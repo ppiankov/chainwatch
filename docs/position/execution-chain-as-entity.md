@@ -200,12 +200,29 @@ It complements existing controls by addressing a layer they cannot reach.
 
 ---
 
-## 9. Future directions
+## 9. Future extension: embodied systems and intention reporting
 
-This abstraction likely extends to embodied autonomous systems, where execution chains cross from digital actions into physical consequences.
-In such systems, runtime enforcement may require explicit reporting of intended actions and continuous evaluation against accumulated chain state.
+The execution-chain abstraction is not limited to purely digital systems.
+As autonomous agents become embedded in physical systems (robots, vehicles,
+industrial automation), execution chains will increasingly span both digital
+and physical actions.
 
-## 9. Conclusion
+In such systems, runtime enforcement may require not only observation of
+performed actions, but also explicit reporting of intended actions or goals
+prior to execution. These intention signals are not treated as authoritative,
+but as additional context that can be evaluated against accumulated chain
+state, environmental constraints, and safety policies.
+
+This document does not attempt to define intention vectors or embodied
+enforcement mechanisms. It merely notes that treating execution chains as
+first-class entities provides a necessary foundation for governing autonomous
+systems whose actions have irreversible physical consequences.
+
+The appropriate abstractions for intention reporting and physical enforcement
+should emerge from real-world failures and operational experience, rather than
+premature formalization.
+
+## 10. Conclusion
 
 Autonomous systems require a shift in how security boundaries are defined.
 As long as execution chains remain implicit, enforcement will remain reactive
