@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
-
-from .types import Action, TraceState, PolicyResult, Decision, ResultMeta
+from .types import Action, Decision, PolicyResult, ResultMeta, TraceState
 
 # Deterministic weights, not probabilities.
 SENSITIVITY_WEIGHT = {
@@ -83,7 +81,10 @@ def evaluate(
         if "salary" in action.resource.lower():
             return PolicyResult(
                 decision=Decision.REQUIRE_APPROVAL,
-                reason="Access to salary data is not allowed for SOC efficiency tasks without approval.",
+                reason=(
+                    "Access to salary data is not allowed for SOC efficiency "
+                    "tasks without approval."
+                ),
                 approval_key="soc_salary_access",
                 policy_id="purpose.SOC_efficiency.salary",
             )
@@ -93,7 +94,10 @@ def evaluate(
     if risk >= RISK_APPROVAL_MIN:
         return PolicyResult(
             decision=Decision.REQUIRE_APPROVAL,
-            reason=f"High cumulative risk (risk={risk}) based on sensitivity, volume, and chain context.",
+            reason=(
+                f"High cumulative risk (risk={risk}) based on sensitivity, "
+                "volume, and chain context."
+            ),
             approval_key="high_risk_action",
             policy_id="risk.high",
         )

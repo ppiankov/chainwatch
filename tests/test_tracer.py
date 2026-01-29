@@ -1,8 +1,7 @@
 """Unit tests for trace accumulation logic."""
 
-import pytest
-from chainwatch.types import Action, TraceState, Decision
-from chainwatch.tracer import TraceAccumulator, new_trace_id, new_span_id
+from chainwatch.tracer import TraceAccumulator, new_span_id, new_trace_id
+from chainwatch.types import Action, TraceState
 
 
 def test_new_trace_id_format():

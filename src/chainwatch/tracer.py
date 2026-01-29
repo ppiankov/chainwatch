@@ -1,12 +1,12 @@
 # src/chainwatch/tracer.py
 from __future__ import annotations
 
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-import uuid
 
-from .types import Action, TraceState, ResultMeta
+from .types import Action, ResultMeta, TraceState
 
 SENS_RANK = {"low": 0, "medium": 1, "high": 2}
 

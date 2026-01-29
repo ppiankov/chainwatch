@@ -1,11 +1,11 @@
 """Integration tests for FileGuard wrapper."""
 
-import pytest
-import tempfile
 from pathlib import Path
 
-from chainwatch.wrappers.file_ops import FileGuard
+import pytest
+
 from chainwatch.enforcement import EnforcementError
+from chainwatch.wrappers.file_ops import FileGuard
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def test_file_guard_deactivates_on_exit(temp_files):
 
     actor = {"user_id": "test", "agent_id": "test"}
 
-    with FileGuard(purpose="test", actor=actor) as guard:
+    with FileGuard(purpose="test", actor=actor):
         # Inside context, open should be wrapped
         assert builtins.open != original_open
 

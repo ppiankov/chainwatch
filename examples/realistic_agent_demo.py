@@ -17,10 +17,10 @@ This is more realistic than the basic demo because:
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
-from chainwatch.wrappers.file_ops import FileGuard
 from chainwatch.enforcement import EnforcementError
+from chainwatch.wrappers.file_ops import FileGuard
 
 
 class SOCEfficiencyAgent:
@@ -111,7 +111,7 @@ class SOCEfficiencyAgent:
             print(f"  ✗ BLOCKED by Chainwatch: {e}")
 
         except FileNotFoundError:
-            print(f"  ⚠ File not found (skipping)")
+            print("  ⚠ File not found (skipping)")
 
         except Exception as e:
             print(f"  ⚠ Error: {e}")
@@ -174,7 +174,7 @@ def main():
         print()
 
     if not data_dir.exists():
-        print(f"✗ Failed to create test data. Please run:")
+        print("✗ Failed to create test data. Please run:")
         print(f"  python3 examples/test_data/setup_corporate_data.py {data_dir}")
         return 1
 

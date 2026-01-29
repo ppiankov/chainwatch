@@ -10,10 +10,10 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from ..types import Action, TraceState
-from ..tracer import TraceAccumulator, new_trace_id, new_span_id
-from ..policy import evaluate
 from ..enforcement import enforce
+from ..policy import evaluate
+from ..tracer import TraceAccumulator, new_span_id, new_trace_id
+from ..types import Action, TraceState
 
 
 class FileGuard:

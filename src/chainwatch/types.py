@@ -83,7 +83,8 @@ class ResultMeta:
 @dataclass
 class Action:
     """
-    One intercepted operation in the agent chain (a tool call, DB query, HTTP call, file write, etc.).
+    One intercepted operation in the agent chain.
+    Examples: tool call, DB query, HTTP call, file write, etc.
     """
 
     tool: str

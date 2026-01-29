@@ -1,5 +1,5 @@
-from .types import PolicyResult, Decision
 from .redaction import redact_auto, rewrite_output_text
+from .types import Decision, PolicyResult
 
 
 class EnforcementError(Exception):
