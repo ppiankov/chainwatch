@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/ppiankov/chainwatch/security/policy
+    about: Report security issues privately (do not open public issue)
+  - name: GitHub Discussions
+    url: https://github.com/ppiankov/chainwatch/discussions
+    about: Ask questions, share use cases, or discuss design decisions
+  - name: Documentation
+    url: https://github.com/ppiankov/chainwatch/tree/main/docs
+    about: Read design docs, integration guides, and FAQs

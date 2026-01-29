@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-
 Sensitivity = Literal["low", "medium", "high"]
 EgressDirection = Literal["internal", "external"]
 
@@ -29,6 +28,7 @@ class ResultMeta:
     - egress: internal|external (where the data is going)
     - destination: host/service identifier (optional, best-effort)
     """
+
     sensitivity: Sensitivity = "low"
     tags: List[str] = field(default_factory=list)
     rows: int = 0
@@ -85,6 +85,7 @@ class Action:
     """
     One intercepted operation in the agent chain (a tool call, DB query, HTTP call, file write, etc.).
     """
+
     tool: str
     resource: str
     operation: str  # "read" | "write" | "query" ... keep flexible
@@ -108,6 +109,7 @@ class TraceState:
     """
     Evolving trace-level context. This is what policies reason about.
     """
+
     trace_id: str
     seen_sources: List[str] = field(default_factory=list)
     max_sensitivity: Sensitivity = "low"

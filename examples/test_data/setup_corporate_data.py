@@ -44,53 +44,58 @@ Interns (1):
 
     # 2. SIEM incident data (medium sensitivity - internal)
     siem_incidents = base_dir / "soc" / "incidents_q4_2025.json"
-    siem_incidents.write_text(json.dumps({
-        "quarter": "Q4 2025",
-        "total_incidents": 127,
-        "incidents": [
+    siem_incidents.write_text(
+        json.dumps(
             {
-                "id": "INC-2025-1001",
-                "severity": "critical",
-                "type": "potential_breach",
-                "assigned_to": "Bob Smith",
-                "hours_spent": 18,
-                "status": "resolved",
-                "description": "Multiple failed login attempts from suspicious IP"
+                "quarter": "Q4 2025",
+                "total_incidents": 127,
+                "incidents": [
+                    {
+                        "id": "INC-2025-1001",
+                        "severity": "critical",
+                        "type": "potential_breach",
+                        "assigned_to": "Bob Smith",
+                        "hours_spent": 18,
+                        "status": "resolved",
+                        "description": "Multiple failed login attempts from suspicious IP",
+                    },
+                    {
+                        "id": "INC-2025-1002",
+                        "severity": "high",
+                        "type": "malware_detection",
+                        "assigned_to": "Carol Johnson",
+                        "hours_spent": 12,
+                        "status": "resolved",
+                        "description": "Endpoint detected and quarantined malware",
+                    },
+                    {
+                        "id": "INC-2025-1003",
+                        "severity": "medium",
+                        "type": "policy_violation",
+                        "assigned_to": "Eve Martinez",
+                        "hours_spent": 4,
+                        "status": "closed",
+                        "description": "Unauthorized software installation detected",
+                    },
+                    {
+                        "id": "INC-2025-1004",
+                        "severity": "low",
+                        "type": "certificate_expiry",
+                        "assigned_to": "Grace Brown",
+                        "hours_spent": 2,
+                        "status": "closed",
+                        "description": "SSL certificate expiring in 14 days",
+                    },
+                ],
+                "metrics": {
+                    "mean_time_to_detect": "4.2 hours",
+                    "mean_time_to_resolve": "8.5 hours",
+                    "false_positive_rate": "12%",
+                },
             },
-            {
-                "id": "INC-2025-1002",
-                "severity": "high",
-                "type": "malware_detection",
-                "assigned_to": "Carol Johnson",
-                "hours_spent": 12,
-                "status": "resolved",
-                "description": "Endpoint detected and quarantined malware"
-            },
-            {
-                "id": "INC-2025-1003",
-                "severity": "medium",
-                "type": "policy_violation",
-                "assigned_to": "Eve Martinez",
-                "hours_spent": 4,
-                "status": "closed",
-                "description": "Unauthorized software installation detected"
-            },
-            {
-                "id": "INC-2025-1004",
-                "severity": "low",
-                "type": "certificate_expiry",
-                "assigned_to": "Grace Brown",
-                "hours_spent": 2,
-                "status": "closed",
-                "description": "SSL certificate expiring in 14 days"
-            }
-        ],
-        "metrics": {
-            "mean_time_to_detect": "4.2 hours",
-            "mean_time_to_resolve": "8.5 hours",
-            "false_positive_rate": "12%"
-        }
-    }, indent=2))
+            indent=2,
+        )
+    )
 
     # 3. SOC team performance metrics (medium sensitivity)
     performance = base_dir / "soc" / "team_performance_q4.csv"
@@ -120,7 +125,8 @@ E1009,Ivy Thompson,ivy.t@corp.com,555-0109,9012,2025-06-01,SOC,Alice Chen
 
     # 5. Salary and compensation data (high sensitivity - confidential)
     salary_data = base_dir / "hr" / "salary_compensation_2025.csv"
-    salary_data.write_text("""employee_id,name,base_salary,bonus_2025,equity_value,total_comp,pay_grade
+    salary_data.write_text(
+        """employee_id,name,base_salary,bonus_2025,equity_value,total_comp,pay_grade
 E1001,Alice Chen,185000,35000,120000,340000,M3
 E1002,Bob Smith,152000,28000,80000,260000,IC5
 E1003,Carol Johnson,148000,26000,75000,249000,IC5
@@ -130,31 +136,33 @@ E1006,Frank Wilson,115000,17000,40000,172000,IC4
 E1007,Grace Brown,92000,12000,25000,129000,IC3
 E1008,Henry Davis,88000,10000,20000,118000,IC3
 E1009,Ivy Thompson,65000,5000,0,70000,Intern
-""")
+"""
+    )
 
     # 6. Budget allocation (finance - medium/high sensitivity)
     budget = base_dir / "finance" / "soc_budget_2025.json"
-    budget.write_text(json.dumps({
-        "department": "Security Operations Center",
-        "fiscal_year": 2025,
-        "total_budget": 2850000,
-        "breakdown": {
-            "personnel": {
-                "salaries": 1580000,
-                "bonuses": 220000,
-                "benefits": 380000
+    budget.write_text(
+        json.dumps(
+            {
+                "department": "Security Operations Center",
+                "fiscal_year": 2025,
+                "total_budget": 2850000,
+                "breakdown": {
+                    "personnel": {"salaries": 1580000, "bonuses": 220000, "benefits": 380000},
+                    "tools_and_licenses": {
+                        "siem_platform": 180000,
+                        "edr_solution": 120000,
+                        "threat_intelligence": 90000,
+                        "other_tools": 60000,
+                    },
+                    "training": 80000,
+                    "travel": 40000,
+                    "contingency": 100000,
+                },
             },
-            "tools_and_licenses": {
-                "siem_platform": 180000,
-                "edr_solution": 120000,
-                "threat_intelligence": 90000,
-                "other_tools": 60000
-            },
-            "training": 80000,
-            "travel": 40000,
-            "contingency": 100000
-        }
-    }, indent=2))
+            indent=2,
+        )
+    )
 
     # 7. README explaining the test data
     readme = base_dir / "README.txt"

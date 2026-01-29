@@ -25,14 +25,12 @@ def setup_demo_files(base_dir: Path) -> dict:
 
     # 1. Org chart (low risk - should allow)
     org_chart = base_dir / "org_chart.txt"
-    org_chart.write_text(
-        """SOC Team Structure:
+    org_chart.write_text("""SOC Team Structure:
 - Alice Chen (Manager)
 - Bob Smith (Senior Analyst)
 - Carol Johnson (Analyst)
 - David Lee (Junior Analyst)
-"""
-    )
+""")
     files["org_chart"] = str(org_chart)
 
     # 2. SIEM incidents (medium risk - should allow)
@@ -71,26 +69,22 @@ def setup_demo_files(base_dir: Path) -> dict:
 
     # 3. HR employee list (high risk PII - may redact)
     hr_data = base_dir / "hr_employees.csv"
-    hr_data.write_text(
-        """name,email,phone,team
+    hr_data.write_text("""name,email,phone,team
 Alice Chen,alice.chen@corp.com,555-0101,SOC
 Bob Smith,bob.smith@corp.com,555-0102,SOC
 Carol Johnson,carol.j@corp.com,555-0103,SOC
 David Lee,david.lee@corp.com,555-0104,SOC
-"""
-    )
+""")
     files["hr"] = str(hr_data)
 
     # 4. Salary data (high risk - MUST block)
     salary_data = base_dir / "hr_salary_bands.csv"
-    salary_data.write_text(
-        """name,salary,bonus_eligible
+    salary_data.write_text("""name,salary,bonus_eligible
 Alice Chen,165000,yes
 Bob Smith,145000,yes
 Carol Johnson,105000,yes
 David Lee,85000,no
-"""
-    )
+""")
     files["salary"] = str(salary_data)
 
     return files

@@ -8,7 +8,6 @@ import uuid
 
 from .types import Action, TraceState, ResultMeta
 
-
 SENS_RANK = {"low": 0, "medium": 1, "high": 2}
 
 
@@ -30,6 +29,7 @@ class Event:
     JSON-serializable event representing one intercepted agent action.
     Mirrors docs/mvp-event.md (v0).
     """
+
     ts: str
     trace_id: str
     span_id: str
@@ -56,6 +56,7 @@ class TraceAccumulator:
     v0: in-memory only.
     v1+: persist events/state to Postgres; stream to OTel/Jaeger if desired.
     """
+
     state: TraceState
     events: List[Event] = field(default_factory=list)
 

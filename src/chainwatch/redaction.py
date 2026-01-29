@@ -7,10 +7,18 @@ import re
 MASK = "***"
 
 DEFAULT_PII_KEYS = {
-    "name", "first_name", "last_name", "full_name",
-    "email", "phone", "address",
-    "ssn", "passport", "dob",
+    "name",
+    "first_name",
+    "last_name",
+    "full_name",
+    "email",
+    "phone",
+    "address",
+    "ssn",
+    "passport",
+    "dob",
 }
+
 
 def mask_value(v: Any) -> Any:
     if v is None:
@@ -22,6 +30,7 @@ def mask_value(v: Any) -> Any:
         return MASK
     return MASK
 
+
 def redact_dict(d: Mapping[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
     out = dict(d)
     for k in keys:
@@ -29,8 +38,10 @@ def redact_dict(d: Mapping[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
             out[k] = mask_value(out[k])
     return out
 
+
 def redact_records(records: List[Dict[str, Any]], keys: Iterable[str]) -> List[Dict[str, Any]]:
     return [redact_dict(r, keys) for r in records]
+
 
 def redact_auto(obj: Any, extra_keys: Optional[Iterable[str]] = None) -> Any:
     """
@@ -51,6 +62,7 @@ def redact_auto(obj: Any, extra_keys: Optional[Iterable[str]] = None) -> Any:
     if isinstance(obj, list):
         return [redact_auto(x, keys) for x in obj]
     return obj
+
 
 def rewrite_output_text(text: str, patterns: Optional[List[str]] = None) -> str:
     """
