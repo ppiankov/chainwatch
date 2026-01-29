@@ -1,27 +1,113 @@
-from .types import Action, TraceState, PolicyResult, Decision
+from __future__ import annotations
 
-SENS_WEIGHT = {"low": 1, "medium": 3, "high": 6}
+from typing import Dict, Optional
 
-def evaluate(action: Action, state: TraceState, purpose: str) -> PolicyResult:
-    sensitivity = action.result_meta.get("sensitivity", "low")
-    rows = int(action.result_meta.get("rows", 0))
-    egress = action.result_meta.get("egress", "internal")
+from .types import Action, TraceState, PolicyResult, Decision, ResultMeta
 
-    # update-like logic lives in tracer in a fuller version; here keep it simple
-    risk = SENS_WEIGHT.get(sensitivity, 1)
-    if rows > 1000:
+# Deterministic weights, not probabilities.
+SENSITIVITY_WEIGHT = {
+    "low": 1,
+    "medium": 3,
+    "high": 6,
+}
+
+# Explicit thresholds. Changing these is a policy decision, not tuning.
+RISK_ALLOW_MAX = 5
+RISK_REDACT_MAX = 10
+RISK_APPROVAL_MIN = 11
+
+
+def _risk_score(
+    *,
+    meta: ResultMeta,
+    state: TraceState,
+    is_new_source: bool,
+) -> int:
+    """
+    Compute a simple, explainable risk score.
+
+    This is NOT anomaly detection.
+    This is cumulative, deterministic scoring based on semantics.
+    """
+    risk = 0
+
+    # Sensitivity dominates.
+    risk += SENSITIVITY_WEIGHT.get(meta.sensitivity, 1)
+
+    # Volume escalation.
+    if meta.rows > 1_000:
         risk += 3
-    if rows > 10000:
-        risk += 6
-    if egress == "external":
+    if meta.rows > 10_000:
         risk += 6
 
-    # purpose-bound rule examples
-    if purpose == "SOC_efficiency" and "salary" in action.resource.lower():
-        return PolicyResult(Decision.REQUIRE_APPROVAL, "Salary access requires approval for this purpose.", approval_key="salary-access")
+    # New source in the chain increases uncertainty.
+    if is_new_source:
+        risk += 2
 
-    if risk >= 12:
-        return PolicyResult(Decision.REQUIRE_APPROVAL, f"High risk action (risk={risk}).", approval_key="high-risk")
-    if risk >= 7:
-        return PolicyResult(Decision.ALLOW_WITH_REDACTION, f"Medium risk action (risk={risk}), redacting sensitive fields.", redactions={"mask_fields": True})
-    return PolicyResult(Decision.ALLOW, f"Low risk action (risk={risk}).")
+    # External egress is always expensive.
+    if meta.egress == "external":
+        risk += 6
+
+    return risk
+
+
+def evaluate(
+    *,
+    action: Action,
+    state: TraceState,
+    purpose: str,
+) -> PolicyResult:
+    """
+    Evaluate a single action in the context of the current trace state.
+
+    Decisions must be:
+    - deterministic
+    - explainable
+    - attributable to explicit conditions
+    """
+    action.normalize_meta()
+    meta = action.normalized_meta()
+
+    source = action.tool or action.resource.split("/", 1)[0]
+    is_new_source = source not in state.seen_sources
+
+    risk = _risk_score(
+        meta=meta,
+        state=state,
+        is_new_source=is_new_source,
+    )
+
+    # ---- Purpose-bound hard rules (explicit > scoring) ----
+
+    if purpose == "SOC_efficiency":
+        if "salary" in action.resource.lower():
+            return PolicyResult(
+                decision=Decision.REQUIRE_APPROVAL,
+                reason="Access to salary data is not allowed for SOC efficiency tasks without approval.",
+                approval_key="soc_salary_access",
+                policy_id="purpose.SOC_efficiency.salary",
+            )
+
+    # ---- Risk-based enforcement ----
+
+    if risk >= RISK_APPROVAL_MIN:
+        return PolicyResult(
+            decision=Decision.REQUIRE_APPROVAL,
+            reason=f"High cumulative risk (risk={risk}) based on sensitivity, volume, and chain context.",
+            approval_key="high_risk_action",
+            policy_id="risk.high",
+        )
+
+    if risk > RISK_ALLOW_MAX:
+        return PolicyResult(
+            decision=Decision.ALLOW_WITH_REDACTION,
+            reason=f"Moderate risk (risk={risk}); sensitive fields must be redacted.",
+            redactions={"auto": True},
+            policy_id="risk.moderate",
+        )
+
+    return PolicyResult(
+        decision=Decision.ALLOW,
+        reason=f"Low risk action (risk={risk}).",
+        policy_id="risk.low",
+    )
