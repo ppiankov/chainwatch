@@ -62,20 +62,20 @@ class SOCEfficiencyAgent:
 
         # Step 3: Read team performance (should allow)
         print("\n[Agent] Step 3: Analyzing individual analyst performance...")
-        self._read_file("soc/team_performance_q4.csv", "Performance metrics for productivity analysis")
+        self._read_file(
+            "soc/team_performance_q4.csv", "Performance metrics for productivity analysis"
+        )
 
         # Step 4: Read HR employee data (may redact PII)
         print("\n[Agent] Step 4: Correlating employee info with performance...")
         self._read_file(
-            "hr/employees_soc_team.csv",
-            "Employee records for tenure/experience correlation"
+            "hr/employees_soc_team.csv", "Employee records for tenure/experience correlation"
         )
 
         # Step 5: Try to read salary data (SHOULD BE BLOCKED)
         print("\n[Agent] Step 5: Calculating cost per incident for ROI analysis...")
         self._read_file(
-            "hr/salary_compensation_2025.csv",
-            "Salary data for cost-effectiveness calculation"
+            "hr/salary_compensation_2025.csv", "Salary data for cost-effectiveness calculation"
         )
 
         # Step 6: Try to read budget (should allow or redact)
@@ -132,7 +132,9 @@ class SOCEfficiencyAgent:
         findings = []
 
         if "org/team_structure.txt" in self.collected_data:
-            findings.append("Team structure analyzed: 1 manager, 3 senior analysts, 4 analysts, 1 intern")
+            findings.append(
+                "Team structure analyzed: 1 manager, 3 senior analysts, 4 analysts, 1 intern"
+            )
 
         if "soc/incidents_q4_2025.json" in self.collected_data:
             findings.append("Q4 incident volume: 127 incidents handled")
@@ -167,11 +169,8 @@ def main():
         print(f"\n⚠ Test data not found at {data_dir}")
         print("Creating test data...")
         import subprocess
-        subprocess.run([
-            "python3",
-            "examples/test_data/setup_corporate_data.py",
-            str(data_dir)
-        ])
+
+        subprocess.run(["python3", "examples/test_data/setup_corporate_data.py", str(data_dir)])
         print()
 
     if not data_dir.exists():
@@ -206,15 +205,15 @@ def main():
     print("=" * 80)
 
     print(f"\nFiles accessed: {report['files_accessed']}")
-    for file in report['allowed_files']:
+    for file in report["allowed_files"]:
         print(f"  ✓ {file}")
 
     print(f"\nFiles blocked: {report['files_blocked']}")
-    for file in report['blocked_files']:
+    for file in report["blocked_files"]:
         print(f"  ✗ {file}")
 
     print("\nKey Findings:")
-    for finding in report['findings']:
+    for finding in report["findings"]:
         print(f"  • {finding}")
 
     # Show trace
@@ -226,7 +225,7 @@ def main():
 
     # Determine success
     print("\n" + "=" * 80)
-    salary_blocked = "hr/salary_compensation_2025.csv" in report['blocked_files']
+    salary_blocked = "hr/salary_compensation_2025.csv" in report["blocked_files"]
 
     if salary_blocked:
         print("✓ SUCCESS: Chainwatch blocked salary access as expected")

@@ -21,7 +21,9 @@ def temp_files(tmp_path):
 
     # High-risk file (HR data with PII)
     hr_data = tmp_path / "hr_employees.csv"
-    hr_data.write_text("name,email,team\nAlice,alice@corp.com,Engineering\nBob,bob@corp.com,Security")
+    hr_data.write_text(
+        "name,email,team\nAlice,alice@corp.com,Engineering\nBob,bob@corp.com,Security"
+    )
 
     # Blocked file (salary data)
     salary_data = tmp_path / "hr_salary_bands.csv"
@@ -155,7 +157,9 @@ def test_nonexistent_file_raises_normal_error(tmp_path):
                 f.read()
 
 
-@pytest.mark.skip(reason="Path.read_text() monkey-patching doesn't work in Python 3.14+ - known limitation")
+@pytest.mark.skip(
+    reason="Path.read_text() monkey-patching doesn't work in Python 3.14+ - known limitation"
+)
 def test_path_read_text_interception(temp_files):
     """Path.read_text() should also be intercepted (known limitation in Python 3.14+)."""
     actor = {"user_id": "test", "agent_id": "test"}

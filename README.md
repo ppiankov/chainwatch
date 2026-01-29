@@ -1,5 +1,10 @@
 # Chainwatch (prototype)
 
+[![CI](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 Chainwatch is a runtime control plane for AI agents.
 
 AI agents need broad, dynamic access to tools and data to be useful. Existing security controls
@@ -212,6 +217,8 @@ These are intentional MVP constraints:
 
 ### Integration
 - **File operations only**: No HTTP/network interception yet (v0.2.0)
-- **No agent runtime hooks**: Can't integrate directly with Claude Code, Codex, etc.
+- **No agent runtime hooks**: Can't integrate directly with Claude Code, Codex, etc. yet
+
+**Roadmap context:** v0.1.0 proves enforcement semantics (blocking works). v0.2.0 proves insertion into real runtimes via HTTP proxy.
 
 See `docs/integrations/file-ops-wrapper.md` and `docs/decisions/002-file-classification.md` for detailed rationale and evolution plans.

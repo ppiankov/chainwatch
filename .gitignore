@@ -46,6 +46,7 @@ test-*.sh
 !CHANGELOG.md
 !CONTRIBUTING.md
 !FIELD_NOTES.md
+!SECURITY.md
 
 # OS
 .DS_Store

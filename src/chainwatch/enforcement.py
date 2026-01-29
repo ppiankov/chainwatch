@@ -1,8 +1,10 @@
 from .types import PolicyResult, Decision
 from .redaction import redact_auto, rewrite_output_text
 
+
 class EnforcementError(Exception):
     pass
+
 
 def enforce(result: PolicyResult, data: object) -> object:
     if result.decision == Decision.DENY:
