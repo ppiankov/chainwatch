@@ -59,3 +59,12 @@ Only one strategy will be implemented at a time.
 ## FAQ
 Common questions are addressed in `docs/FAQ.md`,
 including why Chainwatch intentionally does not use ML for enforcement.
+
+## Implementation notes
+
+The current reference implementation is written in Python to optimize
+for clarity and iteration speed.
+
+A future implementation may use Go for long-running runtime components
+(e.g. proxies, sidecars, or system services) once interception boundaries
+and enforcement semantics are proven.
