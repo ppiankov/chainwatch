@@ -48,6 +48,16 @@ We evaluate risk and enforce policy based on the accumulated context of the trac
 - docs/core-idea.md
 - docs/mvp-event.md
 
+## Positioning
+
+Chainwatch is based on the idea that **execution chains**, not requests or sessions,
+must be treated as first-class entities for security enforcement in autonomous systems.
+
+For a conceptual explanation of this abstraction and why existing tools fail to address it,
+see:
+
+- `docs/position/execution-chain-as-entity.md`
+
 ## Development rules
 
 - Chainwatch prioritizes runtime control over detection or observability.
