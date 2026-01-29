@@ -200,6 +200,11 @@ It complements existing controls by addressing a layer they cannot reach.
 
 ---
 
+## 9. Future directions
+
+This abstraction likely extends to embodied autonomous systems, where execution chains cross from digital actions into physical consequences.
+In such systems, runtime enforcement may require explicit reporting of intended actions and continuous evaluation against accumulated chain state.
+
 ## 9. Conclusion
 
 Autonomous systems require a shift in how security boundaries are defined.
