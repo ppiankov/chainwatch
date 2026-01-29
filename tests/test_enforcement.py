@@ -1,8 +1,9 @@
 """Unit tests for enforcement logic."""
 
 import pytest
-from chainwatch.types import PolicyResult, Decision
-from chainwatch.enforcement import enforce, EnforcementError
+
+from chainwatch.enforcement import EnforcementError, enforce
+from chainwatch.types import Decision, PolicyResult
 
 
 def test_allow_decision_passes_through():

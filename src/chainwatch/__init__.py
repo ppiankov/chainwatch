@@ -5,11 +5,11 @@ Chainwatch enforces chain-aware policies on AI agent operations,
 providing deterministic control over data access and egress.
 """
 
-from .types import Action, Decision, PolicyResult, ResultMeta, TraceState
+from .enforcement import EnforcementError, enforce
 from .policy import evaluate
-from .enforcement import enforce, EnforcementError
-from .tracer import TraceAccumulator, Event, new_trace_id, new_span_id
 from .redaction import redact_auto, redact_dict, redact_records
+from .tracer import Event, TraceAccumulator, new_span_id, new_trace_id
+from .types import Action, Decision, PolicyResult, ResultMeta, TraceState
 
 __version__ = "0.1.0"
 __all__ = [

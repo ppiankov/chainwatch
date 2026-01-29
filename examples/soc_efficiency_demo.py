@@ -15,8 +15,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from chainwatch.wrappers.file_ops import FileGuard
 from chainwatch.enforcement import EnforcementError
+from chainwatch.wrappers.file_ops import FileGuard
 
 
 def setup_demo_files(base_dir: Path) -> dict:

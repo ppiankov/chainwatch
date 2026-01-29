@@ -1,8 +1,7 @@
 """Unit tests for policy evaluation logic."""
 
-import pytest
-from chainwatch.types import Action, TraceState, Decision
 from chainwatch.policy import evaluate
+from chainwatch.types import Action, Decision, TraceState
 
 
 def test_low_risk_action_allows():

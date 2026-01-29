@@ -1,6 +1,6 @@
-from chainwatch.types import Action, TraceState
+from chainwatch.enforcement import EnforcementError, enforce
 from chainwatch.policy import evaluate
-from chainwatch.enforcement import enforce, EnforcementError
+from chainwatch.types import Action, TraceState
 
 
 def call_tool(action: Action, state: TraceState, purpose: str):

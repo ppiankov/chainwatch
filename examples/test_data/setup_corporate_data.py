@@ -201,7 +201,6 @@ EXPECTED CHAINWATCH BEHAVIOR:
 
 if __name__ == "__main__":
     import sys
-    import tempfile
 
     if len(sys.argv) > 1:
         base_dir = Path(sys.argv[1])
