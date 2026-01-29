@@ -20,6 +20,7 @@ without violating any single control.
 Chainwatch explores a new control point: **chain-aware runtime enforcement**.
 
 Designed to integrate with multiple agent execution models, including tool-driven, SaaS-hosted, and local agents.
+Enforcement is mode-agnostic: it applies regardless of whether an LLM is used, because leakage and over-collection can occur in “no-LLM” report workflows too.
 
 ## What it does (goal)
 - Intercepts agent tool/data actions
@@ -222,3 +223,6 @@ These are intentional MVP constraints:
 **Roadmap context:** v0.1.0 proves enforcement semantics (blocking works). v0.2.0 proves insertion into real runtimes via HTTP proxy.
 
 See `docs/integrations/file-ops-wrapper.md` and `docs/decisions/002-file-classification.md` for detailed rationale and evolution plans.
+
+## Case studies
+- `docs/case-studies/entropia-chainwatch-intraweb.md` – Using Entropia + Chainwatch to scrutinize a sensitive corporate intraweb safely.

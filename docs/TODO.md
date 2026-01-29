@@ -90,4 +90,25 @@ If this doesn’t work, stop adding features.
 - Approval UX (CLI or minimal web)
 - More connectors
 
+### Case study: Entropia + Chainwatch (corporate intraweb)
+
+Goal: demonstrate safe scrutiny of sensitive corporate intraweb content using
+Entropia for analysis and Chainwatch for runtime enforcement.
+
+Notes:
+- Enforcement is mode-agnostic: applies in both LLM and no-LLM workflows.
+- PII exposure and over-collection risks exist even without LLM usage
+  (e.g. report generation, exports).
+
+Tasks:
+- [ ] Publish case study doc:
+      docs/case-studies/entropia-chainwatch-intraweb.md
+- [ ] Document that enforcement applies regardless of LLM usage
+- [ ] Define HTTP proxy insertion strategy for intraweb crawling (Chainwatch boundary)
+- [ ] Provide a reproducible MVP demo using intraweb snapshot + FileGuard (v0.1.x stand-in)
+
+Dependencies:
+- Entropia must support proxy configuration (env vars or CLI flags) so that
+  intraweb crawling can be routed through an enforcing boundary.
+
 Not before.
