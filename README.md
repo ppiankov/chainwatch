@@ -14,6 +14,8 @@ without violating any single control.
 
 Chainwatch explores a new control point: **chain-aware runtime enforcement**.
 
+Designed to integrate with multiple agent execution models, including tool-driven, SaaS-hosted, and local agents.
+
 ## What it does (goal)
 - Intercepts agent tool/data actions
 - Correlates actions into execution chains (traces)
@@ -46,3 +48,14 @@ We evaluate risk and enforce policy based on the accumulated context of the trac
 - Connectors may be sloppy; the core must be deterministic.
 - If an action cannot be intercepted and blocked, it is out of scope.
 - Policy decisions must be explainable to a human without statistics.
+
+## Integration strategies
+
+Chainwatch can be inserted at different points depending on the agent runtime.
+See `docs/integrations/` for an analysis of supported and rejected approaches.
+
+Only one strategy will be implemented at a time.
+
+## FAQ
+Common questions are addressed in `docs/FAQ.md`,
+including why Chainwatch intentionally does not use ML for enforcement.
