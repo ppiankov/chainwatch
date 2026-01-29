@@ -115,20 +115,35 @@ Treating the chain as an implicit or emergent property causes loss of control.
 Security decisions that ignore prior steps inevitably fail in autonomous systems.
 
 Examples:
-- Access to HR data may be acceptable alone, but not after joining with incident data
+- Access to HR data may be acceptable in isolation, but not after joining with incident data
 - A file read may be safe early in execution but dangerous after aggregation
-- Exporting results may be acceptable until sensitivity crosses a threshold
+- Exporting results may be acceptable until accumulated sensitivity crosses a threshold
 
-In these cases, the correctness of the decision depends on **history**, not
-just the current request.
+In these cases, the correctness of a decision depends on **execution history**, not
+on the current request evaluated in isolation.
 
-First-class treatment of the execution chain enables:
-- enforcement based on accumulated sensitivity
-- detection of purpose drift
-- dynamic revocation of previously acceptable actions
-- output control based on provenance, not content alone
+Treating the execution chain as a first-class entity enables:
+- enforcement based on accumulated sensitivity rather than static classification
+- detection of purpose drift as actions compound
+- revocation or constraint of actions that were previously acceptable
+- output control based on provenance and process, not content alone
 
-Without this, least-privilege either breaks agents or becomes meaningless.
+Without this perspective, least-privilege either renders agents ineffective
+or degrades into broad, permanent access that defeats its purpose.
+
+Autonomous systems rarely fail because of a single incorrect decision.
+More commonly, failure emerges from the accumulation of individually acceptable
+actions that cross a critical boundary too late to prevent harm.
+
+This makes a case for runtime governance that reasons over the *sequence* of
+actions rather than evaluating commands in isolation. Such governance can slow,
+constrain, or refuse execution when an evolving execution trajectory begins to
+resemble previously observed failure paths.
+
+This is not a form of prediction, intent inference, or machine learning.
+It is better understood as conservative, experience-informed control applied
+at runtime — a brake grounded in accumulated context rather than an attempt
+to model intelligence.
 
 ---
 
