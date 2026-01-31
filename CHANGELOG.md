@@ -37,9 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Added `examples/denylist_demo.py` - demonstrates blocking checkout URLs and credentials
 - Added `tests/test_denylist.py` - comprehensive unit tests for denylist functionality
+- Added `docs/v0.1.1-denylist-usage.md` - complete usage guide for denylist feature
 - Roadmap documents added:
   - `docs/roadmap-clawbot.md` - Integration strategy with Clawbot and autonomous agents
   - `docs/integrations/browser-checkout-gate.md` - v0.2.0 browser wrapper spec
+  - `docs/integrations/clawbot-denylist.md` - Using denylist with Clawbot today
 
 ### Why This Matters
 
