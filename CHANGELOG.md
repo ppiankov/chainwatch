@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-01-29
+
+### Added
+- **Denylist enforcement** (`denylist.py`)
+  - Simple, deterministic resource/action blocking
+  - Pattern-based matching for URLs, files, and commands
+  - Default denylist blocks common dangerous patterns:
+    - Checkout/payment URLs (`/checkout`, `/payment`, `stripe.com`, etc.)
+    - Credential files (`~/.ssh/id_rsa`, `~/.aws/credentials`, etc.)
+    - Dangerous shell commands (`rm -rf`, `sudo su`, etc.)
+  - YAML configuration format for user customization
+  - Automatic loading from `~/.chainwatch/denylist.yaml`
+  - CLI command: `chainwatch init-denylist` to generate default denylist
+
+- **Policy integration**
+  - Denylist checked first in `policy.evaluate()` (highest priority)
+  - Hard `DENY` decision for denylisted resources (no approval workflow)
+  - Explicit reason messages showing which pattern matched
+
+- **Dependencies**
+  - Added `pyyaml>=6.0` for denylist configuration parsing
+
+### Changed
+- Version bumped to 0.1.1
+- `policy.evaluate()` now accepts optional `denylist` parameter
+- CLI help updated to include `init-denylist` command
+
+### Documentation
+- Added `examples/denylist_demo.py` - demonstrates blocking checkout URLs and credentials
+- Added `tests/test_denylist.py` - comprehensive unit tests for denylist functionality
+- Roadmap documents added:
+  - `docs/roadmap-clawbot.md` - Integration strategy with Clawbot and autonomous agents
+  - `docs/integrations/browser-checkout-gate.md` - v0.2.0 browser wrapper spec
+
+### Why This Matters
+
+**v0.1.1 prevents the "$3000 course purchase" incident.**
+
+Before v0.1.1:
+- Agent could navigate to checkout and complete purchase
+- No mechanism to block dangerous resources by pattern
+
+After v0.1.1:
+- Checkout URLs are denylisted by default
+- Agent's navigation is blocked before payment can occur
+- Users can customize denylist for their specific threats
+
+This is immediate, usable protection for Clawbot and other browser-based agents.
+
 ## [0.1.0] - 2026-01-29
 
 ### Added
@@ -102,5 +151,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Path-based classification**: False positives/negatives expected (e.g., /finance vs /hr/salary)
 - **Monkey-patching limitations**: Won't catch C extension file I/O or subprocess calls
 
-[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ppiankov/chainwatch/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ppiankov/chainwatch/releases/tag/v0.1.0

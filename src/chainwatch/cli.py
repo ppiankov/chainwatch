@@ -39,6 +39,29 @@ def cmd_demo_soc():
     sys.exit(result.returncode)
 
 
+def cmd_init_denylist():
+    """Initialize default denylist file."""
+    from .denylist import Denylist
+
+    try:
+        path = Denylist.create_default()
+        print(f"✓ Created denylist at: {path}")
+        print()
+        print("Default denylist blocks:")
+        print("  - Checkout/payment URLs (e.g., /checkout, /payment)")
+        print("  - Credential files (e.g., ~/.ssh/id_rsa, ~/.aws/credentials)")
+        print("  - Dangerous commands (e.g., rm -rf, sudo su)")
+        print()
+        print("Edit the denylist:")
+        print(f"  vim {path}")
+        print()
+        print("The denylist is automatically loaded by Chainwatch policy evaluation.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"✗ Failed to create denylist: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     """CLI entrypoint."""
     if len(sys.argv) < 2:
@@ -50,9 +73,11 @@ def main():
         cmd_version()
     elif command == "demo" and len(sys.argv) > 2 and sys.argv[2] == "soc":
         cmd_demo_soc()
+    elif command == "init-denylist":
+        cmd_init_denylist()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
-        print("Usage: chainwatch [version | demo soc]", file=sys.stderr)
+        print("Usage: chainwatch [version | demo soc | init-denylist]", file=sys.stderr)
         sys.exit(1)
 
 

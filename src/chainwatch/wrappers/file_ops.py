@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from ..denylist import Denylist
 from ..enforcement import enforce
 from ..policy import evaluate
 from ..tracer import TraceAccumulator, new_span_id, new_trace_id
@@ -47,6 +48,13 @@ class FileGuard:
         self.actor = actor
         self.trace_id = trace_id or new_trace_id()
         self.tracer = TraceAccumulator(state=TraceState(trace_id=self.trace_id))
+
+        # Load denylist BEFORE activating intercepts (to avoid recursive interception)
+        try:
+            self.denylist = Denylist.load()
+        except Exception:
+            # If denylist can't be loaded, continue without it
+            self.denylist = None
 
         # Store original functions for restoration
         self._original_open = builtins.open
@@ -134,6 +142,7 @@ class FileGuard:
             action=action,
             state=self.tracer.state,
             purpose=self.purpose,
+            denylist=self.denylist,
         )
 
         # Record event (before enforcement for audit trail)
