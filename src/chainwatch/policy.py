@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import Optional
+
+from .denylist import Denylist
 from .types import Action, Decision, PolicyResult, ResultMeta, TraceState
 
 # Deterministic weights, not probabilities.
@@ -54,6 +57,7 @@ def evaluate(
     action: Action,
     state: TraceState,
     purpose: str,
+    denylist: Optional[Denylist] = None,
 ) -> PolicyResult:
     """
     Evaluate a single action in the context of the current trace state.
@@ -63,6 +67,23 @@ def evaluate(
     - explainable
     - attributable to explicit conditions
     """
+    # ---- Denylist check (hard block, highest priority) ----
+    if denylist is None:
+        try:
+            denylist = Denylist.load()
+        except Exception:
+            # If denylist can't be loaded, continue without it
+            pass
+
+    if denylist:
+        is_blocked, reason = denylist.is_blocked(action.resource, action.tool)
+        if is_blocked:
+            return PolicyResult(
+                decision=Decision.DENY,
+                reason=f"Denylisted: {reason}",
+                policy_id="denylist.block",
+            )
+
     action.normalize_meta()
     meta = action.normalized_meta()
 
