@@ -152,6 +152,54 @@ with FileGuard(purpose="SOC_efficiency", actor=actor) as guard:
     print(trace)
 ```
 
+### Block Dangerous Actions with Denylist (v0.1.1)
+
+Prevent agents from accessing checkout URLs, credentials, or running destructive commands:
+
+```bash
+# Initialize denylist with sane defaults
+chainwatch init-denylist
+
+# Blocks checkout/payment URLs, SSH keys, AWS credentials, dangerous commands
+# Automatically enforced by FileGuard and policy evaluation
+```
+
+Example - Block purchases:
+
+```python
+from chainwatch.denylist import Denylist
+from chainwatch.policy import evaluate
+from chainwatch.types import Action, TraceState
+from chainwatch.enforcement import EnforcementError
+
+denylist = Denylist.load()  # Loads ~/.chainwatch/denylist.yaml
+
+action = Action(
+    tool="browser_navigate",
+    resource="https://coursera.org/checkout",
+    operation="navigate"
+)
+
+result = evaluate(
+    action=action,
+    state=TraceState(trace_id="session-123"),
+    purpose="research",
+    denylist=denylist
+)
+
+# result.decision == "deny"
+# result.reason == "Denylisted: URL matches denylist pattern: /checkout"
+```
+
+**What's blocked by default:**
+- Checkout URLs: `/checkout`, `/payment`, `/billing`, `stripe.com/checkout`
+- Credentials: `~/.ssh/id_rsa`, `~/.aws/credentials`, `**/.env`
+- Dangerous commands: `rm -rf`, `sudo su`, `curl ... | sh`
+
+Customize: `vim ~/.chainwatch/denylist.yaml`
+
+See [docs/integrations/clawbot-denylist.md](docs/integrations/clawbot-denylist.md) for Clawbot integration.
+
 ### Test with External Agent Tools
 
 See [docs/testing-guide.md](docs/testing-guide.md) for instructions on:
