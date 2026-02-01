@@ -12,7 +12,7 @@ from .redaction import redact_auto, redact_dict, redact_records
 from .tracer import Event, TraceAccumulator, new_span_id, new_trace_id
 from .types import Action, Decision, PolicyResult, ResultMeta, TraceState
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __all__ = [
     "Action",
     "Decision",
