@@ -38,25 +38,59 @@ Enforcement is mode-agnostic: it applies regardless of whether an LLM is used, b
 - A full agent framework
 - A production security product (yet)
 
+## Core Philosophy
+
+Chainwatch is built on three foundational ideas:
+
+### 1. Irreversible Boundaries
+Some actions cannot be undone. Once executed, no policy can reverse their effects.
+
+Chainwatch treats these as **hard execution boundaries** where the system refuses continuation regardless of model intent.
+
+- Payment commitment (money leaves account)
+- Credential exposure (secrets cannot be "unread")
+- Data destruction (files cannot be recovered)
+
+These are not moral judgments. These are **architectural properties**.
+
+**The system NEVER asks the model whether an irreversible action is safe.**
+
+👉 **Read:** [`docs/irreversible-boundaries.md`](docs/irreversible-boundaries.md) - Core concept (500+ lines)
+
+### 2. Monotonic Irreversibility
+Chainwatch evolves along a single axis:
+
+**Local → Historical → Structural irreversibility awareness**
+
+Correctness ladder: `SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE` (one-way only)
+
+**North Star:** Chainwatch should never become smarter — only more conservative as execution progresses.
+
+This is not ML. This is not prediction. This is **structural safety**.
+
+👉 **Read:** [`docs/monotonic-irreversibility.md`](docs/monotonic-irreversibility.md) - Canonical evolution path (350+ lines)
+
+### 3. Control Plane, Not Observability
+
+**Observability says:** "I saw the agent buy a course. Here's the log."
+
+**Chainwatch says:** "The agent tried to cross the payment boundary. I stopped it."
+
+Chainwatch refuses execution when chains cross irreversible boundaries.
+
+This is **enforcement**, not **detection**.
+
+👉 **Read:** [`docs/boundary-configuration.md`](docs/boundary-configuration.md) - Configuration guide
+
+---
+
+**Additional context:**
+- [`docs/core-idea.md`](docs/core-idea.md) - Original concept: execution chains as first-class entities
+- [`docs/position/execution-chain-as-entity.md`](docs/position/execution-chain-as-entity.md) - Why existing tools fail
+- [`docs/FAQ.md`](docs/FAQ.md) - Common questions (including: why no ML?)
+
 ## Status
 Experimental prototype. Expect breaking changes and blunt edges.
-
-## Concept
-Treat each agent task as a distributed trace:
-request -> tool calls -> data transforms -> output.
-We evaluate risk and enforce policy based on the accumulated context of the trace, not isolated events.
-- docs/core-idea.md
-- docs/mvp-event.md
-
-## Positioning
-
-Chainwatch is based on the idea that **execution chains**, not requests or sessions,
-must be treated as first-class entities for security enforcement in autonomous systems.
-
-For a conceptual explanation of this abstraction and why existing tools fail to address it,
-see:
-
-- `docs/position/execution-chain-as-entity.md`
 
 ## Development rules
 
@@ -71,10 +105,6 @@ Chainwatch can be inserted at different points depending on the agent runtime.
 See `docs/integrations/` for an analysis of supported and rejected approaches.
 
 Only one strategy will be implemented at a time.
-
-## FAQ
-Common questions are addressed in `docs/FAQ.md`,
-including why Chainwatch intentionally does not use ML for enforcement.
 
 ## Implementation notes
 
@@ -198,6 +228,11 @@ result = evaluate(
 
 These are not "bad actions" — they are **structural points of no return**.
 
+**Learn more:**
+- 📖 [Irreversible Boundaries](docs/irreversible-boundaries.md) - Why boundaries, not blocklists
+- 🔧 [Boundary Configuration](docs/boundary-configuration.md) - How to customize
+- 🚀 [Monotonic Irreversibility](docs/monotonic-irreversibility.md) - Evolution path
+
 Customize: `vim ~/.chainwatch/denylist.yaml`
 
 See [docs/integrations/clawbot-denylist.md](docs/integrations/clawbot-denylist.md) for Clawbot integration.
@@ -233,11 +268,16 @@ make build
 
 ## Roadmap
 
+**Evolution Axis:** Local → Historical → Structural irreversibility awareness
+
+See `docs/monotonic-irreversibility.md` for complete evolution design.
+
 ### v0.1.2 (Current)
 - ✓ Irreversible boundary protection (pattern-based)
 - ✓ Default boundaries: payment, credentials, destructive ops
 - ✓ Conceptual reframe: from "denylist" to "boundary detection"
 - ✓ Core concept documentation (`docs/irreversible-boundaries.md`)
+- ✓ Evolution path: monotonic irreversibility design (`docs/monotonic-irreversibility.md`)
 
 ### v0.1.0-0.1.1 (Released)
 - ✓ File operation wrapper (`FileGuard`)
@@ -247,19 +287,31 @@ make build
 - ✓ CI/CD pipeline (Python 3.10-3.12)
 - ✓ Path-based file classification
 
-### v0.2.0 (Planned)
-- HTTP proxy wrapper for network interception
-- Policy DSL (YAML-based configuration)
-- Event persistence (Postgres/SQLite)
-- Approval workflow CLI
-- Content-based file classification
+### v0.2.0 (Planned: Monotonic Boundary Accumulation)
+**Core concept:** Chain-aware irreversibility (has chain entered zone where this becomes irreversible?)
 
-### v1.0.0 (Future)
-- Multi-connector support (file, HTTP, database)
+- Monotonic state transitions (SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE)
+- Zone-based boundary detection (commercial intent, credential exposure, external egress)
+- Compound boundaries (credentials + network = exfiltration)
+- HTTP proxy wrapper for network interception
+- Approval workflow CLI (out-of-band, human override only)
+- Event persistence (Postgres/SQLite)
+
+### v0.3.0 (Future: Irreversibility Graphs)
+**Core concept:** Structural boundary mapping (not execution graphs)
+
+- Irreversibility graphs (nodes are recoverability states, edges are loss of reversibility)
+- Multi-step boundary detection
+- Boundary composition
+
+### v1.0.0 (Vision: Formal Boundary Calculus)
+- Provable monotonicity properties
+- Compositional boundary reasoning
 - Go-based proxy/sidecar for production deployments
-- OpenTelemetry export
 - Multi-tenant support
-- Policy-as-code with version control integration
+- OpenTelemetry export
+
+**North Star:** Chainwatch should never become smarter — only more conservative as execution progresses.
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 

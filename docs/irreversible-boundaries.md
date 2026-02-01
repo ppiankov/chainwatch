@@ -428,35 +428,56 @@ Chainwatch is:
 
 ## Evolution Path
 
+**See `docs/monotonic-irreversibility.md` for complete evolution design.**
+
+**Single axis:** Local → Historical → Structural irreversibility awareness
+
 ### v0.1.2 (Current)
 
-**Primitive:** Pattern-based boundary detection
+**Primitive:** Pattern-based boundary detection (local irreversibility)
 - URL patterns (`/checkout`)
 - File patterns (`~/.ssh/id_rsa`)
 - Command patterns (`rm -rf`)
+
+**Question answered:** "Is this action itself irreversible?"
 
 **Limitation:** Static patterns, no chain context
 
 ### v0.2.0 (Planned)
 
-**Improvement:** Chain-aware boundary detection
-- "Browse + pricing + cart" → elevated boundary risk
-- "Read credentials + external POST" → compound boundary
-- "Volume spike + external egress" → exfiltration boundary
+**Improvement:** Monotonic boundary accumulation (historical irreversibility)
+- Boundaries accumulate, never disappear
+- Zone-based detection: commercial intent, credential exposure, external egress
+- Correctness ladder: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE (one-way only)
+- Compound boundaries: credentials + network = exfiltration
+
+**Question answered:** "Has the chain entered a zone where this becomes irreversible?"
+
+**Not graphs yet. Just monotonic state transitions.**
 
 ### v0.3.0 (Future)
 
-**Evolution:** Boundary graphs
-- Map state transitions to irreversibility zones
-- Model "distance to boundary" during chain execution
-- Preemptive warnings before approaching boundaries
+**Evolution:** Irreversibility graphs (structural irreversibility)
+- Nodes are recoverability states (not actions)
+- Edges are loss of reversibility (not execution paths)
+- Still refusal logic, not planning
+
+**Question answered:** "Does the next edge cross a structural boundary?"
+
+### v0.4.0 (Later)
+
+**Visibility:** Distance-to-boundary signaling (non-enforcing)
+- Proximity metrics for human operators
+- Non-enforcing: yellow light, not brake
 
 ### v1.0.0 (Vision)
 
 **Goal:** Formal boundary calculus
-- Provable boundary properties
+- Provable monotonicity properties
 - Compositional boundary reasoning
 - Boundary-aware policy language
+
+**North Star:** Chainwatch should never become smarter — only more conservative as execution progresses.
 
 ---
 

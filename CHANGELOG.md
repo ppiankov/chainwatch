@@ -54,6 +54,12 @@ The denylist declares these boundaries. Policy evaluation refuses to cross them.
   - Terminology: DENY (absolute) vs REQUIRE_APPROVAL (human override)
   - Out-of-band approval requirements: model must not observe or influence
   - Non-goal: Chainwatch judges recoverability, not morality
+- **Added:** `docs/monotonic-irreversibility.md` - **Canonical evolution path** (350+ lines)
+  - Single axis of evolution: local → historical → structural irreversibility awareness
+  - v0.2.0 design: monotonic boundary accumulation (not graphs)
+  - Correctness ladder: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE
+  - Anti-patterns: what NOT to build (no ML, no prediction, no negotiation)
+  - North star: "Chainwatch should never become smarter — only more conservative"
 - **Added:** `docs/boundary-configuration.md` - Configuration guide with anti-patterns
 - **Updated:** `docs/core-idea.md` - Added "Irreversible Boundaries" section
 - **Updated:** README - Changed language from "block dangerous actions" to "irreversible boundary protection"
@@ -90,11 +96,17 @@ Chainwatch is principles-first.
 
 ### Evolution Path
 
-- **v0.1.1:** Shipped denylist (pattern matching for "dangerous" resources)
-- **v0.1.2:** Realized it's boundary detection (irreversibility-aware refusal)
-- **v0.2.0:** Chain-aware boundaries (trajectory to commitment, not just patterns)
-- **v0.3.0:** Boundary graphs (model distance-to-irreversibility)
-- **v1.0.0:** Formal boundary calculus (provable properties)
+**Single axis:** Local → Historical → Structural irreversibility awareness
+
+- **v0.1.x:** Local irreversibility (pattern matching: is this action irreversible?)
+- **v0.2.0:** Monotonic boundary accumulation (has chain entered zone where this becomes irreversible?)
+- **v0.3.0:** Irreversibility graphs (not execution graphs - nodes are recoverability states)
+- **v0.4.0:** Distance-to-boundary signaling (non-enforcing visibility)
+- **v1.0.0:** Formal boundary calculus (provable monotonicity properties)
+
+**Correctness ladder:** SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE (one-way only)
+
+See `docs/monotonic-irreversibility.md` for complete evolution design.
 
 ### Key Quote from New Docs
 
