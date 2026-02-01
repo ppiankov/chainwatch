@@ -42,20 +42,28 @@ Enforcement is mode-agnostic: it applies regardless of whether an LLM is used, b
 
 Chainwatch is built on three foundational ideas:
 
-### 1. Irreversible Boundaries
-Some actions cannot be undone. Once executed, no policy can reverse their effects.
+### 1. Irreversible Boundaries (Two Limbs)
+Some transitions in execution context cannot be undone. Chainwatch treats these as **hard boundaries** where the system refuses continuation regardless of model intent.
 
-Chainwatch treats these as **hard execution boundaries** where the system refuses continuation regardless of model intent.
-
+**Limb A: Execution Boundaries**
 - Payment commitment (money leaves account)
 - Credential exposure (secrets cannot be "unread")
 - Data destruction (files cannot be recovered)
+- External communication (messages cannot be unsent)
+
+**Limb B: Authority Boundaries**
+- Proxied commands (instruction origin crosses trust boundary)
+- Injected control (malicious steering enters execution chain)
+- Cross-context commands (isolation violation)
+- Replayed sessions (temporal integrity compromised)
+
+**Real incident:** The Clawdbot attack (2026) was an authority boundary violation — attacker's proxied commands were accepted as legitimate, leading to full system compromise.
 
 These are not moral judgments. These are **architectural properties**.
 
-**The system NEVER asks the model whether an irreversible action is safe.**
+**The system NEVER asks the model whether an irreversible action OR instruction is safe.**
 
-👉 **Read:** [`docs/irreversible-boundaries.md`](docs/irreversible-boundaries.md) - Core concept (500+ lines)
+👉 **Read:** [`docs/irreversible-boundaries.md`](docs/irreversible-boundaries.md) - Core concept (650+ lines)
 
 ### 2. Monotonic Irreversibility
 Chainwatch evolves along a single axis:
@@ -69,6 +77,8 @@ Correctness ladder: `SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE` (one-wa
 This is not ML. This is not prediction. This is **structural safety**.
 
 👉 **Read:** [`docs/monotonic-irreversibility.md`](docs/monotonic-irreversibility.md) - Canonical evolution path (350+ lines)
+
+👉 **Implement:** [`docs/design/v0.2.0-specification.md`](docs/design/v0.2.0-specification.md) - v0.2.0 implementation blueprint (500+ lines)
 
 ### 3. Control Plane, Not Observability
 
@@ -287,15 +297,20 @@ See `docs/monotonic-irreversibility.md` for complete evolution design.
 - ✓ CI/CD pipeline (Python 3.10-3.12)
 - ✓ Path-based file classification
 
-### v0.2.0 (Planned: Monotonic Boundary Accumulation)
+### v0.2.0 (Designed, Ready to Implement)
 **Core concept:** Chain-aware irreversibility (has chain entered zone where this becomes irreversible?)
 
+**Design specification:** `docs/design/v0.2.0-specification.md` (500+ lines)
+
+**Features:**
 - Monotonic state transitions (SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE)
-- Zone-based boundary detection (commercial intent, credential exposure, external egress)
+- Zone-based boundary detection (commercial intent, credential exposure, external egress, sensitive data)
+- Authority boundary detection (proxy relay, context crossing, temporal violations, injection)
 - Compound boundaries (credentials + network = exfiltration)
-- HTTP proxy wrapper for network interception
-- Approval workflow CLI (out-of-band, human override only)
-- Event persistence (Postgres/SQLite)
+- Approval workflow CLI (out-of-band, single-use tokens, model cannot observe)
+- TraceState evolution (backward compatible with v0.1.x)
+
+**Philosophy locked:** All anti-patterns and warnings from philosophical docs baked into specification.
 
 ### v0.3.0 (Future: Irreversibility Graphs)
 **Core concept:** Structural boundary mapping (not execution graphs)

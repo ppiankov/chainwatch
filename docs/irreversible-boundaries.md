@@ -27,7 +27,11 @@ Each individual step looks innocent. The chain becomes irreversible.
 
 ## Chainwatch's Answer
 
-Chainwatch identifies **structural boundaries** in the execution chain:
+Chainwatch identifies **two classes of structural boundaries**:
+
+### Class 1: Execution Boundaries
+
+Actions that cannot be undone once executed:
 
 1. **Points of no return** - Actions that cannot be undone
    - Submitting payment
@@ -45,7 +49,17 @@ Chainwatch identifies **structural boundaries** in the execution chain:
    - Formatting disks
    - Force-pushing code
 
-These are not "bad actions" — they are **irreversible execution boundaries**.
+### Class 2: Authority Boundaries
+
+Instructions that cannot be "un-accepted" once admitted into the execution chain:
+
+4. **Authority ingress** - Control that cannot be revoked once granted
+   - Proxied commands from untrusted origins
+   - Injected instructions into agent control flow
+   - Cross-context command steering
+   - Replayed commands from compromised sessions
+
+These are not "bad actions" or "bad commands" — they are **irreversible transitions in execution context**.
 
 ---
 
@@ -76,6 +90,252 @@ Result: Chain halts before commitment
 Chainwatch **never asks the model** whether an irreversible action is safe.
 
 If the chain crosses a hard boundary, **the system refuses**.
+
+---
+
+## Authority Boundaries: The Second Limb
+
+**Core insight:** Accepting an instruction into the execution chain is itself an irreversible boundary.
+
+### The Problem (Real Incident: Clawdbot, 2025)
+
+**System design:**
+- Clawdbot has full system access (files, OS, browser, chat history)
+- Designed to accept commands through a control interface
+- Processes instructions without distinguishing origin
+
+**The attack:**
+1. Attacker proxies commands through the user's device
+2. Commands reach Clawdbot's "trusted channel"
+3. System treats them as legitimate user instructions
+4. Attacker gains full control: read history, send messages, execute arbitrary commands
+
+**Traditional security perspective:**
+"This is an authentication/authorization failure. Fix the auth layer."
+
+**Chainwatch perspective:**
+"This is an irreversible boundary crossing. Once the instruction is accepted as authoritative, the chain is compromised."
+
+### Why This Is Irreversible
+
+Once a malicious instruction is:
+- Accepted into the control flow
+- Contextualized with trace state
+- Mixed with legitimate execution history
+
+**You cannot "un-infect" the execution chain.**
+
+The attacker's command becomes part of the agent's reasoning context. Even if you detect the intrusion later:
+- The agent has already executed commands
+- History is contaminated
+- Secrets may be exposed
+- Outputs may be manipulated
+
+This is the same irreversibility as payment commitment or credential exposure — just earlier in the lifecycle.
+
+### The Unifying Concept
+
+**Two limbs, same organism:**
+
+| Limb | Question | Boundary Type |
+|------|----------|---------------|
+| **Execution Irreversibility** | "Should this action be allowed even if the instruction is valid?" | Actions that cannot be undone |
+| **Authority Irreversibility** | "Should this instruction be treated as legitimate at all?" | Control that cannot be revoked |
+
+Both are **irreversible transitions in execution context**.
+
+Different surface. Same species.
+
+### Traditional vs Chainwatch Response
+
+**Traditional approach (fails):**
+```
+Authenticate the request
+Verify IP address
+Check token validity
+If all pass → trust instruction
+```
+
+**Problem:** The agent assumes "if it reached me, it must be okay."
+
+This assumption is invisible to classic tools:
+- Logs look normal
+- Permissions are correct
+- No single rule is violated
+
+Exactly like: `browse → cart → checkout → payment`
+
+Each step looks innocent. The chain becomes irreversible.
+
+**Chainwatch approach (succeeds):**
+```
+Instruction origin crosses trust boundary (IRREVERSIBLE)
+→ Boundary detected
+→ REFUSE or REQUIRE_APPROVAL (out-of-band human verification)
+→ No continuation without explicit consent
+```
+
+### Authority Boundary Examples
+
+**Proxied control:**
+- Command arrives through proxy/relay instead of direct user interaction
+- System cannot verify instruction originated from legitimate human
+
+**Boundary:** Once proxied command is accepted, authority is compromised.
+
+**Injected instructions:**
+- Attacker injects commands into agent's input stream
+- Commands appear syntactically valid but semantically malicious
+
+**Boundary:** Once injection is processed, execution chain is contaminated.
+
+**Cross-context steering:**
+- Agent receives commands from one security context (e.g., public web)
+- Commands affect resources in another context (e.g., internal systems)
+
+**Boundary:** Once cross-context command is accepted, isolation is broken.
+
+**Replayed sessions:**
+- Attacker captures and replays legitimate command sequence
+- System treats replay as fresh instruction
+
+**Boundary:** Once replay is accepted as current, temporal integrity is lost.
+
+### What Chainwatch Does NOT Do
+
+**❌ WRONG approaches (traditional security):**
+
+```python
+# ❌ Inspect IP reputation
+if ip_reputation.is_suspicious(request.ip):
+    block()  # Bypassed by proxy rotation
+
+# ❌ Ask model to classify intent
+if model.classify_command_intent(instruction) == "malicious":
+    block()  # Model can be fooled by adversarial phrasing
+
+# ❌ Trust prompts
+if instruction.contains("only accept user commands"):
+    allow()  # Prompt injection bypasses this
+```
+
+All of these fail under adversarial conditions.
+
+**✅ CORRECT approach (structural boundary detection):**
+
+```python
+# ✅ Detect structural boundary crossing
+if instruction.origin_crosses_trust_boundary():
+    return Decision.REQUIRE_APPROVAL  # Human verifies out-of-band
+
+# ✅ Detect control flow contamination
+if instruction.mixed_with_untrusted_context():
+    return Decision.DENY  # Refuse to continue contaminated chain
+
+# ✅ Detect replay/injection
+if instruction.temporal_integrity_violated():
+    return Decision.DENY  # Hard stop
+```
+
+No model reasoning. No IP heuristics. **Structural refusal.**
+
+### How This Would Have Stopped Clawdbot Attack
+
+**With Chainwatch authority boundaries:**
+
+1. **Detect ingress boundary:**
+   ```
+   Instruction arrives via proxy relay
+   → Authority boundary detected: command origin crosses trust boundary
+   ```
+
+2. **Refuse continuation:**
+   ```
+   → Decision: REQUIRE_APPROVAL
+   → Execution halts
+   → Out-of-band notification to legitimate user
+   ```
+
+3. **Human verifies:**
+   ```
+   User sees: "Command received through proxy. Did you authorize this?"
+   User response: "No, I did not send this command."
+   → Instruction rejected, attack prevented
+   ```
+
+4. **Attack fails before execution:**
+   - No history leaked
+   - No commands executed
+   - No chain contamination
+
+**Key point:** The boundary was enforced **before** the instruction entered the execution chain, not after damage was done.
+
+### Why This Is Still Chainwatch, Not IAM
+
+Traditional IAM/Zero Trust asks:
+- "Is this user authenticated?"
+- "Does this token have the right permissions?"
+- "Is this IP address trusted?"
+
+Chainwatch asks:
+- "Is accepting this instruction an irreversible transition?"
+- "Can we recover if this instruction is malicious?"
+- "Can this instruction be 'un-accepted' from the execution chain?"
+
+If the answer is "no, we cannot recover," **refuse**.
+
+This is control plane logic, not identity verification.
+
+### Authority Boundaries in v0.2.0
+
+**Planned implementation:**
+
+Authority boundaries will be detected through **structural signals**, not heuristics:
+
+```python
+AUTHORITY_BOUNDARIES = {
+    "proxy_relay": {
+        "pattern": "instruction.origin != direct_user_interface",
+        "decision": Decision.REQUIRE_APPROVAL,
+        "reason": "Command proxied through untrusted relay"
+    },
+    "context_crossing": {
+        "pattern": "instruction.context != execution.context",
+        "decision": Decision.DENY,
+        "reason": "Cross-context command steering detected"
+    },
+    "temporal_violation": {
+        "pattern": "instruction.timestamp < session.start_time",
+        "decision": Decision.DENY,
+        "reason": "Replay attack or temporal integrity violation"
+    }
+}
+```
+
+**No ML. No sentiment analysis. No "does this look suspicious?"**
+
+Just: "Did this instruction cross a structural authority boundary?"
+
+### The Unified Philosophy
+
+**Chainwatch enforces both execution boundaries and authority boundaries.**
+
+Both answer the same fundamental question:
+
+> "Is this transition in execution context irreversible?"
+
+Whether the transition is:
+- An action (payment, credential read, file delete)
+- An instruction (proxied command, injected steering, replayed session)
+
+If it's irreversible, **refuse** or **require human override**.
+
+**The system never asks the model:**
+- "Is this action safe?"
+- "Is this command legitimate?"
+- "Does this instruction seem user-like?"
+
+The model's opinion is irrelevant. The boundary is absolute.
 
 ---
 
@@ -412,6 +672,26 @@ Chainwatch is:
 
 **Chainwatch response:** Block `rm -rf`, `dd if=/dev/zero`, `mkfs`
 
+### Authority Compromise (Clawdbot Incident)
+
+**Boundary:** Accepting untrusted instruction as authoritative control
+
+**Why irreversible:**
+- Once malicious instruction enters execution chain, context is contaminated
+- Agent cannot distinguish legitimate vs injected commands in trace history
+- Attacker gains full control: read history, execute commands, manipulate outputs
+- Cannot "un-accept" instruction once it's part of reasoning context
+
+**Real incident (2025):**
+- Attacker proxied commands through user's device
+- Clawdbot treated proxied commands as legitimate
+- Result: full system compromise without auth bypass
+
+**Chainwatch response:**
+- Detect instruction origin boundary crossing (v0.2.0)
+- Require out-of-band human approval for proxied/relayed commands
+- Refuse execution if instruction context crosses trust boundary
+
 ### External Communication
 
 **Boundary:** Sending messages outside the controlled environment
@@ -614,15 +894,34 @@ But boundaries themselves are not negotiable.
 
 ## Summary
 
-**Chainwatch does not treat the denylist as a list of "bad actions."**
+**Chainwatch enforces two classes of irreversible boundaries:**
 
-**Chainwatch treats it as a declaration of irreversible execution boundaries.**
+### 1. Execution Boundaries
+Some **actions** cannot be undone:
+- Payment commitment
+- Credential exposure
+- Data destruction
+- External communication
 
-Some actions cannot be undone.
-Chainwatch refuses to cross those boundaries without explicit human consent.
+### 2. Authority Boundaries
+Some **instructions** cannot be un-accepted once admitted to the execution chain:
+- Proxied commands
+- Injected control flow
+- Cross-context steering
+- Replayed sessions
+
+**Both answer the same question:**
+
+> "Is this transition in execution context irreversible?"
+
+If yes, **refuse** or **require human override**.
+
+**Chainwatch does not treat boundaries as "bad things."**
+
+**Chainwatch treats them as structural points where recovery becomes impossible.**
 
 This is not security theater.
-This is **structural irreversibility awareness** in execution chains.
+This is **irreversibility awareness** across both execution and control.
 
 ---
 
