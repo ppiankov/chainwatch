@@ -152,15 +152,15 @@ with FileGuard(purpose="SOC_efficiency", actor=actor) as guard:
     print(trace)
 ```
 
-### Block Dangerous Actions with Denylist (v0.1.1)
+### Irreversible Boundary Protection (v0.1.1)
 
-Prevent agents from accessing checkout URLs, credentials, or running destructive commands:
+Prevent agents from crossing irreversible execution boundaries - actions that cannot be undone once executed:
 
 ```bash
 # Initialize denylist with sane defaults
 chainwatch init-denylist
 
-# Blocks checkout/payment URLs, SSH keys, AWS credentials, dangerous commands
+# Declares irreversible boundaries: payment flows, credential exposure, destructive operations
 # Automatically enforced by FileGuard and policy evaluation
 ```
 
@@ -191,10 +191,12 @@ result = evaluate(
 # result.reason == "Denylisted: URL matches denylist pattern: /checkout"
 ```
 
-**What's blocked by default:**
-- Checkout URLs: `/checkout`, `/payment`, `/billing`, `stripe.com/checkout`
-- Credentials: `~/.ssh/id_rsa`, `~/.aws/credentials`, `**/.env`
-- Dangerous commands: `rm -rf`, `sudo su`, `curl ... | sh`
+**Irreversible boundaries detected by default:**
+- **Payment commitment:** `/checkout`, `/payment`, `/billing`, `stripe.com/checkout`
+- **Credential exposure:** `~/.ssh/id_rsa`, `~/.aws/credentials`, `**/.env`
+- **Destructive operations:** `rm -rf`, `sudo su`, `curl ... | sh`
+
+These are not "bad actions" — they are **structural points of no return**.
 
 Customize: `vim ~/.chainwatch/denylist.yaml`
 
@@ -231,7 +233,13 @@ make build
 
 ## Roadmap
 
-### v0.1.0 (Current - MVP)
+### v0.1.2 (Current)
+- ✓ Irreversible boundary protection (pattern-based)
+- ✓ Default boundaries: payment, credentials, destructive ops
+- ✓ Conceptual reframe: from "denylist" to "boundary detection"
+- ✓ Core concept documentation (`docs/irreversible-boundaries.md`)
+
+### v0.1.0-0.1.1 (Released)
 - ✓ File operation wrapper (`FileGuard`)
 - ✓ Deterministic policy engine (no ML)
 - ✓ SOC efficiency demo (blocks salary access)

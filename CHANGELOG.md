@@ -7,13 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-02-01
+
+### Changed
+
+**Conceptual reframe: from "denylist" to "irreversible boundaries"**
+
+v0.1.2 contains **no code changes** from v0.1.1. The implementation is identical.
+
+What changed is **how we describe what it does**.
+
+We built a denylist in v0.1.1. Then we realized what it actually is: a primitive implementation of **irreversibility-aware boundary detection**.
+
+### What This Means
+
+**v0.1.1 language (functional, but undersold):**
+- "Block dangerous actions"
+- "Denylist for bad URLs"
+- "Security feature"
+
+**v0.1.2 language (aligned with Chainwatch philosophy):**
+- "Refuse execution when chains cross irreversible boundaries"
+- "Structural points of no return"
+- "Control plane interrupt"
+
+### Why Language Matters
+
+Chainwatch is not about blocking "bad things."
+
+Chainwatch is about **structural awareness of irreversibility in execution chains**.
+
+Some actions cannot be undone:
+- Payment commitment (money leaves account)
+- Credential exposure (secrets cannot be "unread")
+- Data destruction (deleted files cannot be recovered)
+
+These are not moral judgments. These are **architectural properties**.
+
+The denylist declares these boundaries. Policy evaluation refuses to cross them.
+
+### Documentation Changes
+
+- **Added:** `docs/irreversible-boundaries.md` - Core concept document (500+ lines)
+  - Explains why boundaries, not blocklists
+  - Critical warning section: how approval workflows in v0.2.0 could break philosophy if implemented incorrectly
+  - Terminology: DENY (absolute) vs REQUIRE_APPROVAL (human override)
+  - Out-of-band approval requirements: model must not observe or influence
+  - Non-goal: Chainwatch judges recoverability, not morality
+- **Added:** `docs/boundary-configuration.md` - Configuration guide with anti-patterns
+- **Updated:** `docs/core-idea.md` - Added "Irreversible Boundaries" section
+- **Updated:** README - Changed language from "block dangerous actions" to "irreversible boundary protection"
+- **Updated:** All user-facing documentation to use boundary framing
+
+### Breaking Changes
+
+**None.** v0.1.2 is 100% backward compatible with v0.1.1.
+
+The YAML file is still `~/.chainwatch/denylist.yaml` (for now).
+The Python module is still `denylist.py` (implementation detail).
+All APIs unchanged.
+
+What changed: **conceptual framing**.
+
+### Migration from v0.1.1
+
+```bash
+pip install --upgrade chainwatch  # v0.1.1 → v0.1.2
+# Everything still works. No code changes required.
+```
+
+### Why We Did This
+
+v0.1.1 was technically correct but **conceptually undersold**.
+
+Saying "we block checkout URLs" sounds like a security checklist.
+
+Saying "we refuse to cross payment commitment boundaries because they're structurally irreversible" is a **thesis about execution control**.
+
+The former is a feature. The latter is a principle.
+
+Chainwatch is principles-first.
+
+### Evolution Path
+
+- **v0.1.1:** Shipped denylist (pattern matching for "dangerous" resources)
+- **v0.1.2:** Realized it's boundary detection (irreversibility-aware refusal)
+- **v0.2.0:** Chain-aware boundaries (trajectory to commitment, not just patterns)
+- **v0.3.0:** Boundary graphs (model distance-to-irreversibility)
+- **v1.0.0:** Formal boundary calculus (provable properties)
+
+### Key Quote from New Docs
+
+> "Chainwatch never asks the model whether an irreversible action is safe.
+> If the chain crosses a hard boundary, the system refuses."
+
+This is the line between control plane and observability.
+
 ## [0.1.1] - 2026-01-29
 
 ### Added
-- **Denylist enforcement** (`denylist.py`)
-  - Simple, deterministic resource/action blocking
-  - Pattern-based matching for URLs, files, and commands
-  - Default denylist blocks common dangerous patterns:
+- **Irreversible boundary protection** (`denylist.py`)
+  - Hard execution boundaries for actions that cannot be undone
+  - Pattern-based detection of structural points of no return
+  - Default boundaries prevent:
     - Checkout/payment URLs (`/checkout`, `/payment`, `stripe.com`, etc.)
     - Credential files (`~/.ssh/id_rsa`, `~/.aws/credentials`, etc.)
     - Dangerous shell commands (`rm -rf`, `sudo su`, etc.)
@@ -35,28 +131,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI help updated to include `init-denylist` command
 
 ### Documentation
-- Added `examples/denylist_demo.py` - demonstrates blocking checkout URLs and credentials
-- Added `tests/test_denylist.py` - comprehensive unit tests for denylist functionality
-- Added `docs/v0.1.1-denylist-usage.md` - complete usage guide for denylist feature
+- Added `docs/irreversible-boundaries.md` - **Core concept:** Why boundaries, not blocklists
+- Added `examples/denylist_demo.py` - demonstrates boundary protection (checkout, credentials)
+- Added `tests/test_denylist.py` - comprehensive unit tests for boundary detection
+- Added `docs/v0.1.1-denylist-usage.md` - complete usage guide
 - Roadmap documents added:
   - `docs/roadmap-clawbot.md` - Integration strategy with Clawbot and autonomous agents
   - `docs/integrations/browser-checkout-gate.md` - v0.2.0 browser wrapper spec
-  - `docs/integrations/clawbot-denylist.md` - Using denylist with Clawbot today
+  - `docs/integrations/clawbot-denylist.md` - Using boundary protection with Clawbot today
 
 ### Why This Matters
 
-**v0.1.1 prevents the "$3000 course purchase" incident.**
+**v0.1.1 prevents the "$3000 course purchase" incident by treating payment as an irreversible boundary.**
 
 Before v0.1.1:
-- Agent could navigate to checkout and complete purchase
-- No mechanism to block dangerous resources by pattern
+- Agent could cross from "browsing" to "committed purchase" without intervention
+- No structural awareness of irreversibility
+- Policy evaluated actions in isolation, not boundary crossings
 
 After v0.1.1:
-- Checkout URLs are denylisted by default
-- Agent's navigation is blocked before payment can occur
-- Users can customize denylist for their specific threats
+- Payment commitment recognized as irreversible boundary
+- System refuses to cross boundary (hard stop, no negotiation)
+- Users can declare their own irreversible boundaries in YAML
 
-This is immediate, usable protection for Clawbot and other browser-based agents.
+This is not a blocklist. This is **irreversibility-aware execution control**.
+
+Chainwatch never asks the model whether an irreversible action is safe.
+If the chain crosses a hard boundary, the system refuses.
 
 ## [0.1.0] - 2026-01-29
 
@@ -153,6 +254,7 @@ This is immediate, usable protection for Clawbot and other browser-based agents.
 - **Path-based classification**: False positives/negatives expected (e.g., /finance vs /hr/salary)
 - **Monkey-patching limitations**: Won't catch C extension file I/O or subprocess calls
 
-[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/ppiankov/chainwatch/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ppiankov/chainwatch/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ppiankov/chainwatch/releases/tag/v0.1.0
