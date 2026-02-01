@@ -48,19 +48,33 @@ The denylist declares these boundaries. Policy evaluation refuses to cross them.
 
 ### Documentation Changes
 
-- **Added:** `docs/irreversible-boundaries.md` - Core concept document (500+ lines)
-  - Explains why boundaries, not blocklists
+- **Added:** `docs/irreversible-boundaries.md` - Core concept document (650+ lines)
+  - **Two classes of boundaries:** Execution boundaries AND Authority boundaries
+  - Execution: actions that cannot be undone (payment, credentials, destruction)
+  - Authority: instructions that cannot be un-accepted (proxied commands, injection)
+  - Real incident analysis: Clawdbot attack (2026) as authority boundary violation
   - Critical warning section: how approval workflows in v0.2.0 could break philosophy if implemented incorrectly
   - Terminology: DENY (absolute) vs REQUIRE_APPROVAL (human override)
   - Out-of-band approval requirements: model must not observe or influence
   - Non-goal: Chainwatch judges recoverability, not morality
+  - Unified philosophy: both boundaries ask "Is this transition irreversible?"
 - **Added:** `docs/monotonic-irreversibility.md` - **Canonical evolution path** (350+ lines)
   - Single axis of evolution: local → historical → structural irreversibility awareness
   - v0.2.0 design: monotonic boundary accumulation (not graphs)
   - Correctness ladder: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE
   - Anti-patterns: what NOT to build (no ML, no prediction, no negotiation)
   - North star: "Chainwatch should never become smarter — only more conservative"
+- **Added:** `docs/design/v0.2.0-specification.md` - **Implementation blueprint** (500+ lines)
+  - Complete v0.2.0 implementation specification
+  - Zone taxonomy: commercial intent, credentials, egress, sensitive data
+  - Authority boundary detection: proxy relay, context crossing, temporal violations
+  - TraceState schema evolution: irreversibility_level, zones_entered, authority_context
+  - Approval workflow design: out-of-band, single-use tokens, model-blind
+  - Monotonicity guarantees and testing requirements
+  - All warnings from irreversible-boundaries.md baked into design
 - **Added:** `docs/boundary-configuration.md` - Configuration guide with anti-patterns
+- **Added:** `docs/design/v0.2.0-specification.md` → `docs/design/README.md` - Design specification directory
+- **Added:** `docs/INDEX.md` - Complete documentation index and reading guide
 - **Updated:** `docs/core-idea.md` - Added "Irreversible Boundaries" section
 - **Updated:** README - Changed language from "block dangerous actions" to "irreversible boundary protection"
 - **Updated:** All user-facing documentation to use boundary framing
