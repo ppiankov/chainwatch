@@ -64,14 +64,19 @@ The denylist declares these boundaries. Policy evaluation refuses to cross them.
   - Correctness ladder: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE
   - Anti-patterns: what NOT to build (no ML, no prediction, no negotiation)
   - North star: "Chainwatch should never become smarter — only more conservative"
-- **Added:** `docs/design/v0.2.0-specification.md` - **Implementation blueprint** (500+ lines)
-  - Complete v0.2.0 implementation specification
+- **Added:** `docs/design/v0.2.0-specification.md` - **Implementation blueprint** (1000+ lines)
+  - **Two-stage boundary enforcement architecture** (authority BEFORE execution)
+  - Authority boundaries: checked BEFORE instruction admission (prevents chain contamination)
+  - Execution boundaries: checked AFTER admission (prevents irreversible actions)
+  - Critical ordering: ingress → admission → execution
   - Zone taxonomy: commercial intent, credentials, egress, sensitive data
   - Authority boundary detection: proxy relay, context crossing, temporal violations
   - TraceState schema evolution: irreversibility_level, zones_entered, authority_context
   - Approval workflow design: out-of-band, single-use tokens, model-blind
   - Monotonicity guarantees and testing requirements
+  - Clawbot attack prevention proof (integration test requirement)
   - All warnings from irreversible-boundaries.md baked into design
+  - **Unified theory: both boundaries ask "Is this transition irreversible?"**
 - **Added:** `docs/boundary-configuration.md` - Configuration guide with anti-patterns
 - **Added:** `docs/design/v0.2.0-specification.md` → `docs/design/README.md` - Design specification directory
 - **Added:** `docs/INDEX.md` - Complete documentation index and reading guide
