@@ -80,6 +80,10 @@ The denylist declares these boundaries. Policy evaluation refuses to cross them.
 - **Added:** `docs/boundary-configuration.md` - Configuration guide with anti-patterns
 - **Added:** `docs/design/v0.2.0-specification.md` → `docs/design/README.md` - Design specification directory
 - **Added:** `docs/INDEX.md` - Complete documentation index and reading guide
+- **Added:** `docs/DESIGN_BASELINE.md` - **Principiis obsta** (resist the beginnings)
+  - Shared design principle across projects
+  - Citatable foundation for intervention-first systems
+  - Enables low-friction spread of core idea
 - **Updated:** `docs/core-idea.md` - Added "Irreversible Boundaries" section
 - **Updated:** README - Changed language from "block dangerous actions" to "irreversible boundary protection"
 - **Updated:** All user-facing documentation to use boundary framing

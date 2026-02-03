@@ -40,7 +40,13 @@ Enforcement is mode-agnostic: it applies regardless of whether an LLM is used, b
 
 ## Core Philosophy
 
-Chainwatch is built on three foundational ideas:
+**Principiis obsta** — resist the beginnings.
+
+Chainwatch intervenes early, at the point where small, acceptable actions begin to form irreversible outcomes. It operates at the root of events, not their aftermath.
+
+👉 **Read:** [`docs/DESIGN_BASELINE.md`](docs/DESIGN_BASELINE.md) - Shared design principle
+
+### Three Foundational Ideas
 
 ### 1. Irreversible Boundaries (Two Limbs)
 Some transitions in execution context cannot be undone. Chainwatch treats these as **hard boundaries** where the system refuses continuation regardless of model intent.

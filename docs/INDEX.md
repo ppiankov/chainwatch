@@ -9,9 +9,33 @@
 **New to Chainwatch?** Read in this order:
 
 1. **README.md** (project root) - Quick overview and installation
-2. **Core Philosophy** (below) - Understand the foundational ideas
-3. **Evolution Path** (below) - See where we're going and why
-4. **Design Specifications** (when ready to implement) - Implementation blueprints
+2. **DESIGN_BASELINE.md** (below) - Shared principle: Principiis obsta
+3. **Core Philosophy** (below) - Understand the foundational ideas
+4. **Evolution Path** (below) - See where we're going and why
+5. **Design Specifications** (when ready to implement) - Implementation blueprints
+
+---
+
+## Design Baseline (The Foundation)
+
+### Principiis obsta
+**File:** `DESIGN_BASELINE.md`
+
+**Principiis obsta** — resist the beginnings.
+
+Chainwatch intervenes early, at the point where small, acceptable actions begin to form irreversible outcomes. It operates at the root of events, not their aftermath.
+
+**Key principle:**
+> If an outcome cannot be undone, the system should refuse to proceed.
+
+**Shared across projects:**
+- Chainwatch - Execution chain control for AI agents
+- kubenow - Cluster health intervention (not exploration)
+- infranow - Metric-driven triage (silence as success)
+
+**When to read:** First, to understand the invariant that governs all design decisions.
+
+**See also:** `SHARED_PRINCIPLE.md` - How this principle applies across all projects
 
 ---
 
