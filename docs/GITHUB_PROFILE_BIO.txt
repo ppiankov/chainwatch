@@ -1,0 +1,19 @@
+# GitHub Profile Bio Options
+
+Choose one for your GitHub profile:
+
+## Option 1 (Recommended - Technical + Citational)
+I build execution-time control systems that prevent irreversible outcomes instead of observing failures after the fact. (Principiis obsta)
+
+## Option 2 (Sharper)
+I build software that intervenes before damage occurs, not tools that decorate failures afterward. (Principiis obsta)
+
+## Option 3 (Very Minimal)
+Execution control over observability. Prevention over post-mortems. (Principiis obsta)
+
+## Option 4 (Philosophy-first)
+Principiis obsta — resist the beginnings. Building intervention-first systems: chainwatch, kubenow, infranow.
+
+---
+
+All options work. Option 1 is most professional while still being citational.
