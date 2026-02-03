@@ -38,6 +38,25 @@ Enforcement is mode-agnostic: it applies regardless of whether an LLM is used, b
 - A full agent framework
 - A production security product (yet)
 
+## Start Here
+
+**New to Chainwatch?** Read in this order:
+
+1. **[Core Philosophy](#core-philosophy)** (below) - Understand the foundational principle
+2. **[docs/irreversible-boundaries.md](docs/irreversible-boundaries.md)** - Why boundaries, not blocklists (650+ lines)
+3. **[Quick Start](#quick-start)** (below) - Install and run the demo
+4. **[docs/INDEX.md](docs/INDEX.md)** - Complete documentation guide
+
+**Want to implement v0.2.0?** Start with:
+- **[docs/design/v0.2.0-specification.md](docs/design/v0.2.0-specification.md)** - Implementation blueprint (1000+ lines)
+
+**Want to understand RootOps?** Read:
+- **[docs/DESIGN_BASELINE.md](docs/DESIGN_BASELINE.md)** - Principiis obsta principle
+- **[docs/security-classes.md](docs/security-classes.md)** - Forbidden architectures (CW-01 through CW-05)
+- **[docs/rootops-antipatterns.md](docs/rootops-antipatterns.md)** - "Convenient Trust Amplifier" antipattern
+
+**Questions?** See [docs/FAQ.md](docs/FAQ.md)
+
 ## Core Philosophy
 
 **Principiis obsta** — resist the beginnings.

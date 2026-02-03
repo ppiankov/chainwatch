@@ -1,120 +1,104 @@
-# Chainwatch Documentation Index
+# Chainwatch Documentation Guide
 
-**Complete guide to Chainwatch's conceptual foundation and design.**
-
----
-
-## Start Here
-
-**New to Chainwatch?** Read in this order:
-
-1. **README.md** (project root) - Quick overview and installation
-2. **DESIGN_BASELINE.md** (below) - Shared principle: Principiis obsta
-3. **Core Philosophy** (below) - Understand the foundational ideas
-4. **Evolution Path** (below) - See where we're going and why
-5. **Design Specifications** (when ready to implement) - Implementation blueprints
+**Navigation hub for all Chainwatch concepts and specifications.**
 
 ---
 
-## Design Baseline (The Foundation)
+## Quick Navigation
 
-### Principiis obsta
+**I want to...**
+
+- **...understand what Chainwatch is** → Start with [README.md](../README.md)
+- **...understand the core philosophy** → Read [irreversible-boundaries.md](#irreversible-boundaries)
+- **...see the evolution roadmap** → Read [monotonic-irreversibility.md](#monotonic-irreversibility)
+- **...implement v0.2.0** → Read [design/v0.2.0-specification.md](#v020-specification)
+- **...configure boundaries** → Read [boundary-configuration.md](#boundary-configuration)
+- **...use Chainwatch today** → Read [Quick Start](../README.md#quick-start) and [getting-started.md](#getting-started)
+- **...understand RootOps** → Read [DESIGN_BASELINE.md](#design-baseline) and [rootops-antipatterns.md](#rootops-antipatterns)
+- **...learn about forbidden architectures** → Read [security-classes.md](#security-classes)
+
+---
+
+## Start Here (Recommended Order)
+
+For newcomers, read in this order:
+
+1. [README.md](../README.md) - Project overview
+2. [DESIGN_BASELINE.md](#design-baseline) - Principiis obsta
+3. [irreversible-boundaries.md](#irreversible-boundaries) - Core concept (650+ lines)
+4. [monotonic-irreversibility.md](#monotonic-irreversibility) - Evolution path (350+ lines)
+5. [Quick Start](../README.md#quick-start) - Install and demo
+
+**Then explore based on interest:**
+- Implementation → [design/v0.2.0-specification.md](#v020-specification)
+- Configuration → [boundary-configuration.md](#boundary-configuration)
+- RootOps → [security-classes.md](#security-classes), [rootops-antipatterns.md](#rootops-antipatterns)
+
+---
+
+## Foundation Documents
+
+### Design Baseline
+
 **File:** `DESIGN_BASELINE.md`
 
 **Principiis obsta** — resist the beginnings.
 
-Chainwatch intervenes early, at the point where small, acceptable actions begin to form irreversible outcomes. It operates at the root of events, not their aftermath.
+The shared design principle across chainwatch, kubenow, infranow:
+- Intervene at the root of events, not aftermath
+- Prevent irreversible outcomes at execution time
+- Silence when systems are healthy
 
 **Key principle:**
 > If an outcome cannot be undone, the system should refuse to proceed.
 
-**Shared across projects:**
-- Chainwatch - Execution chain control for AI agents
-- kubenow - Cluster health intervention (not exploration)
-- infranow - Metric-driven triage (silence as success)
-
-**When to read:** First, to understand the invariant that governs all design decisions.
-
-**See also:** `SHARED_PRINCIPLE.md` - How this principle applies across all projects
+**When to read:** First, to understand the invariant governing all decisions.
 
 ---
 
-## Security Classes and RootOps
+### Irreversible Boundaries
 
-### Security Classes (CW-01 through CW-05)
-**File:** `security-classes.md`
+**File:** `irreversible-boundaries.md` (650+ lines)
 
-**What it covers:**
-Five root architectural violations that make compromise inevitable:
-- CW-01: Unbounded authentication artifacts (tokens without context)
-- CW-02: Irreversible trust escalation (one capture → long access)
-- CW-03: Opaque identity provider (no enterprise controls)
-- CW-04: Credential leakage surfaces (secrets in URLs/logs)
-- CW-05: Container illusion of safety (Docker as false boundary)
-
-These are not vulnerability classes. These are **forbidden architectures**.
-
-**When to read:** When designing authentication systems or evaluating agent security.
-
-### RootOps Antipattern: "Convenient Trust Amplifier"
-**File:** `rootops-antipatterns.md`
+**Core concept:** Some transitions cannot be undone.
 
 **What it covers:**
-- Definition of RootOps (operate on root causes, not symptoms)
-- The "Convenient Trust Amplifier" antipattern
-- Real incident analysis: AI agent knowledge base
-- 5 attack scenarios (all inevitable by design)
-- Why "hasn't been attacked yet" ≠ secure
-- Detection checklist
-
-**Key quote:**
-> If a system relies on "nobody has attacked it yet," it is already compromised by design.
-
-**When to read:** Before building any authentication or access control system.
-
----
-
-## Core Philosophy (The "Why")
-
-These documents explain **why Chainwatch exists** and **what principles guide all decisions**.
-
-### 1. Irreversible Boundaries (650+ lines)
-**File:** `irreversible-boundaries.md`
-
-**What it covers:**
-- Two classes of boundaries: Execution and Authority
-- Why some actions cannot be undone (payment, credentials, destruction)
-- Why some instructions cannot be un-accepted (proxied commands, injection)
-- Real incident: Clawdbot attack (2025) as authority boundary violation
-- Critical warnings: how approval workflows can break everything
-- Terminology: DENY vs REQUIRE_APPROVAL
-- Out-of-band approval requirements
+- Two classes of boundaries: Execution AND Authority
+- Execution: actions that cannot be undone (payment, credentials, destruction)
+- Authority: instructions that cannot be un-accepted (proxied commands, injection)
+- Real incident: Clawbot attack (2026) as authority boundary violation
+- Critical warnings: how approval workflows can break philosophy
+- Why "never ask the model if safe"
 
 **Key quote:**
 > "The system NEVER asks the model whether an irreversible action OR instruction is safe."
 
-**When to read:** First, to understand what Chainwatch is actually doing.
+**When to read:** Second, to understand what Chainwatch actually does.
 
 ---
 
-### 2. Monotonic Irreversibility (350+ lines)
-**File:** `monotonic-irreversibility.md`
+### Monotonic Irreversibility
+
+**File:** `monotonic-irreversibility.md` (350+ lines)
+
+**Core concept:** Chainwatch should never become smarter — only more conservative.
 
 **What it covers:**
 - Single axis of evolution: Local → Historical → Structural irreversibility awareness
 - Correctness ladder: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE (one-way only)
-- v0.2.0 design principles: monotonic boundary accumulation (not graphs)
+- v0.2.0 design: monotonic boundary accumulation (not graphs yet)
 - Anti-patterns: what NOT to build (ML, prediction, negotiation)
-- Why Chainwatch should never become smarter — only more conservative
+- Why Chainwatch optimizes for "correct under uncertainty and hostile conditions"
 
 **Key quote:**
-> "Chainwatch optimizes for: Correct under uncertainty and hostile conditions."
+> "Chainwatch should never become smarter — only more conservative as execution progresses."
 
-**When to read:** After irreversible-boundaries.md, to understand the evolution path.
+**When to read:** Third, to understand the evolution path and anti-patterns.
 
 ---
 
-### 3. Boundary Configuration
+### Boundary Configuration
+
 **File:** `boundary-configuration.md`
 
 **What it covers:**
@@ -131,26 +115,40 @@ These documents explain **why Chainwatch exists** and **what principles guide al
 
 ---
 
-## Design Specifications (The "What" and "How")
+## Implementation Guides
 
-These documents specify **exactly what to build** and **how to build it**.
+### Getting Started
 
-### v0.2.0 Specification (500+ lines)
-**File:** `design/v0.2.0-specification.md`
+**File:** `getting-started.md`
+
+Quick onboarding for first-time users:
+- Installation steps
+- First integration example with FileGuard
+- How policy works
+- File classification logic
+- Next steps
+
+**When to read:** After understanding philosophy, before implementing.
+
+---
+
+### v0.2.0 Specification
+
+**File:** `design/v0.2.0-specification.md` (1000+ lines)
 
 **Status:** Design complete, ready to implement
 
 **What it covers:**
+- Two-stage boundary enforcement (authority BEFORE execution)
 - Zone taxonomy (commercial, credential, egress, sensitive data)
 - Authority boundary detection (proxy relay, context crossing, temporal violations)
-- TraceState schema evolution (irreversibility_level, zones_entered, authority_context)
-- Transition tables and rules (deterministic, no ML)
+- TraceState schema evolution
 - Approval workflow design (out-of-band, single-use tokens, model-blind)
 - Monotonicity guarantees and testing requirements
-- Success criteria
+- Clawbot attack prevention proof
 
 **Key principle:**
-> "All anti-patterns and warnings from philosophical docs baked into specification."
+> "This is not v0.1.1 with approvals. This is a fundamental architectural shift."
 
 **When to read:** Before implementing v0.2.0.
 
@@ -158,74 +156,151 @@ These documents specify **exactly what to build** and **how to build it**.
 
 ---
 
-## Implementation Guides
+### Testing Guide
 
-### Current Implementation (v0.1.2)
+**File:** `testing-guide.md`
 
-- `v0.1.1-denylist-usage.md` - Using boundary protection today
-- `integrations/file-ops-wrapper.md` - FileGuard capabilities
-- `integrations/clawbot-denylist.md` - Clawbot integration
-- `testing-guide.md` - Testing with external agents
-
-### Conceptual Background
-
-- `core-idea.md` - Original concept: execution chains as first-class entities
-- `mvp-event.md` - Event schema specification
-- `position/execution-chain-as-entity.md` - Why existing tools fail
-
-### Decisions
-
-- `decisions/001-first-integration.md` - Why file wrapper first
-- `decisions/002-file-classification.md` - Path-based classification rationale
+Instructions for testing with external agents:
+- Testing with Aider, OpenHands, or other Python-based agents
+- Creating custom test scenarios
+- What works now vs what needs HTTP proxy mode (v0.2.0)
 
 ---
 
-## Quick Reference
+## RootOps and Security
 
-### "I want to..."
+### Security Classes
 
-**...understand Chainwatch's philosophy:**
-→ Start with `irreversible-boundaries.md`
+**File:** `security-classes.md`
 
-**...see the evolution roadmap:**
-→ Read `monotonic-irreversibility.md`
+**Five forbidden architectures (CW-01 through CW-05):**
 
-**...implement v0.2.0:**
-→ Read philosophy first, then `design/v0.2.0-specification.md`
+- **CW-01: Unbounded Authentication Artifacts** - tokens without context
+- **CW-02: Irreversible Trust Escalation** - one capture → long access
+- **CW-03: Opaque Identity Provider** - no enterprise controls
+- **CW-04: Credential Leakage Surfaces** - secrets in URLs/logs
+- **CW-05: Container Illusion of Safety** - Docker as false boundary
 
-**...configure boundaries:**
-→ Read `boundary-configuration.md`
+**What it covers:**
+- Root architectural violations, not exploitable bugs
+- Why each is unfixable by patches
+- Examples (forbidden vs acceptable)
+- Chainwatch detection logic
+- Real incident references
 
-**...use Chainwatch today (v0.1.2):**
-→ Read `v0.1.1-denylist-usage.md` and README Quick Start
+**Key insight:**
+> "These are not vulnerability classes. These are forbidden architectures."
 
-**...integrate with Clawbot:**
-→ Read `integrations/clawbot-denylist.md`
+**When to read:** When designing authentication systems or evaluating agent security.
 
-**...understand why no ML:**
-→ Read `FAQ.md` and `monotonic-irreversibility.md` anti-patterns
+---
+
+### RootOps Antipatterns
+
+**File:** `rootops-antipatterns.md`
+
+**The "Convenient Trust Amplifier" antipattern:**
+
+System where convenience > boundaries, resulting in:
+- One artifact grants full access
+- Trust never expires
+- Context never re-verified
+- Control replaced with hope
+
+**What it covers:**
+- Definition of RootOps (operate on root causes, not symptoms)
+- The antipattern definition
+- Real incident analysis: AI agent knowledge base
+- 5 attack scenarios (all inevitable by design)
+- Detection checklist
+- Related principles: zero-knowledge, Principiis obsta
+
+**Key quote:**
+> "If a system relies on 'nobody has attacked it yet,' it is already compromised by design."
+
+**When to read:** Before building any authentication or access control system.
+
+---
+
+## Background and Context
+
+### Core Idea
+
+**File:** `core-idea.md`
+
+Original concept: execution chains as first-class entities for security enforcement.
+
+---
+
+### FAQ
+
+**File:** `FAQ.md`
+
+Common questions:
+- Why no ML for enforcement?
+- Why Chainwatch exists
+- How it differs from existing tools
+
+---
+
+### Threat Model
+
+**File:** `threat-model.md`
+
+What Chainwatch protects against and what it doesn't.
+
+---
+
+### Roadmap (Clawbot)
+
+**File:** `roadmap-clawbot.md`
+
+Integration strategy with Clawbot and autonomous agents.
+
+---
+
+## Integration Guides
+
+**Directory:** `integrations/`
+
+- `file-ops-wrapper.md` - FileGuard capabilities and limitations
+- `clawbot-denylist.md` - Clawbot integration today
+- `browser-checkout-gate.md` - v0.2.0 browser wrapper spec
+
+---
+
+## Decision Records
+
+**Directory:** `decisions/`
+
+- `001-first-integration.md` - Why file wrapper first
+- `002-file-classification.md` - Path-based classification rationale
 
 ---
 
 ## Document Hierarchy
 
 ```
-Philosophy (WHY)
-    ├── irreversible-boundaries.md    [Execution + Authority boundaries]
-    ├── monotonic-irreversibility.md  [Evolution axis, anti-patterns]
-    └── boundary-configuration.md     [Configuration guide]
-           ↓
-Design (WHAT & HOW)
-    └── design/
-        └── v0.2.0-specification.md   [Implementation blueprint]
-           ↓
-Implementation (USAGE)
-    ├── v0.1.1-denylist-usage.md     [Current usage]
-    ├── integrations/                 [Integration guides]
-    └── testing-guide.md              [Testing]
+Foundation (Philosophy - WHY)
+├── DESIGN_BASELINE.md          [Principiis obsta]
+├── irreversible-boundaries.md  [Core concept]
+└── monotonic-irreversibility.md [Evolution path]
+       ↓
+Design (What & How)
+├── design/v0.2.0-specification.md [Implementation blueprint]
+└── boundary-configuration.md      [Configuration guide]
+       ↓
+Security (Forbidden Architectures)
+├── security-classes.md         [CW-01 through CW-05]
+└── rootops-antipatterns.md     [Convenient Trust Amplifier]
+       ↓
+Implementation (Usage)
+├── getting-started.md          [Onboarding]
+├── testing-guide.md            [Testing]
+└── integrations/               [Integration guides]
 ```
 
-**Rule:** Always read philosophy before implementing. Design specifications reference philosophy, not replace it.
+**Rule:** Read philosophy before implementing. Always.
 
 ---
 
@@ -240,10 +315,10 @@ From all philosophical documents:
 2. **Monotonicity:**
    - Boundaries accumulate, never disappear
    - Irreversibility only increases, never decreases
-   - One-way transitions: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE
+   - One-way: SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE
 
 3. **Control, not observability:**
-   - System refuses execution when boundaries crossed
+   - Refuse execution when boundaries crossed
    - Not detection, not logging — enforcement
 
 4. **No model negotiation:**
@@ -252,8 +327,8 @@ From all philosophical documents:
    - Approval is human override, not model bypass
 
 5. **Evolution axis:**
-   - Single axis: Local → Historical → Structural irreversibility awareness
-   - Never become smarter — only more conservative
+   - Single axis: Local → Historical → Structural irreversibility
+   - Never smarter — only more conservative
 
 6. **Structural, not statistical:**
    - Deterministic rules, not ML
@@ -265,9 +340,9 @@ From all philosophical documents:
 ## For Contributors
 
 **Before adding features:**
-1. Check if it aligns with philosophy (read irreversible-boundaries.md)
-2. Check if it fits evolution path (read monotonic-irreversibility.md)
-3. Check if it's explicitly deferred (read design/v0.2.0-specification.md non-goals)
+1. Does it align with philosophy? (read irreversible-boundaries.md)
+2. Does it fit evolution path? (read monotonic-irreversibility.md)
+3. Is it explicitly deferred? (read design/v0.2.0-specification.md non-goals)
 
 **Red flags (stop immediately):**
 - Adding ML or heuristics
@@ -287,13 +362,13 @@ From all philosophical documents:
 
 ## Version Status
 
-- **v0.1.2 (current):** Conceptual foundation complete, pattern-based boundaries
+- **v0.1.2 (current):** Conceptual foundation complete
 - **v0.2.0 (designed):** Specification complete, ready to implement
 - **v0.3.0+ (planned):** See monotonic-irreversibility.md evolution path
 
 ---
 
-**Last updated:** 2026-02-01
+**Last updated:** 2026-02-03
 
 **Maintained by:** Philosophy-first development process
 

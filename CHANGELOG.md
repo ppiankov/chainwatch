@@ -97,6 +97,15 @@ The denylist declares these boundaries. Policy evaluation refuses to cross them.
   - Real incident analysis from AI agent knowledge base
   - 5 attack scenarios, all inevitable by design
   - RootOps verdict: reject at design, not at pentest
+- **Improved:** README navigation
+  - Added "Start Here" section with clear reading order
+  - Brutally obvious entrance path (no doc maze)
+  - Links to key documents organized by use case
+- **Rebuilt:** `docs/INDEX.md` navigation guide
+  - "Quick Navigation" by intent ("I want to...")
+  - "Start Here" recommended reading order
+  - All documents categorized: Foundation → Design → Security → Implementation
+  - Each doc has: file name, what it covers, key quote, when to read
 - **Updated:** `docs/core-idea.md` - Added "Irreversible Boundaries" section
 - **Updated:** README - Changed language from "block dangerous actions" to "irreversible boundary protection"
 - **Updated:** All user-facing documentation to use boundary framing
