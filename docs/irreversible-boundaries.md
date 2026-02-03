@@ -691,6 +691,11 @@ Chainwatch is:
 - Detect instruction origin boundary crossing (v0.2.0)
 - Require out-of-band human approval for proxied/relayed commands
 - Refuse execution if instruction context crosses trust boundary
+- Enforce security classes CW-01 through CW-05 (see `docs/security-classes.md`)
+
+**Related:** Authority boundary violations extend to authentication architecture design. See:
+- `docs/security-classes.md` - Five forbidden authentication patterns
+- `docs/rootops-antipatterns.md` - "Convenient Trust Amplifier" antipattern
 
 ### External Communication
 

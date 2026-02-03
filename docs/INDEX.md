@@ -39,6 +39,41 @@ Chainwatch intervenes early, at the point where small, acceptable actions begin 
 
 ---
 
+## Security Classes and RootOps
+
+### Security Classes (CW-01 through CW-05)
+**File:** `security-classes.md`
+
+**What it covers:**
+Five root architectural violations that make compromise inevitable:
+- CW-01: Unbounded authentication artifacts (tokens without context)
+- CW-02: Irreversible trust escalation (one capture → long access)
+- CW-03: Opaque identity provider (no enterprise controls)
+- CW-04: Credential leakage surfaces (secrets in URLs/logs)
+- CW-05: Container illusion of safety (Docker as false boundary)
+
+These are not vulnerability classes. These are **forbidden architectures**.
+
+**When to read:** When designing authentication systems or evaluating agent security.
+
+### RootOps Antipattern: "Convenient Trust Amplifier"
+**File:** `rootops-antipatterns.md`
+
+**What it covers:**
+- Definition of RootOps (operate on root causes, not symptoms)
+- The "Convenient Trust Amplifier" antipattern
+- Real incident analysis: AI agent knowledge base
+- 5 attack scenarios (all inevitable by design)
+- Why "hasn't been attacked yet" ≠ secure
+- Detection checklist
+
+**Key quote:**
+> If a system relies on "nobody has attacked it yet," it is already compromised by design.
+
+**When to read:** Before building any authentication or access control system.
+
+---
+
 ## Core Philosophy (The "Why")
 
 These documents explain **why Chainwatch exists** and **what principles guide all decisions**.

@@ -84,6 +84,19 @@ The denylist declares these boundaries. Policy evaluation refuses to cross them.
   - Shared design principle across projects
   - Citatable foundation for intervention-first systems
   - Enables low-friction spread of core idea
+- **Added:** `docs/security-classes.md` - **Five Chainwatch security classes** (CW-01 through CW-05)
+  - Extension to authority boundary detection
+  - Root architectural violations, not exploitable bugs
+  - CW-01: Unbounded authentication artifacts
+  - CW-02: Irreversible trust escalation
+  - CW-03: Opaque identity provider
+  - CW-04: Credential leakage surfaces
+  - CW-05: Container illusion of safety
+- **Added:** `docs/rootops-antipatterns.md` - **"Convenient Trust Amplifier" antipattern**
+  - Forbidden architecture: convenience > boundaries
+  - Real incident analysis from AI agent knowledge base
+  - 5 attack scenarios, all inevitable by design
+  - RootOps verdict: reject at design, not at pentest
 - **Updated:** `docs/core-idea.md` - Added "Irreversible Boundaries" section
 - **Updated:** README - Changed language from "block dangerous actions" to "irreversible boundary protection"
 - **Updated:** All user-facing documentation to use boundary framing
