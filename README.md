@@ -57,6 +57,8 @@ Enforcement is mode-agnostic: it applies regardless of whether an LLM is used, b
 
 **Questions?** See [docs/FAQ.md](docs/FAQ.md)
 
+**What is Chainwatch NOT?** See [docs/OUT_OF_SCOPE.md](docs/OUT_OF_SCOPE.md)
+
 ## Core Philosophy
 
 **Principiis obsta** — resist the beginnings.
