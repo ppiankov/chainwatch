@@ -469,6 +469,10 @@ multiple violations of these classes simultaneously:
 
 These systems are compromised by design, regardless of implementation quality.
 
+**References:**
+- https://www.xda-developers.com/please-stop-using-openclaw/
+- https://blogs.cisco.com/ai/personal-ai-agents-like-openclaw-are-a-security-nightmare
+
 ---
 
 **Status:** Security classes defined for v0.2.0+
