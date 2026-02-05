@@ -457,10 +457,24 @@ def check_authentication_architecture(system_config):
 
 ---
 
+### Real-World Incidents and Warnings
+
+Recent analyses of personal AI agents (e.g., OpenClaw) demonstrate
+multiple violations of these classes simultaneously:
+
+- Long-lived authentication artifacts (CW-01)
+- Irreversible trust escalation (CW-02)
+- Opaque identity providers used as primary auth (CW-03)
+- Reliance on containerization as a safety boundary (CW-05)
+
+These systems are compromised by design, regardless of implementation quality.
+
+---
+
 **Status:** Security classes defined for v0.2.0+
 **Philosophy:** Reject dangerous architectures, not just exploits
 **Principle:** If the design allows irreversible capture, refuse the design
 
 ---
 
-*Last updated: 2026-02-03*
+*Last updated: 2026-02-05*
