@@ -1,215 +1,64 @@
 # Work Orders — chainwatch
 
-## WO-CW01: v0.2.0 Core — Monotonic State Machine
+## WO-CW01: v0.2.0 Core — Monotonic State Machine ✅
 
 **Goal:** Implement the two-stage boundary enforcement from `docs/design/v0.2.0-specification.md`.
 
-### What Changes
-Replace flat risk scoring with monotonic state transitions:
-```
-SAFE → SENSITIVE → COMMITMENT → IRREVERSIBLE (one-way only)
-```
-
-### Steps
-1. Add `BoundaryZone` enum to `types.py` (SAFE, SENSITIVE, COMMITMENT, IRREVERSIBLE)
-2. Update `TraceState` with `zone: BoundaryZone` field — can only advance, never retreat
-3. Add `advance_zone()` to tracer — validates monotonicity, records transition event
-4. Update `policy.py` to evaluate zone transitions instead of raw risk scores
-5. Add authority boundary check (Stage 1): instruction admission before chain entry
-6. Keep execution boundary check (Stage 2): action evaluation after admission
-7. Backward-compatible: existing file wrapper still works
-
-### Tests
-- Zone can advance but never retreat
-- Authority boundary blocks Clawbot-pattern instructions
-- Execution boundary blocks irreversible actions
-- Existing demo still passes (salary blocked)
-
-### Acceptance
-- `make test` passes
-- Demo gate passes
-- Zone transitions visible in trace events
+### Implementation
+- `internal/model/boundary.go` — BoundaryZone constants (Safe, Sensitive, Commitment, Irreversible)
+- `internal/zone/detect.go` — `DetectZones()` with 8 fine-grained zone patterns
+- `internal/zone/level.go` — `ComputeIrreversibilityLevel()` with monotonic enforcement
+- `internal/authority/check.go` — `CheckAdmission()` for Stage 1 boundary checks
+- `internal/policy/evaluate.go` — zone-aware risk evaluation replacing flat scoring
 
 ---
 
-## WO-CW02: HTTP Proxy Wrapper
+## WO-CW02: HTTP Proxy Wrapper ✅
 
 **Goal:** Add an HTTP proxy that intercepts agent outbound requests and enforces policy.
 
-### Context
-File wrapper covers reads. Agents also make HTTP calls — API requests, webhooks, checkout flows. The HTTP proxy is chainwatch's second insertion point, covering network egress.
-
-This is how chainwatch bolts onto Clawbot-style agents: agent's HTTP calls route through chainwatch proxy, which evaluates each request against denylist + policy before forwarding.
-
-### Steps
-1. Create `src/chainwatch/wrappers/http_proxy.py`
-2. Lightweight MITM-free proxy (no TLS interception — inspect URL/headers/method only)
-3. Policy check per request: denylist match on URL patterns, method restrictions
-4. Block: payment endpoints, credential endpoints, destructive APIs
-5. Allow: read-only APIs, search, documentation
-6. Require-approval: external POST/PUT/DELETE to unknown domains
-7. Trace: record HTTP events with method, URL (redacted), decision
-8. CLI: `chainwatch proxy --port 8888 --denylist ~/.chainwatch/denylist.yaml`
-
-### Integration
-Agent configured with `HTTP_PROXY=http://localhost:8888`:
-```bash
-HTTP_PROXY=http://localhost:8888 clawbot run --task "research competitors"
-```
-
-### Tests
-- Payment URLs blocked (stripe.com/checkout, paypal.com/pay)
-- Credential endpoints blocked (oauth/token with POST)
-- GET requests to docs/search allowed
-- Unknown POST requires approval
-- Proxy starts/stops cleanly
-
-### Acceptance
-- `make test` passes
-- `chainwatch proxy --port 8888` starts and proxies requests
-- Denylist patterns enforced on URLs
+### Implementation
+- `internal/proxy/server.go` — MITM-free forward proxy with HTTP and HTTPS CONNECT tunneling
+- `internal/cli/proxy.go` — `chainwatch proxy --port 8888` CLI command
+- Denylist enforcement on both plain HTTP and CONNECT requests
+- Policy evaluation before forwarding; blocks on Deny or RequireApproval decisions
 
 ---
 
-## WO-CW03: Subprocess Wrapper
+## WO-CW03: Subprocess Wrapper ✅
 
 **Goal:** Intercept subprocess/shell commands agents execute.
 
-### Context
-Agents run shell commands — `rm`, `curl | sh`, `git push --force`, `docker run`. These are irreversible execution boundaries.
-
-### Steps
-1. Create `src/chainwatch/wrappers/subprocess_ops.py`
-2. Monkey-patch `subprocess.run`, `subprocess.Popen`, `os.system`
-3. Parse command for denylist patterns before execution
-4. Block: `rm -rf /`, `sudo su`, `curl ... | sh`, `git push --force`
-5. Allow: `ls`, `cat`, `git status`, `make test`
-6. Trace: record command, decision, exit code
-
-### Tests
-- Destructive commands blocked
-- Read-only commands allowed
-- Pipe-to-shell detected and blocked
-- Existing tests still pass
-
-### Acceptance
-- `make test` passes
-- Demo with subprocess calls shows enforcement
+### Implementation
+- `internal/cmdguard/guard.go` — `Guard` with `Run()` and `Check()` for command interception
+- `internal/cmdguard/action.go` — action builder from command invocations
+- `internal/cli/exec.go` — `chainwatch exec` CLI command with `--dry-run` mode
+- Policy evaluation and denylist check before execution; captures stdout/stderr/exit code
 
 ---
 
-## WO-CW04: Declarative Policy YAML
+## WO-CW04: Declarative Policy YAML ✅
 
-**Goal:** Move policy rules from hardcoded Python to YAML config.
+**Goal:** Move policy rules from hardcoded constants to YAML config.
 
-### Context
-Currently `policy.py` has hardcoded purpose-bound rules and thresholds. Users need to customize without editing source.
-
-### Config Format
-```yaml
-# ~/.chainwatch/policy.yaml
-thresholds:
-  allow_max: 5
-  redact_max: 10
-  approval_min: 11
-
-sensitivity_weights:
-  public: 1
-  internal: 3
-  confidential: 5
-  restricted: 6
-
-rules:
-  - purpose: SOC_efficiency
-    resource_pattern: "*salary*"
-    decision: require_approval
-    approval_key: soc_salary_access
-
-  - purpose: "*"
-    resource_pattern: "*.env"
-    decision: deny
-    reason: "Environment files blocked"
-```
-
-### Steps
-1. Create `src/chainwatch/config.py` — YAML loader with defaults
-2. Update `policy.py` to read from config instead of constants
-3. Merge: defaults + user YAML + CLI overrides
-4. `chainwatch init-policy` generates default YAML with comments
-
-### Tests
-- Default config produces same results as current hardcoded values
-- Custom config overrides thresholds
-- Missing config file uses defaults gracefully
-
-### Acceptance
-- `make test` passes
-- `chainwatch init-policy` generates valid YAML
-- Existing demo still passes with default config
+### Implementation
+- `internal/policy/config.go` — `PolicyConfig` with `Thresholds`, `SensitivityWeights`, YAML loading
+- `internal/policy/risk.go` — risk scoring from config values
+- `internal/cli/init_policy.go` — `chainwatch init-policy` generates default YAML
+- `LoadConfig()` reads `~/.chainwatch/policy.yaml` with fallback to defaults
 
 ---
 
-## WO-CW05: Clawbot Safety Profile
+## WO-CW05: Clawbot Safety Profile ✅
 
 **Goal:** Ship a pre-built denylist + policy profile for Clawbot-style AI agents.
 
-### Context
-People will keep using Clawbot. Instead of telling them not to, make it safer. Ship a profile that blocks the known attack surface.
-
-### Profile Contents
-```yaml
-# profiles/clawbot.yaml
-name: clawbot-safety
-description: Safety profile for browser-automation AI agents
-
-authority_boundaries:
-  # Block instruction injection patterns
-  - pattern: "execute.*from.*webpage"
-    reason: "Cross-context instruction injection"
-  - pattern: "admin.*override"
-    reason: "Authority escalation attempt"
-
-execution_boundaries:
-  urls:
-    # Payment/checkout
-    - "*/checkout*"
-    - "*/payment*"
-    - "stripe.com/*"
-    - "paypal.com/*"
-    # Credential exposure
-    - "*/oauth/token*"
-    - "*/api/keys*"
-    # Account modification
-    - "*/account/delete*"
-    - "*/settings/security*"
-
-  commands:
-    - "rm -rf*"
-    - "curl*|*sh"
-    - "sudo*"
-
-  file_patterns:
-    - "~/.ssh/*"
-    - "~/.aws/*"
-    - "**/.env"
-    - "**/credentials*"
-```
-
-### Steps
-1. Create `profiles/` directory with `clawbot.yaml`
-2. `chainwatch apply-profile clawbot` loads the profile
-3. Profile merges with user denylist (profile = base, user = overrides)
-4. `chainwatch check-profile clawbot` validates the profile loads cleanly
-
-### Tests
-- Profile loads and merges with existing denylist
-- All Clawbot attack patterns blocked
-- Profile doesn't interfere with legitimate agent operations
-
-### Acceptance
-- `make test` passes
-- `chainwatch apply-profile clawbot` works
-- Demo with Clawbot-pattern attacks shows blocks
+### Implementation
+- `internal/profile/profile.go` — profile loading (built-in + user-defined)
+- `internal/profile/builtin.go` — embedded clawbot profile
+- `internal/profile/apply.go` — runtime application to guard/proxy configs
+- `internal/profile/profiles/clawbot.yaml` — authority boundaries (injection, escalation) + execution boundaries (payments, credentials, dangerous commands)
+- `internal/cli/profile.go` — `chainwatch profile list|check|apply` commands
 
 ---
 
@@ -218,15 +67,16 @@ execution_boundaries:
 **Goal:** Interactive approval flow for require-approval decisions.
 
 ### Context
-Currently `require_approval` just blocks. Need a way for humans to approve specific actions during supervised agent runs.
+`RequireApproval` decision type exists in `internal/model/types.go`. Both proxy and guard generate `ApprovalKey` in trace records and block with HTTP 403 / `BlockedError`. Missing: CLI commands to manage approvals.
 
 ### Steps
-1. Approval request writes to `~/.chainwatch/pending/<approval_key>.json`
-2. `chainwatch approve <key>` grants one-time approval
-3. `chainwatch approve <key> --duration 5m` grants time-limited approval
-4. `chainwatch pending` lists pending approvals
-5. `chainwatch deny <key>` explicitly denies
-6. Approval state is per-session (not persistent across restarts)
+1. Create `internal/approval/store.go` — file-based approval state (`~/.chainwatch/pending/`)
+2. Create `internal/cli/approve.go` — `chainwatch approve <key>` grants one-time approval
+3. Add `--duration 5m` flag for time-limited approval
+4. Create `internal/cli/pending.go` — `chainwatch pending` lists pending approvals
+5. Create `internal/cli/deny.go` — `chainwatch deny <key>` explicitly denies
+6. Wire approval store into guard and proxy decision paths
+7. Approval state is per-session (not persistent across restarts)
 
 ### Tests
 - Pending approval blocks execution
@@ -235,7 +85,7 @@ Currently `require_approval` just blocks. Need a way for humans to approve speci
 - Denial is recorded in trace
 
 ### Acceptance
-- `make test` passes
+- `make go-test` passes with -race
 - End-to-end: agent hits approval boundary → human approves → agent continues
 
 ---
@@ -245,12 +95,10 @@ Currently `require_approval` just blocks. Need a way for humans to approve speci
 **Goal:** A persistent monitor that blocks root-level system operations in real time, not after the fact.
 
 ### Context
-Clawbot runs on a VM with root access. This means the agent can `sudo`, write to `/etc/`, create systemd services, modify firewall rules, change file ownership, install packages — all irreversible. CW03 (subprocess wrapper) catches shell commands, but only when the agent uses Python's `subprocess`. A determined agent (or injected instruction) can bypass that.
-
-The root monitor is a separate enforcement layer: a daemon that watches for root-level operations regardless of how they're triggered.
+Clawbot runs on a VM with root access. This means the agent can `sudo`, write to `/etc/`, create systemd services, modify firewall rules, change file ownership, install packages — all irreversible. CW03 (cmdguard) catches shell commands routed through `chainwatch exec`, but a determined agent (or injected instruction) can spawn processes directly. The root monitor is a separate enforcement layer: a daemon that watches for root-level operations regardless of how they're triggered.
 
 ### Architecture
-Lightweight daemon process (not the same as the proxy or wrapper):
+Lightweight daemon process (not the same as the proxy or guard):
 ```
 chainwatch root-monitor --pid <agent-pid>
 ```
@@ -275,11 +123,11 @@ Monitors the agent process tree and blocks:
 - All blocked attempts logged to trace with full command, PID, timestamp
 
 ### Steps
-1. Create `src/chainwatch/monitors/root_monitor.py` — daemon loop
-2. Create `src/chainwatch/monitors/seccomp_filter.py` — seccomp-bpf rules (Linux only)
-3. Create `src/chainwatch/monitors/proc_watcher.py` — /proc polling fallback
-4. CLI: `chainwatch root-monitor --pid <pid> --profile clawbot`
-5. Integrate with Clawbot safety profile (CW05) for rule set
+1. Create `internal/monitor/daemon.go` — daemon loop, process tree tracking
+2. Create `internal/monitor/seccomp.go` — seccomp-bpf rules via `golang.org/x/sys/unix` (Linux only)
+3. Create `internal/monitor/procwatch.go` — `/proc` polling fallback
+4. Create `internal/cli/root_monitor.go` — `chainwatch root-monitor --pid <pid> --profile clawbot`
+5. Integrate with profile package (CW05) for rule set
 6. Grace period: allow `sudo` only if pre-approved via CW06 approval workflow
 
 ### Tests
@@ -291,7 +139,7 @@ Monitors the agent process tree and blocks:
 - Trace captures all blocked attempts
 
 ### Acceptance
-- `make test` passes
+- `make go-test` passes with -race
 - `chainwatch root-monitor --pid $$ --profile clawbot` starts and enforces
 - Demo: agent attempts `sudo rm -rf /tmp/test` → blocked, logged, agent continues
 
