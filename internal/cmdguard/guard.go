@@ -12,6 +12,7 @@ import (
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
+	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/tracer"
 )
 
@@ -19,6 +20,7 @@ import (
 type Config struct {
 	DenylistPath string
 	PolicyPath   string
+	ProfileName  string
 	Purpose      string
 	Actor        map[string]any
 }
@@ -62,6 +64,15 @@ func NewGuard(cfg Config) (*Guard, error) {
 	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load policy config: %w", err)
+	}
+
+	if cfg.ProfileName != "" {
+		prof, err := profile.Load(cfg.ProfileName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load profile %q: %w", cfg.ProfileName, err)
+		}
+		profile.ApplyToDenylist(prof, dl)
+		policyCfg = profile.ApplyToPolicy(prof, policyCfg)
 	}
 
 	if cfg.Actor == nil {
