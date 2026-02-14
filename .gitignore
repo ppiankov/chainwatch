@@ -47,6 +47,7 @@ test-*.sh
 !CONTRIBUTING.md
 !FIELD_NOTES.md
 !SECURITY.md
+!CLAUDE.md
 
 # OS
 .DS_Store
@@ -89,3 +90,7 @@ ENV/
 
 # Generated test data
 corporate_test_data/
+
+# Claude Code
+.claude/
+CLAUDE.local.md
