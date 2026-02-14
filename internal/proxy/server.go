@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -35,6 +36,7 @@ type Server struct {
 	cfg       Config
 	dl        *denylist.Denylist
 	policyCfg *policy.PolicyConfig
+	approvals *approval.Store
 	tracer    *tracer.TraceAccumulator
 	mu        sync.Mutex // protects tracer state
 	srv       *http.Server
@@ -61,6 +63,12 @@ func NewServer(cfg Config) (*Server, error) {
 		policyCfg = profile.ApplyToPolicy(prof, policyCfg)
 	}
 
+	approvalStore, err := approval.NewStore(approval.DefaultDir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create approval store: %w", err)
+	}
+	approvalStore.Cleanup()
+
 	if cfg.Actor == nil {
 		cfg.Actor = map[string]any{"proxy": "chainwatch"}
 	}
@@ -72,6 +80,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg:       cfg,
 		dl:        dl,
 		policyCfg: policyCfg,
+		approvals: approvalStore,
 		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
 	}
 
@@ -144,11 +153,24 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}, "")
 	s.mu.Unlock()
 
-	switch result.Decision {
-	case model.Deny:
+	if result.Decision == model.Deny {
 		writeBlocked(w, http.StatusForbidden, result)
 		return
-	case model.RequireApproval:
+	}
+
+	if result.Decision == model.RequireApproval && result.ApprovalKey != "" {
+		status, _ := s.approvals.Check(result.ApprovalKey)
+		if status == approval.StatusApproved {
+			s.approvals.Consume(result.ApprovalKey)
+			// fall through to forward
+		} else {
+			if status != approval.StatusPending && status != approval.StatusDenied {
+				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+			}
+			writeBlocked(w, http.StatusForbidden, result)
+			return
+		}
+	} else if result.Decision == model.RequireApproval {
 		writeBlocked(w, http.StatusForbidden, result)
 		return
 	}
@@ -218,7 +240,24 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}, "")
 	s.mu.Unlock()
 
-	if result.Decision == model.Deny || result.Decision == model.RequireApproval {
+	if result.Decision == model.Deny {
+		http.Error(w, fmt.Sprintf("CONNECT blocked: %s", result.Reason), http.StatusForbidden)
+		return
+	}
+
+	if result.Decision == model.RequireApproval && result.ApprovalKey != "" {
+		status, _ := s.approvals.Check(result.ApprovalKey)
+		if status == approval.StatusApproved {
+			s.approvals.Consume(result.ApprovalKey)
+			// fall through to tunnel
+		} else {
+			if status != approval.StatusPending && status != approval.StatusDenied {
+				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+			}
+			http.Error(w, fmt.Sprintf("CONNECT blocked: %s (approval_key=%s)", result.Reason, result.ApprovalKey), http.StatusForbidden)
+			return
+		}
+	} else if result.Decision == model.RequireApproval {
 		http.Error(w, fmt.Sprintf("CONNECT blocked: %s", result.Reason), http.StatusForbidden)
 		return
 	}
