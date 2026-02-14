@@ -91,5 +91,9 @@ go-init-policy: ## Generate default policy.yaml
 go-apply-profile: ## Show clawbot safety profile patterns
 	go run ./cmd/chainwatch profile apply clawbot
 
+.PHONY: go-pending
+go-pending: ## List pending approval requests
+	go run ./cmd/chainwatch pending
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
