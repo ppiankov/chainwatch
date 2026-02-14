@@ -52,3 +52,28 @@ all: fmt lint test ## Run fmt, lint, and test
 .PHONY: check-fmt
 check-fmt: ## Check if code is formatted (CI mode)
 	black --check src/ tests/ examples/
+
+# ── Go targets ──────────────────────────────────────────
+
+.PHONY: go-build
+go-build: ## Build Go binary
+	go build -o bin/chainwatch ./cmd/chainwatch
+
+.PHONY: go-test
+go-test: ## Run Go tests with race detection
+	go test -race -v ./internal/...
+
+.PHONY: go-lint
+go-lint: ## Run golangci-lint
+	golangci-lint run ./...
+
+.PHONY: go-fmt
+go-fmt: ## Format Go code
+	gofmt -w cmd/ internal/
+
+.PHONY: go-demo
+go-demo: ## Run Go SOC demo (salary must be blocked)
+	go run ./cmd/chainwatch demo soc
+
+.PHONY: go-all
+go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
