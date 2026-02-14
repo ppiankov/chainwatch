@@ -17,7 +17,11 @@ import (
 //  3. Irreversibility level check (v0.2.0 — enforce monotonic boundaries)
 //  4. Legacy risk scoring (v0.1.x — for non-boundary cases)
 //  5. Purpose-bound rules (v0.1.x — specific hard rules)
-func Evaluate(action *model.Action, state *model.TraceState, purpose string, dl *denylist.Denylist) model.PolicyResult {
+func Evaluate(action *model.Action, state *model.TraceState, purpose string, dl *denylist.Denylist, cfg *PolicyConfig) model.PolicyResult {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+
 	// Step 1: Denylist check (hard block, highest priority)
 	if dl != nil {
 		if blocked, reason := dl.IsBlocked(action.Resource, action.Tool); blocked {
@@ -71,22 +75,28 @@ func Evaluate(action *model.Action, state *model.TraceState, purpose string, dl 
 	}
 	isNewSource := !state.HasSource(source)
 
-	risk := riskScore(meta, state, isNewSource)
+	risk := riskScore(meta, state, isNewSource, cfg)
 
-	// Step 5: Purpose-bound hard rules (explicit > scoring)
-	if purpose == "SOC_efficiency" {
-		if strings.Contains(strings.ToLower(action.Resource), "salary") {
+	// Step 5: Purpose-bound rules from config (explicit > scoring)
+	for _, rule := range cfg.Rules {
+		if matchRule(rule, purpose, action.Resource) {
+			decision := parseDecision(rule.Decision)
+			reason := rule.Reason
+			if reason == "" {
+				reason = fmt.Sprintf("%s purpose: %s requires %s",
+					rule.Purpose, rule.ResourcePattern, rule.Decision)
+			}
 			return model.PolicyResult{
-				Decision:    model.RequireApproval,
-				Reason:      "access to salary data is not allowed for SOC efficiency tasks without approval",
-				ApprovalKey: "soc_salary_access",
-				PolicyID:    "purpose.SOC_efficiency.salary",
+				Decision:    decision,
+				Reason:      reason,
+				ApprovalKey: rule.ApprovalKey,
+				PolicyID:    rulePolicyID(rule),
 			}
 		}
 	}
 
 	// Risk-based enforcement
-	if risk >= RiskApprovalMin {
+	if risk >= cfg.Thresholds.ApprovalMin {
 		return model.PolicyResult{
 			Decision:    model.RequireApproval,
 			Reason:      fmt.Sprintf("high cumulative risk (risk=%d) based on sensitivity, volume, and chain context", risk),
@@ -95,7 +105,7 @@ func Evaluate(action *model.Action, state *model.TraceState, purpose string, dl 
 		}
 	}
 
-	if risk > RiskAllowMax {
+	if risk > cfg.Thresholds.AllowMax {
 		return model.PolicyResult{
 			Decision:   model.AllowWithRedaction,
 			Reason:     fmt.Sprintf("moderate risk (risk=%d); sensitive fields must be redacted", risk),

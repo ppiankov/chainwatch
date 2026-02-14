@@ -64,9 +64,13 @@ func runSOCDemo(cmd *cobra.Command, args []string) error {
 		_ = f
 	}
 
-	// Set up tracer and denylist
+	// Set up tracer, denylist, and policy config
 	acc := tracer.NewAccumulator(tracer.NewTraceID())
 	dl := denylist.NewDefault()
+	policyCfg, err := policy.LoadConfig("")
+	if err != nil {
+		return fmt.Errorf("failed to load policy config: %w", err)
+	}
 
 	actor := map[string]any{
 		"user_id":  "analyst1",
@@ -85,7 +89,7 @@ func runSOCDemo(cmd *cobra.Command, args []string) error {
 		action := buildFileAction(path, name)
 
 		// Evaluate policy
-		result := policy.Evaluate(action, acc.State, purpose, dl)
+		result := policy.Evaluate(action, acc.State, purpose, dl, policyCfg)
 
 		// Record event
 		acc.RecordAction(actor, purpose, action, map[string]any{

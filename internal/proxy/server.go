@@ -22,6 +22,7 @@ import (
 type Config struct {
 	Port         int
 	DenylistPath string
+	PolicyPath   string
 	Purpose      string
 	Actor        map[string]any
 }
@@ -29,11 +30,12 @@ type Config struct {
 // Server is a forward HTTP proxy that enforces chainwatch policy on outbound requests.
 // MITM-free: no TLS interception. HTTPS CONNECT sees hostname only.
 type Server struct {
-	cfg    Config
-	dl     *denylist.Denylist
-	tracer *tracer.TraceAccumulator
-	mu     sync.Mutex // protects tracer state
-	srv    *http.Server
+	cfg       Config
+	dl        *denylist.Denylist
+	policyCfg *policy.PolicyConfig
+	tracer    *tracer.TraceAccumulator
+	mu        sync.Mutex // protects tracer state
+	srv       *http.Server
 }
 
 // NewServer creates a proxy server with the given configuration.
@@ -41,6 +43,11 @@ func NewServer(cfg Config) (*Server, error) {
 	dl, err := denylist.Load(cfg.DenylistPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load denylist: %w", err)
+	}
+
+	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load policy config: %w", err)
 	}
 
 	if cfg.Actor == nil {
@@ -51,9 +58,10 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:    cfg,
-		dl:     dl,
-		tracer: tracer.NewAccumulator(tracer.NewTraceID()),
+		cfg:       cfg,
+		dl:        dl,
+		policyCfg: policyCfg,
+		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
 	}
 
 	s.srv = &http.Server{
@@ -116,7 +124,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	action := buildActionFromRequest(r)
 
 	s.mu.Lock()
-	result := policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.dl)
+	result := policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.dl, s.policyCfg)
 	s.tracer.RecordAction(s.cfg.Actor, s.cfg.Purpose, action, map[string]any{
 		"result":       string(result.Decision),
 		"reason":       result.Reason,
@@ -188,7 +196,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 			PolicyID: "denylist.block",
 		}
 	} else {
-		result = policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.dl)
+		result = policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.dl, s.policyCfg)
 	}
 
 	s.tracer.RecordAction(s.cfg.Actor, s.cfg.Purpose, action, map[string]any{
