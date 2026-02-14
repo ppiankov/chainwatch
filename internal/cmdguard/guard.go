@@ -18,6 +18,7 @@ import (
 // Config holds command guard configuration.
 type Config struct {
 	DenylistPath string
+	PolicyPath   string
 	Purpose      string
 	Actor        map[string]any
 }
@@ -44,10 +45,11 @@ func (e *BlockedError) Error() string {
 
 // Guard evaluates policy and optionally executes subprocess commands.
 type Guard struct {
-	cfg    Config
-	dl     *denylist.Denylist
-	tracer *tracer.TraceAccumulator
-	mu     sync.Mutex
+	cfg       Config
+	dl        *denylist.Denylist
+	policyCfg *policy.PolicyConfig
+	tracer    *tracer.TraceAccumulator
+	mu        sync.Mutex
 }
 
 // NewGuard creates a Guard with loaded denylist and fresh tracer.
@@ -55,6 +57,11 @@ func NewGuard(cfg Config) (*Guard, error) {
 	dl, err := denylist.Load(cfg.DenylistPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load denylist: %w", err)
+	}
+
+	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load policy config: %w", err)
 	}
 
 	if cfg.Actor == nil {
@@ -65,9 +72,10 @@ func NewGuard(cfg Config) (*Guard, error) {
 	}
 
 	return &Guard{
-		cfg:    cfg,
-		dl:     dl,
-		tracer: tracer.NewAccumulator(tracer.NewTraceID()),
+		cfg:       cfg,
+		dl:        dl,
+		policyCfg: policyCfg,
+		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
 	}, nil
 }
 
@@ -76,7 +84,7 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 	action := buildActionFromCommand(name, args)
 
 	g.mu.Lock()
-	result := policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl)
+	result := policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl, g.policyCfg)
 	g.tracer.RecordAction(g.cfg.Actor, g.cfg.Purpose, action, map[string]any{
 		"result":       string(result.Decision),
 		"reason":       result.Reason,
@@ -129,7 +137,7 @@ func (g *Guard) Check(name string, args []string) model.PolicyResult {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl)
+	return policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl, g.policyCfg)
 }
 
 // TraceSummary exports the trace for debugging/audit.

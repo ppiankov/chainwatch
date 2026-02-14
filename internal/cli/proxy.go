@@ -16,6 +16,7 @@ import (
 var (
 	proxyPort     int
 	proxyDenylist string
+	proxyPolicy   string
 	proxyPurpose  string
 )
 
@@ -23,6 +24,7 @@ func init() {
 	rootCmd.AddCommand(proxyCmd)
 	proxyCmd.Flags().IntVar(&proxyPort, "port", 8888, "Port to listen on")
 	proxyCmd.Flags().StringVar(&proxyDenylist, "denylist", "", "Path to denylist YAML (default: ~/.chainwatch/denylist.yaml)")
+	proxyCmd.Flags().StringVar(&proxyPolicy, "policy", "", "Path to policy YAML (default: ~/.chainwatch/policy.yaml)")
 	proxyCmd.Flags().StringVar(&proxyPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
 }
 
@@ -37,6 +39,7 @@ func runProxy(cmd *cobra.Command, args []string) error {
 	cfg := proxy.Config{
 		Port:         proxyPort,
 		DenylistPath: proxyDenylist,
+		PolicyPath:   proxyPolicy,
 		Purpose:      proxyPurpose,
 		Actor:        map[string]any{"proxy": "chainwatch", "port": proxyPort},
 	}

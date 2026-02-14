@@ -83,5 +83,9 @@ go-proxy: ## Start chainwatch HTTP proxy on port 8888
 go-exec: ## Run a command through chainwatch guard
 	go run ./cmd/chainwatch exec -- echo "chainwatch exec works"
 
+.PHONY: go-init-policy
+go-init-policy: ## Generate default policy.yaml
+	go run ./cmd/chainwatch init-policy
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
