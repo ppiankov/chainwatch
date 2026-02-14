@@ -95,5 +95,9 @@ go-apply-profile: ## Show clawbot safety profile patterns
 go-pending: ## List pending approval requests
 	go run ./cmd/chainwatch pending
 
+.PHONY: go-root-monitor
+go-root-monitor: ## Start root monitor for a PID (Linux only)
+	go run ./cmd/chainwatch root-monitor --pid $(PID) --profile clawbot
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
