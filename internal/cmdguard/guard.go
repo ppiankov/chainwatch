@@ -9,6 +9,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -35,10 +36,11 @@ type Result struct {
 
 // BlockedError is returned when policy denies command execution.
 type BlockedError struct {
-	Command  string
-	Decision model.Decision
-	Reason   string
-	PolicyID string
+	Command     string
+	Decision    model.Decision
+	Reason      string
+	PolicyID    string
+	ApprovalKey string
 }
 
 func (e *BlockedError) Error() string {
@@ -50,6 +52,7 @@ type Guard struct {
 	cfg       Config
 	dl        *denylist.Denylist
 	policyCfg *policy.PolicyConfig
+	approvals *approval.Store
 	tracer    *tracer.TraceAccumulator
 	mu        sync.Mutex
 }
@@ -75,6 +78,12 @@ func NewGuard(cfg Config) (*Guard, error) {
 		policyCfg = profile.ApplyToPolicy(prof, policyCfg)
 	}
 
+	approvalStore, err := approval.NewStore(approval.DefaultDir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create approval store: %w", err)
+	}
+	approvalStore.Cleanup()
+
 	if cfg.Actor == nil {
 		cfg.Actor = map[string]any{"guard": "chainwatch"}
 	}
@@ -86,6 +95,7 @@ func NewGuard(cfg Config) (*Guard, error) {
 		cfg:       cfg,
 		dl:        dl,
 		policyCfg: policyCfg,
+		approvals: approvalStore,
 		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
 	}, nil
 }
@@ -104,12 +114,39 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 	}, "")
 	g.mu.Unlock()
 
-	if result.Decision == model.Deny || result.Decision == model.RequireApproval {
+	if result.Decision == model.Deny {
 		return nil, &BlockedError{
-			Command:  action.Resource,
-			Decision: result.Decision,
-			Reason:   result.Reason,
-			PolicyID: result.PolicyID,
+			Command:     action.Resource,
+			Decision:    result.Decision,
+			Reason:      result.Reason,
+			PolicyID:    result.PolicyID,
+			ApprovalKey: result.ApprovalKey,
+		}
+	}
+
+	if result.Decision == model.RequireApproval && result.ApprovalKey != "" {
+		status, _ := g.approvals.Check(result.ApprovalKey)
+		if status == approval.StatusApproved {
+			g.approvals.Consume(result.ApprovalKey)
+			// fall through to execute
+		} else {
+			if status != approval.StatusPending && status != approval.StatusDenied {
+				g.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+			}
+			return nil, &BlockedError{
+				Command:  action.Resource,
+				Decision: result.Decision,
+				Reason:   result.Reason,
+				PolicyID: result.PolicyID,
+			}
+		}
+	} else if result.Decision == model.RequireApproval {
+		return nil, &BlockedError{
+			Command:     action.Resource,
+			Decision:    result.Decision,
+			Reason:      result.Reason,
+			PolicyID:    result.PolicyID,
+			ApprovalKey: result.ApprovalKey,
 		}
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ppiankov/chainwatch/internal/cmdguard"
+	"github.com/ppiankov/chainwatch/internal/model"
 )
 
 var (
@@ -90,8 +91,15 @@ func runExec(cmd *cobra.Command, args []string) error {
 				"decision": string(blocked.Decision),
 				"reason":   blocked.Reason,
 			}
+			if blocked.PolicyID != "" {
+				resp["policy_id"] = blocked.PolicyID
+			}
 			out, _ := json.MarshalIndent(resp, "", "  ")
 			fmt.Fprintln(os.Stderr, string(out))
+
+			if blocked.Decision == model.RequireApproval && blocked.ApprovalKey != "" {
+				fmt.Fprintf(os.Stderr, "\nTo approve, run: chainwatch approve %s\n", blocked.ApprovalKey)
+			}
 
 			if execVerbose {
 				printExecTrace(guard)
