@@ -87,5 +87,9 @@ go-exec: ## Run a command through chainwatch guard
 go-init-policy: ## Generate default policy.yaml
 	go run ./cmd/chainwatch init-policy
 
+.PHONY: go-apply-profile
+go-apply-profile: ## Show clawbot safety profile patterns
+	go run ./cmd/chainwatch profile apply clawbot
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build

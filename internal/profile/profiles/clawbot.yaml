@@ -1,0 +1,46 @@
+name: clawbot-safety
+description: Safety profile for browser-automation AI agents (Clawbot-style)
+
+# Authority boundaries — instruction-level patterns.
+# Checked via MatchesAuthority() when instruction text is available.
+authority_boundaries:
+  - pattern: "execute.*from.*webpage"
+    reason: "Cross-context instruction injection"
+  - pattern: "admin.*override"
+    reason: "Authority escalation attempt"
+  - pattern: "ignore.*previous.*instructions"
+    reason: "Prompt injection attempt"
+  - pattern: "disregard.*safety"
+    reason: "Safety bypass attempt"
+
+# Execution boundaries — merged into denylist via AddPattern().
+execution_boundaries:
+  urls:
+    - "*/checkout*"
+    - "*/payment*"
+    - "stripe.com/*"
+    - "paypal.com/*"
+    - "*/oauth/token*"
+    - "*/api/keys*"
+    - "*/account/delete*"
+    - "*/settings/security*"
+  files:
+    - "~/.ssh/*"
+    - "~/.aws/*"
+    - "**/.env"
+    - "**/credentials*"
+  commands:
+    - "rm -rf"
+    - "curl|sh"
+    - "curl | sh"
+    - "wget|sh"
+    - "wget | sh"
+    - "sudo"
+
+# Policy rules — prepended to config rules (first-match-wins).
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*password*"
+      decision: deny
+      reason: "password file access blocked by clawbot profile"
