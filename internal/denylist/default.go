@@ -38,5 +38,7 @@ var DefaultPatterns = Patterns{
 		"wget | sh",
 		"sudo su",
 		"sudo -i",
+		"git push --force",
+		"git push -f",
 	},
 }
