@@ -240,6 +240,63 @@ Currently `require_approval` just blocks. Need a way for humans to approve speci
 
 ---
 
+## WO-CW07: Root Access Monitor — Constant Enforcement Daemon
+
+**Goal:** A persistent monitor that blocks root-level system operations in real time, not after the fact.
+
+### Context
+Clawbot runs on a VM with root access. This means the agent can `sudo`, write to `/etc/`, create systemd services, modify firewall rules, change file ownership, install packages — all irreversible. CW03 (subprocess wrapper) catches shell commands, but only when the agent uses Python's `subprocess`. A determined agent (or injected instruction) can bypass that.
+
+The root monitor is a separate enforcement layer: a daemon that watches for root-level operations regardless of how they're triggered.
+
+### Architecture
+Lightweight daemon process (not the same as the proxy or wrapper):
+```
+chainwatch root-monitor --pid <agent-pid>
+```
+Monitors the agent process tree and blocks:
+
+### Blocked Operations
+- `sudo` / `su` / `doas` — privilege escalation
+- `chmod 777` / `chmod +s` — permission weakening
+- `chown root` — ownership escalation
+- Writes to `/etc/`, `/usr/lib/systemd/`, `/var/spool/cron/`
+- `systemctl enable/start` — service persistence
+- `iptables` / `nft` / `ufw` — firewall modification
+- `useradd` / `usermod` / `passwd` — account manipulation
+- `mount` / `umount` — filesystem manipulation
+- Package managers: `apt install`, `yum install`, `pip install --system`
+- `curl | sh` / `wget | bash` — remote code execution
+
+### Enforcement Mechanism
+- Linux: `seccomp-bpf` filter on agent process tree (blocks at kernel level, no bypass)
+- Fallback: `ptrace`-based syscall interception (works without seccomp)
+- Fallback: polling `/proc/<pid>/` for open files and new child processes (least secure, most portable)
+- All blocked attempts logged to trace with full command, PID, timestamp
+
+### Steps
+1. Create `src/chainwatch/monitors/root_monitor.py` — daemon loop
+2. Create `src/chainwatch/monitors/seccomp_filter.py` — seccomp-bpf rules (Linux only)
+3. Create `src/chainwatch/monitors/proc_watcher.py` — /proc polling fallback
+4. CLI: `chainwatch root-monitor --pid <pid> --profile clawbot`
+5. Integrate with Clawbot safety profile (CW05) for rule set
+6. Grace period: allow `sudo` only if pre-approved via CW06 approval workflow
+
+### Tests
+- `sudo ls` blocked immediately
+- `chmod 777 /etc/passwd` blocked
+- `curl ... | sh` blocked
+- Normal agent operations (read files, HTTP GET, write to workdir) unaffected
+- Monitor survives agent crash/restart
+- Trace captures all blocked attempts
+
+### Acceptance
+- `make test` passes
+- `chainwatch root-monitor --pid $$ --profile clawbot` starts and enforces
+- Demo: agent attempts `sudo rm -rf /tmp/test` → blocked, logged, agent continues
+
+---
+
 ## Non-Goals
 
 - No ML or probabilistic safety models
