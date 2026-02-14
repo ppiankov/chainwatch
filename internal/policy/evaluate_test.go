@@ -16,7 +16,7 @@ func TestLowRiskAllowed(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil)
+	result := Evaluate(action, state, "general", nil, nil)
 
 	if result.Decision != model.Allow {
 		t.Errorf("expected Allow for low-risk action, got %s", result.Decision)
@@ -32,7 +32,7 @@ func TestHighSensitivityRedacted(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil)
+	result := Evaluate(action, state, "general", nil, nil)
 
 	if result.Decision != model.AllowWithRedaction {
 		t.Errorf("expected AllowWithRedaction for high sensitivity, got %s", result.Decision)
@@ -48,7 +48,7 @@ func TestSalaryBlockedForSOC(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "SOC_efficiency", nil)
+	result := Evaluate(action, state, "SOC_efficiency", nil, nil)
 
 	if result.Decision != model.RequireApproval {
 		t.Errorf("expected RequireApproval for salary, got %s", result.Decision)
@@ -71,7 +71,7 @@ func TestDenylistBlocksFirst(t *testing.T) {
 	state := model.NewTraceState("test")
 	dl := denylist.NewDefault()
 
-	result := Evaluate(action, state, "general", dl)
+	result := Evaluate(action, state, "general", dl, nil)
 
 	if result.Decision != model.Deny {
 		t.Errorf("expected Deny for denylisted URL, got %s", result.Decision)
@@ -90,7 +90,7 @@ func TestIrreversibleZoneDenies(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil)
+	result := Evaluate(action, state, "general", nil, nil)
 
 	if result.Decision != model.Deny {
 		t.Errorf("expected Deny for IRREVERSIBLE zone (checkout), got %s", result.Decision)
@@ -113,7 +113,7 @@ func TestCommitmentZoneRequiresApproval(t *testing.T) {
 		RawMeta:   map[string]any{"sensitivity": "low"},
 	}
 
-	result := Evaluate(action, state, "general", nil)
+	result := Evaluate(action, state, "general", nil, nil)
 
 	if result.Decision != model.RequireApproval {
 		t.Errorf("expected RequireApproval for COMMITMENT zone, got %s", result.Decision)
@@ -132,7 +132,7 @@ func TestLegacyScoringStillWorks(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil)
+	result := Evaluate(action, state, "general", nil, nil)
 
 	if result.Decision != model.Allow {
 		t.Errorf("expected Allow for low risk, got %s", result.Decision)
@@ -156,7 +156,7 @@ func TestExternalEgressHighRisk(t *testing.T) {
 	state := model.NewTraceState("test")
 	state.SeenSources = append(state.SeenSources, "other_tool")
 
-	result := Evaluate(action, state, "general", nil)
+	result := Evaluate(action, state, "general", nil, nil)
 
 	// high=6 + external=6 + new_source=2 = 14 → RequireApproval
 	if result.Decision != model.RequireApproval {
@@ -174,7 +174,7 @@ func TestZoneEscalationPersistsAcrossEvaluations(t *testing.T) {
 		Operation: "read",
 		RawMeta:   map[string]any{"sensitivity": "high"},
 	}
-	Evaluate(action1, state, "general", nil)
+	Evaluate(action1, state, "general", nil, nil)
 
 	// State should now have SENSITIVE_DATA zone
 	if !state.ZonesEntered[model.ZoneSensitiveData] {
@@ -188,7 +188,7 @@ func TestZoneEscalationPersistsAcrossEvaluations(t *testing.T) {
 		Operation: "read",
 		RawMeta:   map[string]any{"sensitivity": "low"},
 	}
-	Evaluate(action2, state, "general", nil)
+	Evaluate(action2, state, "general", nil, nil)
 
 	// SENSITIVE_DATA zone should still be present
 	if !state.ZonesEntered[model.ZoneSensitiveData] {

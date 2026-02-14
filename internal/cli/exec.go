@@ -16,6 +16,7 @@ import (
 
 var (
 	execDenylist string
+	execPolicy   string
 	execPurpose  string
 	execVerbose  bool
 	execDryRun   bool
@@ -24,6 +25,7 @@ var (
 func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().StringVar(&execDenylist, "denylist", "", "Path to denylist YAML")
+	execCmd.Flags().StringVar(&execPolicy, "policy", "", "Path to policy YAML (default: ~/.chainwatch/policy.yaml)")
 	execCmd.Flags().StringVar(&execPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
 	execCmd.Flags().BoolVarP(&execVerbose, "verbose", "v", false, "Print trace summary after execution")
 	execCmd.Flags().BoolVar(&execDryRun, "dry-run", false, "Check policy without executing")
@@ -40,6 +42,7 @@ var execCmd = &cobra.Command{
 func runExec(cmd *cobra.Command, args []string) error {
 	cfg := cmdguard.Config{
 		DenylistPath: execDenylist,
+		PolicyPath:   execPolicy,
 		Purpose:      execPurpose,
 		Actor:        map[string]any{"cli": "chainwatch exec"},
 	}
