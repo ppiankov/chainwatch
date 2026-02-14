@@ -62,7 +62,7 @@
 
 ---
 
-## WO-CW06: Approval Workflow CLI
+## WO-CW06: Approval Workflow CLI ✅
 
 **Goal:** Interactive approval flow for require-approval decisions.
 
@@ -90,7 +90,7 @@
 
 ---
 
-## WO-CW07: Root Access Monitor — Constant Enforcement Daemon
+## WO-CW07: Root Access Monitor — Constant Enforcement Daemon ✅
 
 **Goal:** A persistent monitor that blocks root-level system operations in real time, not after the fact.
 
