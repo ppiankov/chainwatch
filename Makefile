@@ -79,5 +79,9 @@ go-demo: ## Run Go SOC demo (salary must be blocked)
 go-proxy: ## Start chainwatch HTTP proxy on port 8888
 	go run ./cmd/chainwatch proxy --port 8888
 
+.PHONY: go-exec
+go-exec: ## Run a command through chainwatch guard
+	go run ./cmd/chainwatch exec -- echo "chainwatch exec works"
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
