@@ -119,3 +119,13 @@ sdk-python-lint: ## Lint Python SDK
 .PHONY: sdk-python-fmt
 sdk-python-fmt: ## Format Python SDK
 	black sdk/python/
+
+# ── Go SDK targets ────────────────────────────────────
+
+.PHONY: sdk-go-test
+sdk-go-test: ## Run Go SDK tests with race detection
+	go test -race -v ./sdk/go/chainwatch/
+
+.PHONY: sdk-go-lint
+sdk-go-lint: ## Lint Go SDK
+	golangci-lint run ./sdk/go/...
