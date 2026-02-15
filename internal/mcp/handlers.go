@@ -13,6 +13,8 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/ppiankov/chainwatch/internal/approval"
+	"github.com/ppiankov/chainwatch/internal/audit"
+	"github.com/ppiankov/chainwatch/internal/breakglass"
 	"github.com/ppiankov/chainwatch/internal/cmdguard"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -148,7 +150,34 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 	)
 	s.mu.Unlock()
 
-	s.recordAudit(action, string(result.Decision), result.Reason)
+	s.recordAudit(action, string(result.Decision), result.Reason, result.Tier)
+
+	// Break-glass override (CW-23.2)
+	if result.Tier >= 2 && s.bgStore != nil {
+		if token := breakglass.CheckAndConsume(s.bgStore, result.Tier, action); token != nil {
+			originalDecision := result.Decision
+			result.Decision = model.Allow
+			result.Reason = fmt.Sprintf("break-glass override (token=%s, original=%s): %s",
+				token.ID, originalDecision, token.Reason)
+			result.PolicyID = "breakglass.override"
+			if s.auditLog != nil {
+				s.auditLog.Record(audit.AuditEntry{
+					Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+					TraceID:          s.tracer.State.TraceID,
+					Action:           audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+					Decision:         "allow",
+					Reason:           result.Reason,
+					Tier:             result.Tier,
+					PolicyHash:       s.policyHash,
+					Type:             "break_glass_used",
+					TokenID:          token.ID,
+					OriginalDecision: string(originalDecision),
+					OverriddenTo:     "allow",
+					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
+				})
+			}
+		}
+	}
 
 	// Check decision
 	if result.Decision == model.Deny {
@@ -236,7 +265,7 @@ func (s *Server) handleCheck(ctx context.Context, req *mcpsdk.CallToolRequest, i
 	)
 	s.mu.Unlock()
 
-	s.recordAudit(action, string(result.Decision), result.Reason)
+	s.recordAudit(action, string(result.Decision), result.Reason, result.Tier)
 
 	return nil, CheckOutput{
 		Decision:    string(result.Decision),

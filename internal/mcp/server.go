@@ -11,6 +11,7 @@ import (
 
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
+	"github.com/ppiankov/chainwatch/internal/breakglass"
 	"github.com/ppiankov/chainwatch/internal/cmdguard"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
@@ -35,6 +36,7 @@ type Server struct {
 	dl         *denylist.Denylist
 	policyCfg  *policy.PolicyConfig
 	approvals  *approval.Store
+	bgStore    *breakglass.Store
 	tracer     *tracer.TraceAccumulator
 	auditLog   *audit.Log
 	policyHash string
@@ -97,11 +99,14 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
+	bgStore, _ := breakglass.NewStore(breakglass.DefaultDir())
+
 	s := &Server{
 		guard:      guard,
 		dl:         dl,
 		policyCfg:  policyCfg,
 		approvals:  approvalStore,
+		bgStore:    bgStore,
 		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
 		auditLog:   auditLog,
 		policyHash: policyHash,
@@ -140,7 +145,7 @@ func (s *Server) TraceSummary() map[string]any {
 	return s.tracer.ToJSON()
 }
 
-func (s *Server) recordAudit(action *model.Action, decision, reason string) {
+func (s *Server) recordAudit(action *model.Action, decision, reason string, tier int) {
 	if s.auditLog != nil {
 		s.auditLog.Record(audit.AuditEntry{
 			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
@@ -148,6 +153,7 @@ func (s *Server) recordAudit(action *model.Action, decision, reason string) {
 			Action:     audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
 			Decision:   decision,
 			Reason:     reason,
+			Tier:       tier,
 			PolicyHash: s.policyHash,
 		})
 	}

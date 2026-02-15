@@ -22,18 +22,30 @@ func ApplyToDenylist(p *Profile, dl *denylist.Denylist) {
 	}
 }
 
-// ApplyToPolicy merges profile policy rules into config.
+// ApplyToPolicy merges profile policy rules and MinTier into config.
 // Profile rules are prepended (higher priority in first-match-wins order).
+// MinTier can only promote (never demote).
 // Returns a new config — does not mutate the input.
 func ApplyToPolicy(p *Profile, cfg *policy.PolicyConfig) *policy.PolicyConfig {
-	if p.Policy == nil || len(p.Policy.Rules) == 0 {
+	hasMinTier := p.MinTier > cfg.MinTier
+	hasRules := p.Policy != nil && len(p.Policy.Rules) > 0
+
+	if !hasMinTier && !hasRules {
 		return cfg
 	}
 
 	merged := *cfg
-	merged.Rules = make([]policy.Rule, 0, len(p.Policy.Rules)+len(cfg.Rules))
-	merged.Rules = append(merged.Rules, p.Policy.Rules...)
-	merged.Rules = append(merged.Rules, cfg.Rules...)
+
+	if hasMinTier {
+		merged.MinTier = p.MinTier
+	}
+
+	if hasRules {
+		merged.Rules = make([]policy.Rule, 0, len(p.Policy.Rules)+len(cfg.Rules))
+		merged.Rules = append(merged.Rules, p.Policy.Rules...)
+		merged.Rules = append(merged.Rules, cfg.Rules...)
+	}
+
 	return &merged
 }
 

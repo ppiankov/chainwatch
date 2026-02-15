@@ -34,6 +34,7 @@ type PolicyOverrides struct {
 type Profile struct {
 	Name                string              `yaml:"name"`
 	Description         string              `yaml:"description"`
+	MinTier             int                 `yaml:"min_tier"`
 	AuthorityBoundaries []AuthorityPattern  `yaml:"authority_boundaries"`
 	ExecutionBoundaries ExecutionBoundaries `yaml:"execution_boundaries"`
 	Policy              *PolicyOverrides    `yaml:"policy,omitempty"`

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
+	"github.com/ppiankov/chainwatch/internal/breakglass"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -39,6 +40,7 @@ type Server struct {
 	dl         *denylist.Denylist
 	policyCfg  *policy.PolicyConfig
 	approvals  *approval.Store
+	bgStore    *breakglass.Store
 	tracer     *tracer.TraceAccumulator
 	auditLog   *audit.Log
 	policyHash string
@@ -88,11 +90,14 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 	}
 
+	bgStore, _ := breakglass.NewStore(breakglass.DefaultDir())
+
 	s := &Server{
 		cfg:        cfg,
 		dl:         dl,
 		policyCfg:  policyCfg,
 		approvals:  approvalStore,
+		bgStore:    bgStore,
 		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
 		auditLog:   auditLog,
 		policyHash: policyHash,
@@ -160,6 +165,7 @@ func (s *Server) recordAudit(action *model.Action, result model.PolicyResult) {
 			Action:     audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
 			Decision:   string(result.Decision),
 			Reason:     result.Reason,
+			Tier:       result.Tier,
 			PolicyHash: s.policyHash,
 		})
 	}
@@ -189,6 +195,33 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	s.recordAudit(action, result)
+
+	// Break-glass override (CW-23.2)
+	if result.Tier >= 2 && s.bgStore != nil {
+		if token := breakglass.CheckAndConsume(s.bgStore, result.Tier, action); token != nil {
+			originalDecision := result.Decision
+			result.Decision = model.Allow
+			result.Reason = fmt.Sprintf("break-glass override (token=%s, original=%s): %s",
+				token.ID, originalDecision, token.Reason)
+			result.PolicyID = "breakglass.override"
+			if s.auditLog != nil {
+				s.auditLog.Record(audit.AuditEntry{
+					Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+					TraceID:          s.tracer.State.TraceID,
+					Action:           audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+					Decision:         "allow",
+					Reason:           result.Reason,
+					Tier:             result.Tier,
+					PolicyHash:       s.policyHash,
+					Type:             "break_glass_used",
+					TokenID:          token.ID,
+					OriginalDecision: string(originalDecision),
+					OverriddenTo:     "allow",
+					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
+				})
+			}
+		}
+	}
 
 	if result.Decision == model.Deny {
 		writeBlocked(w, http.StatusForbidden, result)
@@ -264,6 +297,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 			Decision: model.Deny,
 			Reason:   fmt.Sprintf("denylisted: %s", reason),
 			PolicyID: "denylist.block",
+			Tier:     policy.TierCritical,
 		}
 	} else {
 		result = policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.dl, s.policyCfg)
@@ -278,6 +312,33 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	s.recordAudit(action, result)
+
+	// Break-glass override (CW-23.2)
+	if result.Tier >= 2 && s.bgStore != nil {
+		if token := breakglass.CheckAndConsume(s.bgStore, result.Tier, action); token != nil {
+			originalDecision := result.Decision
+			result.Decision = model.Allow
+			result.Reason = fmt.Sprintf("break-glass override (token=%s, original=%s): %s",
+				token.ID, originalDecision, token.Reason)
+			result.PolicyID = "breakglass.override"
+			if s.auditLog != nil {
+				s.auditLog.Record(audit.AuditEntry{
+					Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+					TraceID:          s.tracer.State.TraceID,
+					Action:           audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+					Decision:         "allow",
+					Reason:           result.Reason,
+					Tier:             result.Tier,
+					PolicyHash:       s.policyHash,
+					Type:             "break_glass_used",
+					TokenID:          token.ID,
+					OriginalDecision: string(originalDecision),
+					OverriddenTo:     "allow",
+					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
+				})
+			}
+		}
+	}
 
 	if result.Decision == model.Deny {
 		http.Error(w, fmt.Sprintf("CONNECT blocked: %s", result.Reason), http.StatusForbidden)
