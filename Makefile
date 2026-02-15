@@ -111,6 +111,10 @@ go-break-glass: ## Issue a break-glass emergency override token
 go-break-glass-list: ## List all break-glass tokens
 	go run ./cmd/chainwatch break-glass list
 
+.PHONY: go-replay
+go-replay: ## Replay a session from the audit log
+	go run ./cmd/chainwatch replay $(TRACE_ID) --log $(AUDIT_LOG) $(if $(FORMAT),--format $(FORMAT))
+
 .PHONY: go-intercept
 go-intercept: ## Start chainwatch LLM response interceptor on port 9999
 	go run ./cmd/chainwatch intercept --port 9999
