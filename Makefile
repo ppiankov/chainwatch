@@ -99,5 +99,9 @@ go-pending: ## List pending approval requests
 go-root-monitor: ## Start root monitor for a PID (Linux only)
 	go run ./cmd/chainwatch root-monitor --pid $(PID) --profile clawbot
 
+.PHONY: go-mcp
+go-mcp: ## Start MCP tool server (stdio)
+	go run ./cmd/chainwatch mcp --profile clawbot
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
