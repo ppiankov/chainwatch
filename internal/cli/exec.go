@@ -22,6 +22,7 @@ var (
 	execPurpose  string
 	execVerbose  bool
 	execDryRun   bool
+	execAuditLog string
 )
 
 func init() {
@@ -32,6 +33,7 @@ func init() {
 	execCmd.Flags().StringVar(&execPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
 	execCmd.Flags().BoolVarP(&execVerbose, "verbose", "v", false, "Print trace summary after execution")
 	execCmd.Flags().BoolVar(&execDryRun, "dry-run", false, "Check policy without executing")
+	execCmd.Flags().StringVar(&execAuditLog, "audit-log", "", "Path to audit log JSONL file")
 }
 
 var execCmd = &cobra.Command{
@@ -49,12 +51,14 @@ func runExec(cmd *cobra.Command, args []string) error {
 		ProfileName:  execProfile,
 		Purpose:      execPurpose,
 		Actor:        map[string]any{"cli": "chainwatch exec"},
+		AuditLogPath: execAuditLog,
 	}
 
 	guard, err := cmdguard.NewGuard(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create guard: %w", err)
 	}
+	defer guard.Close()
 
 	name := args[0]
 	cmdArgs := args[1:]

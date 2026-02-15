@@ -19,6 +19,7 @@ var (
 	proxyPolicy   string
 	proxyProfile  string
 	proxyPurpose  string
+	proxyAuditLog string
 )
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 	proxyCmd.Flags().StringVar(&proxyPolicy, "policy", "", "Path to policy YAML (default: ~/.chainwatch/policy.yaml)")
 	proxyCmd.Flags().StringVar(&proxyProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	proxyCmd.Flags().StringVar(&proxyPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
+	proxyCmd.Flags().StringVar(&proxyAuditLog, "audit-log", "", "Path to audit log JSONL file")
 }
 
 var proxyCmd = &cobra.Command{
@@ -45,12 +47,14 @@ func runProxy(cmd *cobra.Command, args []string) error {
 		ProfileName:  proxyProfile,
 		Purpose:      proxyPurpose,
 		Actor:        map[string]any{"proxy": "chainwatch", "port": proxyPort},
+		AuditLogPath: proxyAuditLog,
 	}
 
 	srv, err := proxy.NewServer(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create proxy server: %w", err)
 	}
+	defer srv.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
