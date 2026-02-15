@@ -103,6 +103,14 @@ go-root-monitor: ## Start root monitor for a PID (Linux only)
 go-mcp: ## Start MCP tool server (stdio)
 	go run ./cmd/chainwatch mcp --profile clawbot
 
+.PHONY: go-break-glass
+go-break-glass: ## Issue a break-glass emergency override token
+	go run ./cmd/chainwatch break-glass --reason "$(REASON)" --duration $(or $(DURATION),10m)
+
+.PHONY: go-break-glass-list
+go-break-glass-list: ## List all break-glass tokens
+	go run ./cmd/chainwatch break-glass list
+
 .PHONY: go-intercept
 go-intercept: ## Start chainwatch LLM response interceptor on port 9999
 	go run ./cmd/chainwatch intercept --port 9999

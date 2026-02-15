@@ -36,6 +36,9 @@ func TestDefaultConfigValues(t *testing.T) {
 	if cfg.Rules[0].ApprovalKey != "soc_salary_access" {
 		t.Errorf("expected soc_salary_access, got %s", cfg.Rules[0].ApprovalKey)
 	}
+	if cfg.EnforcementMode != "guarded" {
+		t.Errorf("expected EnforcementMode=guarded, got %s", cfg.EnforcementMode)
+	}
 }
 
 func TestLoadConfigMissingFile(t *testing.T) {
@@ -283,6 +286,9 @@ func TestDefaultConfigYAMLRoundTrip(t *testing.T) {
 	}
 	if parsed.Rules[0].ResourcePattern != defaults.Rules[0].ResourcePattern {
 		t.Errorf("Rule pattern mismatch")
+	}
+	if parsed.EnforcementMode != defaults.EnforcementMode {
+		t.Errorf("EnforcementMode mismatch: parsed=%s, default=%s", parsed.EnforcementMode, defaults.EnforcementMode)
 	}
 }
 
