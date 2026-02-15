@@ -105,3 +105,17 @@ go-mcp: ## Start MCP tool server (stdio)
 
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
+
+# ── Python SDK targets ─────────────────────────────────
+
+.PHONY: sdk-python-test
+sdk-python-test: ## Run Python SDK tests
+	pytest sdk/python/tests/ -v
+
+.PHONY: sdk-python-lint
+sdk-python-lint: ## Lint Python SDK
+	ruff check sdk/python/
+
+.PHONY: sdk-python-fmt
+sdk-python-fmt: ## Format Python SDK
+	black sdk/python/
