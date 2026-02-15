@@ -725,7 +725,6 @@ Builds on CW20 (CI gate). Certification is a curated, versioned set of scenarios
 - `make go-test` passes with -race
 - `chainwatch certify --profile clawbot` passes all scenarios
 - `chainwatch certify --profile permissive` fails with specific failure details
-
 ---
 
 ## Non-Goals
