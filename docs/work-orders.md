@@ -727,13 +727,138 @@ Builds on CW20 (CI gate). Certification is a curated, versioned set of scenarios
 - `chainwatch certify --profile permissive` fails with specific failure details
 ---
 
+# Phase 5.5: Three Laws of Root Actions
+
+**Context:** Asimov's Three Laws are inspiration, not implementation. The practical translation for chainwatch: prevent catastrophic actions by default, obey only within declared scoped intent, and make tampering non-silent with a break-glass escape hatch. This formalizes what chainwatch already does partially (zones, profiles, approval) into a coherent risk tier model with emergency override.
+
+---
+
+## WO-CW23.1: Risk Tier Formalization
+
+**Goal:** Replace ad-hoc denylist matching with a 4-tier risk classification that maps every action to a deterministic enforcement response.
+
+### Risk Tiers
+
+| Tier | Label | Enforcement | Examples |
+|------|-------|-------------|----------|
+| 0 | **Safe** | Allow, log | `ls`, `cat`, `whoami`, HTTP GET to allowlisted domains |
+| 1 | **Elevated** | Allow, log with detail | file writes in workdir, HTTP POST to internal URLs, package list (read-only) |
+| 2 | **Guarded** | Require approval, log | `sudo`, service restart, config file modification, external egress with data |
+| 3 | **Critical** | Deny by default, break-glass only | `rm -rf /`, credential dump, chainwatch self-modification, firewall flush, audit log deletion |
+
+### Mapping Rules
+- Zone detection (CW01) feeds tier classification — irreversible zone = tier 3, commitment = tier 2, sensitive = tier 1
+- Denylist matches (CW03/CW05) override to tier 3 (deny) or tier 2 (approval)
+- Profile rules can promote tiers (stricter) but never demote (a tier 3 action stays tier 3 regardless of profile)
+- Unknown actions default to tier 1 (elevated) — log with detail, don't block
+
+### Three Laws Mapping
+- **Law 1 (prevent harm):** Tier 3 actions denied unless break-glass token active. Tier 2 requires human approval. Harm = catastrophic blast radius (outage, data loss, security breach).
+- **Law 2 (obey within scope):** Actions outside declared intent (CW16 agent identity) escalate one tier. Clawbot asked to do research but attempts file delete → tier 1 becomes tier 2.
+- **Law 3 (self-preservation):** Actions targeting chainwatch itself (config, binary, logs, process) are always tier 3. Break-glass required. Self-protection is structural, not negotiable.
+
+### Enforcement Modes
+1. **Advisory** — all tiers logged, nothing blocked. For adoption and trust-building.
+2. **Guarded** (default) — tier 3 blocked, tier 2 requires approval, tier 0-1 allowed.
+3. **Locked** — tier 2-3 blocked, tier 1 requires approval, tier 0 allowed. For regulated environments.
+
+Mode set in `policy.yaml`: `enforcement_mode: guarded`
+
+### Steps
+1. Create `internal/tier/classify.go` — `Classify(action Action, zones []Zone, profile Profile) Tier`
+2. Create `internal/tier/enforce.go` — `Enforce(tier Tier, mode Mode) Decision`
+3. Refactor `policy.Evaluate` to use tier classification as primary decision path
+4. Keep denylist as override layer (anything on denylist = tier 3 regardless)
+5. Add `enforcement_mode` to policy config
+6. Audit log entries include `tier` field
+
+### Tests
+- Zone-based tier classification correct for all 8 zones
+- Denylist override promotes to tier 3
+- Profile cannot demote tier
+- Unknown action defaults to tier 1
+- Advisory mode logs but never blocks
+- Guarded mode blocks tier 3, approves tier 2
+- Locked mode blocks tier 2+3
+
+### Acceptance
+- `make go-test` passes with -race
+- `chainwatch exec --profile clawbot -- rm -rf /` → tier 3, denied
+- `chainwatch exec --profile clawbot -- ls /tmp` → tier 0, allowed
+- Policy mode switch works without restart
+
+---
+
+## WO-CW23.2: Break-Glass Emergency Override
+
+**Goal:** Sometimes the human must do the harmful thing to prevent bigger harm. Break-glass is a time-limited, single-use, logged override that bypasses tier 2-3 enforcement.
+
+### Design
+- **Token:** `chainwatch break-glass --reason "emergency cert rotation" --duration 10m`
+- **Properties:**
+  - Time-limited (default 10m, max 1h, configurable)
+  - Single-use per action class (one break-glass covers one tier 3 action, then expires)
+  - Mandatory reason string (cannot be empty — recorded in audit log)
+  - Revocable: `chainwatch break-glass revoke <token>`
+  - Audit logged: token creation, usage, expiry, revocation all recorded with hash chain
+
+### Constraints
+- Break-glass does NOT disable chainwatch — it grants temporary tier elevation
+- Break-glass actions still logged at full detail (more detail than normal, not less)
+- Break-glass cannot target chainwatch self-modification (tier 3 self-protection actions are immune)
+- No recursive break-glass (cannot use break-glass to issue another break-glass)
+- Expired tokens fail closed (deny)
+
+### Future: Two-Person Rule (roadmap, not this WO)
+- Break-glass request goes to second approver
+- Both parties recorded in audit log
+- For now: single-person with mandatory reason is sufficient
+
+### Steps
+1. Create `internal/breakglass/token.go` — `Token` with ID, reason, duration, scope, created_at, used_at, revoked_at
+2. Create `internal/breakglass/store.go` — file-based store (`~/.chainwatch/breakglass/`), cleanup expired tokens
+3. Create `internal/cli/breakglass.go` — `chainwatch break-glass --reason --duration`, `chainwatch break-glass list`, `chainwatch break-glass revoke`
+4. Wire into tier enforcement: tier 2-3 check for active break-glass token before denying
+5. Audit log: break-glass events are a distinct event type with full context
+6. Self-protection immunity: actions classified as self-targeting (binary, config, logs) ignore break-glass
+
+### Audit Log Entry for Break-Glass Usage
+```json
+{"ts":"...","type":"break_glass_used","token_id":"bg-abc123","reason":"emergency cert rotation","action":{"tool":"command","resource":"sudo systemctl restart nginx"},"tier":2,"original_decision":"require_approval","overridden_to":"allow","expires_at":"..."}
+```
+
+### Tests
+- Break-glass token grants access to tier 2 action
+- Break-glass token grants access to tier 3 action (non-self-targeting)
+- Break-glass token does NOT grant access to self-targeting tier 3 actions
+- Expired token fails closed
+- Revoked token fails closed
+- Single-use: second action with same token denied
+- Empty reason string rejected
+- Duration > 1h rejected
+- Audit log contains full break-glass lifecycle
+- Break-glass cannot issue break-glass (recursive prevention)
+
+### Acceptance
+- `make go-test` passes with -race
+- `chainwatch break-glass --reason "cert rotation" --duration 10m` → token issued
+- `chainwatch exec --profile clawbot -- sudo systemctl restart nginx` → allowed with active token
+- Same command after token expires → denied
+- `chainwatch exec --profile clawbot -- rm /arena/logs/audit.jsonl` → denied even with break-glass (self-protection)
+
+---
+
 ---
 
 # Phase 6: Adversarial Validation (Dogfight)
 
 **Context:** Chainwatch claims to prevent root-capable agents from doing stupid things. Claims are untested. This phase puts clawbot (with root access) against chainwatch in a controlled VM and films the results. Not a demo — a stress test. If chainwatch fails, we fix it. The goal is confidence scaffolding: simple people should feel safe using clawbot because chainwatch prevents dangerous actions.
 
-**Prerequisite:** WO-CW12 (hash-chained audit log) MUST be implemented first. Without persistent tamper-evident logging, the dogfight is meaningless — clawbot can kill the process and all evidence vanishes. The audit log is the spine. No spine, no fight.
+**Prerequisites:**
+- WO-CW12 (hash-chained audit log) MUST be implemented first. Without persistent tamper-evident logging, the dogfight is meaningless — clawbot can kill the process and all evidence vanishes. The audit log is the spine. No spine, no fight.
+- WO-CW23.1 (risk tiers) and WO-CW23.2 (break-glass) should be implemented for Round 2+ testing.
+
+**Layer:** Both chainwatch and clawbot operate at **application layer**. The dogfight tests application-layer enforcement against application-layer agent. No kernel mode, no eBPF — test what exists, not what's aspirational. If application-layer enforcement fails, that's a finding to fix before adding kernel hooks.
 
 ---
 
