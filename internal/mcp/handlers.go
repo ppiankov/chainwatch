@@ -148,6 +148,8 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 	)
 	s.mu.Unlock()
 
+	s.recordAudit(action, string(result.Decision), result.Reason)
+
 	// Check decision
 	if result.Decision == model.Deny {
 		out := HTTPOutput{
@@ -233,6 +235,8 @@ func (s *Server) handleCheck(ctx context.Context, req *mcpsdk.CallToolRequest, i
 		}, "",
 	)
 	s.mu.Unlock()
+
+	s.recordAudit(action, string(result.Decision), result.Reason)
 
 	return nil, CheckOutput{
 		Decision:    string(result.Decision),

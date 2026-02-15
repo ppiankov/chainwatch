@@ -7,9 +7,13 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"time"
+
 	"github.com/ppiankov/chainwatch/internal/approval"
+	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/cmdguard"
 	"github.com/ppiankov/chainwatch/internal/denylist"
+	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
 	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/tracer"
@@ -21,18 +25,21 @@ type Config struct {
 	PolicyPath   string
 	ProfileName  string
 	Purpose      string
+	AuditLogPath string
 }
 
 // Server wraps the MCP SDK server with chainwatch policy enforcement.
 type Server struct {
-	mcpServer *mcpsdk.Server
-	guard     *cmdguard.Guard
-	dl        *denylist.Denylist
-	policyCfg *policy.PolicyConfig
-	approvals *approval.Store
-	tracer    *tracer.TraceAccumulator
-	purpose   string
-	mu        sync.Mutex
+	mcpServer  *mcpsdk.Server
+	guard      *cmdguard.Guard
+	dl         *denylist.Denylist
+	policyCfg  *policy.PolicyConfig
+	approvals  *approval.Store
+	tracer     *tracer.TraceAccumulator
+	auditLog   *audit.Log
+	policyHash string
+	purpose    string
+	mu         sync.Mutex
 }
 
 // New creates an MCP server with loaded policy, denylist, and tools.
@@ -43,7 +50,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to load denylist: %w", err)
 	}
 
-	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
+	policyCfg, policyHash, err := policy.LoadConfigWithHash(cfg.PolicyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load policy config: %w", err)
 	}
@@ -70,6 +77,7 @@ func New(cfg Config) (*Server, error) {
 		ProfileName:  cfg.ProfileName,
 		Purpose:      cfg.Purpose,
 		Actor:        map[string]any{"mcp": "chainwatch"},
+		AuditLogPath: cfg.AuditLogPath,
 	}
 	guard, err := cmdguard.NewGuard(guardCfg)
 	if err != nil {
@@ -81,13 +89,23 @@ func New(cfg Config) (*Server, error) {
 		purpose = "general"
 	}
 
+	var auditLog *audit.Log
+	if cfg.AuditLogPath != "" {
+		auditLog, err = audit.Open(cfg.AuditLogPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open audit log: %w", err)
+		}
+	}
+
 	s := &Server{
-		guard:     guard,
-		dl:        dl,
-		policyCfg: policyCfg,
-		approvals: approvalStore,
-		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
-		purpose:   purpose,
+		guard:      guard,
+		dl:         dl,
+		policyCfg:  policyCfg,
+		approvals:  approvalStore,
+		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
+		auditLog:   auditLog,
+		policyHash: policyHash,
+		purpose:    purpose,
 	}
 
 	s.mcpServer = mcpsdk.NewServer(
@@ -107,11 +125,32 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.mcpServer.Run(ctx, &mcpsdk.StdioTransport{})
 }
 
+// Close closes the audit log if configured.
+func (s *Server) Close() error {
+	if s.auditLog != nil {
+		return s.auditLog.Close()
+	}
+	return nil
+}
+
 // TraceSummary exports the trace for debugging/audit.
 func (s *Server) TraceSummary() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.tracer.ToJSON()
+}
+
+func (s *Server) recordAudit(action *model.Action, decision, reason string) {
+	if s.auditLog != nil {
+		s.auditLog.Record(audit.AuditEntry{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Action:     audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+			Decision:   decision,
+			Reason:     reason,
+			PolicyHash: s.policyHash,
+		})
+	}
 }
 
 // registerTools adds all chainwatch tools to the MCP server.

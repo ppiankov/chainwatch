@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/approval"
+	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -31,19 +32,22 @@ type Config struct {
 	ProfileName  string
 	Purpose      string
 	Actor        map[string]any
+	AuditLogPath string
 }
 
 // Server is a reverse HTTP proxy that intercepts LLM responses
 // and evaluates chainwatch policy on tool_use/function_call blocks.
 type Server struct {
-	cfg       Config
-	upstream  *url.URL
-	dl        *denylist.Denylist
-	policyCfg *policy.PolicyConfig
-	approvals *approval.Store
-	tracer    *tracer.TraceAccumulator
-	mu        sync.Mutex
-	srv       *http.Server
+	cfg        Config
+	upstream   *url.URL
+	dl         *denylist.Denylist
+	policyCfg  *policy.PolicyConfig
+	approvals  *approval.Store
+	tracer     *tracer.TraceAccumulator
+	auditLog   *audit.Log
+	policyHash string
+	mu         sync.Mutex
+	srv        *http.Server
 }
 
 // NewServer creates an interceptor proxy with loaded policy.
@@ -58,7 +62,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to load denylist: %w", err)
 	}
 
-	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
+	policyCfg, policyHash, err := policy.LoadConfigWithHash(cfg.PolicyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load policy config: %w", err)
 	}
@@ -85,13 +89,23 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.Purpose = "general"
 	}
 
+	var auditLog *audit.Log
+	if cfg.AuditLogPath != "" {
+		auditLog, err = audit.Open(cfg.AuditLogPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open audit log: %w", err)
+		}
+	}
+
 	s := &Server{
-		cfg:       cfg,
-		upstream:  upstream,
-		dl:        dl,
-		policyCfg: policyCfg,
-		approvals: approvalStore,
-		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
+		cfg:        cfg,
+		upstream:   upstream,
+		dl:         dl,
+		policyCfg:  policyCfg,
+		approvals:  approvalStore,
+		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
+		auditLog:   auditLog,
+		policyHash: policyHash,
 	}
 
 	s.srv = &http.Server{
@@ -121,6 +135,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// Close closes the audit log if configured.
+func (s *Server) Close() error {
+	if s.auditLog != nil {
+		return s.auditLog.Close()
+	}
+	return nil
 }
 
 // TraceSummary exports the accumulated trace for debugging/audit.
@@ -387,6 +409,17 @@ func (s *Server) evaluateToolCall(tc ToolCall) model.PolicyResult {
 		"source":       "intercept",
 	}, "")
 	s.mu.Unlock()
+
+	if s.auditLog != nil {
+		s.auditLog.Record(audit.AuditEntry{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Action:     audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			PolicyHash: s.policyHash,
+		})
+	}
 
 	// Handle approval flow
 	if result.Decision == model.RequireApproval && result.ApprovalKey != "" {

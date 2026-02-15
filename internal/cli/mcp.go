@@ -18,6 +18,7 @@ var (
 	mcpPolicy   string
 	mcpProfile  string
 	mcpPurpose  string
+	mcpAuditLog string
 )
 
 func init() {
@@ -26,6 +27,7 @@ func init() {
 	mcpCmd.Flags().StringVar(&mcpPolicy, "policy", "", "Path to policy YAML")
 	mcpCmd.Flags().StringVar(&mcpProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	mcpCmd.Flags().StringVar(&mcpPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
+	mcpCmd.Flags().StringVar(&mcpAuditLog, "audit-log", "", "Path to audit log JSONL file")
 }
 
 var mcpCmd = &cobra.Command{
@@ -41,12 +43,14 @@ func runMCP(cmd *cobra.Command, args []string) error {
 		PolicyPath:   mcpPolicy,
 		ProfileName:  mcpProfile,
 		Purpose:      mcpPurpose,
+		AuditLogPath: mcpAuditLog,
 	}
 
 	srv, err := chainmcp.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create MCP server: %w", err)
 	}
+	defer srv.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

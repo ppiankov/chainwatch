@@ -8,8 +8,10 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/ppiankov/chainwatch/internal/approval"
+	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -24,6 +26,7 @@ type Config struct {
 	ProfileName  string
 	Purpose      string
 	Actor        map[string]any
+	AuditLogPath string
 }
 
 // Result captures subprocess execution outcome.
@@ -49,12 +52,14 @@ func (e *BlockedError) Error() string {
 
 // Guard evaluates policy and optionally executes subprocess commands.
 type Guard struct {
-	cfg       Config
-	dl        *denylist.Denylist
-	policyCfg *policy.PolicyConfig
-	approvals *approval.Store
-	tracer    *tracer.TraceAccumulator
-	mu        sync.Mutex
+	cfg        Config
+	dl         *denylist.Denylist
+	policyCfg  *policy.PolicyConfig
+	approvals  *approval.Store
+	tracer     *tracer.TraceAccumulator
+	auditLog   *audit.Log
+	policyHash string
+	mu         sync.Mutex
 }
 
 // NewGuard creates a Guard with loaded denylist and fresh tracer.
@@ -64,7 +69,7 @@ func NewGuard(cfg Config) (*Guard, error) {
 		return nil, fmt.Errorf("failed to load denylist: %w", err)
 	}
 
-	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
+	policyCfg, policyHash, err := policy.LoadConfigWithHash(cfg.PolicyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load policy config: %w", err)
 	}
@@ -91,12 +96,22 @@ func NewGuard(cfg Config) (*Guard, error) {
 		cfg.Purpose = "general"
 	}
 
+	var auditLog *audit.Log
+	if cfg.AuditLogPath != "" {
+		auditLog, err = audit.Open(cfg.AuditLogPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open audit log: %w", err)
+		}
+	}
+
 	return &Guard{
-		cfg:       cfg,
-		dl:        dl,
-		policyCfg: policyCfg,
-		approvals: approvalStore,
-		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
+		cfg:        cfg,
+		dl:         dl,
+		policyCfg:  policyCfg,
+		approvals:  approvalStore,
+		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
+		auditLog:   auditLog,
+		policyHash: policyHash,
 	}, nil
 }
 
@@ -113,6 +128,17 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 		"approval_key": result.ApprovalKey,
 	}, "")
 	g.mu.Unlock()
+
+	if g.auditLog != nil {
+		g.auditLog.Record(audit.AuditEntry{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    g.tracer.State.TraceID,
+			Action:     audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			PolicyHash: g.policyHash,
+		})
+	}
 
 	if result.Decision == model.Deny {
 		return nil, &BlockedError{
@@ -186,6 +212,14 @@ func (g *Guard) Check(name string, args []string) model.PolicyResult {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl, g.policyCfg)
+}
+
+// Close closes the audit log if configured.
+func (g *Guard) Close() error {
+	if g.auditLog != nil {
+		return g.auditLog.Close()
+	}
+	return nil
 }
 
 // TraceSummary exports the trace for debugging/audit.
