@@ -103,6 +103,10 @@ go-root-monitor: ## Start root monitor for a PID (Linux only)
 go-mcp: ## Start MCP tool server (stdio)
 	go run ./cmd/chainwatch mcp --profile clawbot
 
+.PHONY: go-intercept
+go-intercept: ## Start chainwatch LLM response interceptor on port 9999
+	go run ./cmd/chainwatch intercept --port 9999
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
 
