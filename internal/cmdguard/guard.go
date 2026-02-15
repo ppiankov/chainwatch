@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/alert"
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/breakglass"
@@ -58,6 +59,7 @@ type Guard struct {
 	policyCfg  *policy.PolicyConfig
 	approvals  *approval.Store
 	bgStore    *breakglass.Store
+	dispatcher *alert.Dispatcher
 	tracer     *tracer.TraceAccumulator
 	auditLog   *audit.Log
 	policyHash string
@@ -114,6 +116,7 @@ func NewGuard(cfg Config) (*Guard, error) {
 		policyCfg:  policyCfg,
 		approvals:  approvalStore,
 		bgStore:    bgStore,
+		dispatcher: alert.NewDispatcher(policyCfg.Alerts),
 		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
 		auditLog:   auditLog,
 		policyHash: policyHash,
@@ -145,6 +148,7 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 			PolicyHash: g.policyHash,
 		})
 	}
+	g.dispatchAlert(action, result)
 
 	// Break-glass override (CW-23.2)
 	if result.Tier >= 2 && g.bgStore != nil {
@@ -170,6 +174,7 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
 				})
 			}
+			g.dispatchBreakGlass(action, result)
 		}
 	}
 
@@ -236,6 +241,37 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 		ExitCode: exitCode,
 		Decision: result.Decision,
 	}, nil
+}
+
+func (g *Guard) dispatchAlert(action *model.Action, result model.PolicyResult) {
+	if g.dispatcher != nil {
+		g.dispatcher.Dispatch(alert.AlertEvent{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    g.tracer.State.TraceID,
+			Tool:       action.Tool,
+			Resource:   action.Resource,
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			Tier:       result.Tier,
+			PolicyHash: g.policyHash,
+		})
+	}
+}
+
+func (g *Guard) dispatchBreakGlass(action *model.Action, result model.PolicyResult) {
+	if g.dispatcher != nil {
+		g.dispatcher.Dispatch(alert.AlertEvent{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    g.tracer.State.TraceID,
+			Tool:       action.Tool,
+			Resource:   action.Resource,
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			Tier:       result.Tier,
+			PolicyHash: g.policyHash,
+			Type:       "break_glass_used",
+		})
+	}
 }
 
 // Check evaluates policy without executing. Dry-run mode.

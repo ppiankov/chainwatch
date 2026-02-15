@@ -151,6 +151,7 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 	s.mu.Unlock()
 
 	s.recordAudit(action, string(result.Decision), result.Reason, result.Tier)
+	s.dispatchAlert(action, string(result.Decision), result.Reason, result.Tier)
 
 	// Break-glass override (CW-23.2)
 	if result.Tier >= 2 && s.bgStore != nil {
@@ -176,6 +177,7 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
 				})
 			}
+			s.dispatchBreakGlass(action, string(result.Decision), result.Reason, result.Tier)
 		}
 	}
 

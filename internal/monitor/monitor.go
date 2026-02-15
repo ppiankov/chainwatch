@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/alert"
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/breakglass"
@@ -23,19 +24,21 @@ type Config struct {
 	PollInterval time.Duration
 	Actor        map[string]any
 	AuditLogPath string
+	Alerts       []alert.AlertConfig
 }
 
 // Monitor watches an agent process tree and blocks root-level operations.
 type Monitor struct {
-	cfg       Config
-	watcher   Watcher
-	rules     []Rule
-	approvals *approval.Store
-	bgStore   *breakglass.Store
-	tracer    *tracer.TraceAccumulator
-	auditLog  *audit.Log
-	seen      map[int]bool // PIDs already evaluated
-	mu        sync.Mutex
+	cfg        Config
+	watcher    Watcher
+	rules      []Rule
+	approvals  *approval.Store
+	bgStore    *breakglass.Store
+	dispatcher *alert.Dispatcher
+	tracer     *tracer.TraceAccumulator
+	auditLog   *audit.Log
+	seen       map[int]bool // PIDs already evaluated
+	mu         sync.Mutex
 }
 
 // New creates a Monitor with loaded rules and fresh tracer.
@@ -73,14 +76,15 @@ func New(cfg Config, watcher Watcher) (*Monitor, error) {
 	bgStore, _ := breakglass.NewStore(breakglass.DefaultDir())
 
 	return &Monitor{
-		cfg:       cfg,
-		watcher:   watcher,
-		rules:     rules,
-		approvals: approvalStore,
-		bgStore:   bgStore,
-		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
-		auditLog:  auditLog,
-		seen:      make(map[int]bool),
+		cfg:        cfg,
+		watcher:    watcher,
+		rules:      rules,
+		approvals:  approvalStore,
+		bgStore:    bgStore,
+		dispatcher: alert.NewDispatcher(cfg.Alerts),
+		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
+		auditLog:   auditLog,
+		seen:       make(map[int]bool),
 	}, nil
 }
 
@@ -106,13 +110,14 @@ func NewWithApprovals(cfg Config, watcher Watcher, store *approval.Store) (*Moni
 	bgStore, _ := breakglass.NewStore(breakglass.DefaultDir())
 
 	return &Monitor{
-		cfg:       cfg,
-		watcher:   watcher,
-		rules:     rules,
-		approvals: store,
-		bgStore:   bgStore,
-		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
-		seen:      make(map[int]bool),
+		cfg:        cfg,
+		watcher:    watcher,
+		rules:      rules,
+		approvals:  store,
+		bgStore:    bgStore,
+		dispatcher: alert.NewDispatcher(cfg.Alerts),
+		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
+		seen:       make(map[int]bool),
 	}, nil
 }
 
@@ -194,6 +199,18 @@ func (m *Monitor) scan() {
 						ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
 					})
 				}
+				if m.dispatcher != nil {
+					m.dispatcher.Dispatch(alert.AlertEvent{
+						Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+						TraceID:   m.tracer.State.TraceID,
+						Tool:      "syscall",
+						Resource:  proc.Command,
+						Decision:  "allow",
+						Reason:    reason,
+						Tier:      3,
+						Type:      "break_glass_used",
+					})
+				}
 				m.mu.Lock()
 				m.seen[proc.PID] = true
 				m.mu.Unlock()
@@ -204,6 +221,17 @@ func (m *Monitor) scan() {
 		// Block: kill the process and record
 		m.watcher.Kill(proc.PID)
 		m.recordAction(proc, rule, "deny", fmt.Sprintf("blocked %s: %s", rule.Category, rule.Pattern), 3)
+		if m.dispatcher != nil {
+			m.dispatcher.Dispatch(alert.AlertEvent{
+				Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+				TraceID:   m.tracer.State.TraceID,
+				Tool:      "syscall",
+				Resource:  proc.Command,
+				Decision:  "deny",
+				Reason:    fmt.Sprintf("blocked %s: %s", rule.Category, rule.Pattern),
+				Tier:      3,
+			})
+		}
 
 		// Request approval for future attempts if applicable
 		if rule.ApprovalKey != "" {
