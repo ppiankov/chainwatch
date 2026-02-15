@@ -9,6 +9,7 @@ import (
 
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/alert"
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/breakglass"
@@ -37,6 +38,7 @@ type Server struct {
 	policyCfg  *policy.PolicyConfig
 	approvals  *approval.Store
 	bgStore    *breakglass.Store
+	dispatcher *alert.Dispatcher
 	tracer     *tracer.TraceAccumulator
 	auditLog   *audit.Log
 	policyHash string
@@ -107,6 +109,7 @@ func New(cfg Config) (*Server, error) {
 		policyCfg:  policyCfg,
 		approvals:  approvalStore,
 		bgStore:    bgStore,
+		dispatcher: alert.NewDispatcher(policyCfg.Alerts),
 		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
 		auditLog:   auditLog,
 		policyHash: policyHash,
@@ -143,6 +146,37 @@ func (s *Server) TraceSummary() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.tracer.ToJSON()
+}
+
+func (s *Server) dispatchAlert(action *model.Action, decision, reason string, tier int) {
+	if s.dispatcher != nil {
+		s.dispatcher.Dispatch(alert.AlertEvent{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Tool:       action.Tool,
+			Resource:   action.Resource,
+			Decision:   decision,
+			Reason:     reason,
+			Tier:       tier,
+			PolicyHash: s.policyHash,
+		})
+	}
+}
+
+func (s *Server) dispatchBreakGlass(action *model.Action, decision, reason string, tier int) {
+	if s.dispatcher != nil {
+		s.dispatcher.Dispatch(alert.AlertEvent{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Tool:       action.Tool,
+			Resource:   action.Resource,
+			Decision:   decision,
+			Reason:     reason,
+			Tier:       tier,
+			PolicyHash: s.policyHash,
+			Type:       "break_glass_used",
+		})
+	}
 }
 
 func (s *Server) recordAudit(action *model.Action, decision, reason string, tier int) {
