@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package chainwatch.v1;
+
+option go_package = "github.com/ppiankov/chainwatch/api/proto/chainwatch/v1;chainwatchv1";
+
+service ChainwatchService {
+  rpc Evaluate(EvalRequest) returns (EvalResponse);
+  rpc Approve(ApproveRequest) returns (ApproveResponse);
+  rpc Deny(DenyRequest) returns (DenyResponse);
+  rpc ListPending(ListPendingRequest) returns (ListPendingResponse);
+}
+
+message Action {
+  string tool = 1;
+  string resource = 2;
+  string operation = 3;
+  map<string, string> params = 4;
+  map<string, string> meta = 5;
+}
+
+message EvalRequest {
+  Action action = 1;
+  string purpose = 2;
+  string trace_id = 3;
+}
+
+message EvalResponse {
+  string decision = 1;
+  string reason = 2;
+  int32 tier = 3;
+  string policy_id = 4;
+  string approval_key = 5;
+  string trace_id = 6;
+}
+
+message ApproveRequest {
+  string key = 1;
+  string duration = 2;
+}
+
+message ApproveResponse {
+  string key = 1;
+  string status = 2;
+}
+
+message DenyRequest {
+  string key = 1;
+}
+
+message DenyResponse {
+  string key = 1;
+  string status = 2;
+}
+
+message ListPendingRequest {}
+
+message PendingApproval {
+  string key = 1;
+  string status = 2;
+  string resource = 3;
+  string reason = 4;
+  string created_at = 5;
+}
+
+message ListPendingResponse {
+  repeated PendingApproval approvals = 1;
+}
