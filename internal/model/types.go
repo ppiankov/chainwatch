@@ -194,6 +194,7 @@ func (ts *TraceState) HasSource(source string) bool {
 type PolicyResult struct {
 	Decision      Decision       `json:"decision"`
 	Reason        string         `json:"reason"`
+	Tier          int            `json:"tier"`
 	Redactions    map[string]any `json:"redactions,omitempty"`
 	ApprovalKey   string         `json:"approval_key,omitempty"`
 	OutputRewrite string         `json:"output_rewrite,omitempty"`

@@ -15,6 +15,14 @@ type AuditEntry struct {
 	Action     AuditAction `json:"action"`
 	Decision   string      `json:"decision"`
 	Reason     string      `json:"reason"`
+	Tier       int         `json:"tier"`
 	PolicyHash string      `json:"policy_hash"`
 	PrevHash   string      `json:"prev_hash"`
+
+	// Break-glass fields (CW-23.2) — only present for break-glass events.
+	Type             string `json:"type,omitempty"`
+	TokenID          string `json:"token_id,omitempty"`
+	OriginalDecision string `json:"original_decision,omitempty"`
+	OverriddenTo     string `json:"overridden_to,omitempty"`
+	ExpiresAt        string `json:"expires_at,omitempty"`
 }

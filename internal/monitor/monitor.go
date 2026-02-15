@@ -8,6 +8,7 @@ import (
 
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
+	"github.com/ppiankov/chainwatch/internal/breakglass"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/tracer"
@@ -30,6 +31,7 @@ type Monitor struct {
 	watcher   Watcher
 	rules     []Rule
 	approvals *approval.Store
+	bgStore   *breakglass.Store
 	tracer    *tracer.TraceAccumulator
 	auditLog  *audit.Log
 	seen      map[int]bool // PIDs already evaluated
@@ -68,11 +70,14 @@ func New(cfg Config, watcher Watcher) (*Monitor, error) {
 		}
 	}
 
+	bgStore, _ := breakglass.NewStore(breakglass.DefaultDir())
+
 	return &Monitor{
 		cfg:       cfg,
 		watcher:   watcher,
 		rules:     rules,
 		approvals: approvalStore,
+		bgStore:   bgStore,
 		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
 		auditLog:  auditLog,
 		seen:      make(map[int]bool),
@@ -98,11 +103,14 @@ func NewWithApprovals(cfg Config, watcher Watcher, store *approval.Store) (*Moni
 		rules = append(rules, RulesFromProfile(prof)...)
 	}
 
+	bgStore, _ := breakglass.NewStore(breakglass.DefaultDir())
+
 	return &Monitor{
 		cfg:       cfg,
 		watcher:   watcher,
 		rules:     rules,
 		approvals: store,
+		bgStore:   bgStore,
 		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
 		seen:      make(map[int]bool),
 	}, nil
@@ -153,7 +161,39 @@ func (m *Monitor) scan() {
 			status, _ := m.approvals.Check(rule.ApprovalKey)
 			if status == approval.StatusApproved {
 				m.approvals.Consume(rule.ApprovalKey)
-				m.recordAction(proc, rule, "allow", "pre-approved via approval store")
+				m.recordAction(proc, rule, "allow", "pre-approved via approval store", 0)
+				m.mu.Lock()
+				m.seen[proc.PID] = true
+				m.mu.Unlock()
+				continue
+			}
+		}
+
+		// Break-glass override (CW-23.2)
+		if m.bgStore != nil {
+			action := &model.Action{
+				Tool:      "syscall",
+				Resource:  proc.Command,
+				Operation: "execute",
+			}
+			if token := breakglass.CheckAndConsume(m.bgStore, 3, action); token != nil {
+				reason := fmt.Sprintf("break-glass override (token=%s): %s", token.ID, token.Reason)
+				m.recordAction(proc, rule, "allow", reason, 0)
+				if m.auditLog != nil {
+					m.auditLog.Record(audit.AuditEntry{
+						Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+						TraceID:          m.tracer.State.TraceID,
+						Action:           audit.AuditAction{Tool: "syscall", Resource: proc.Command},
+						Decision:         "allow",
+						Reason:           reason,
+						Tier:             3,
+						Type:             "break_glass_used",
+						TokenID:          token.ID,
+						OriginalDecision: "deny",
+						OverriddenTo:     "allow",
+						ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
+					})
+				}
 				m.mu.Lock()
 				m.seen[proc.PID] = true
 				m.mu.Unlock()
@@ -163,7 +203,7 @@ func (m *Monitor) scan() {
 
 		// Block: kill the process and record
 		m.watcher.Kill(proc.PID)
-		m.recordAction(proc, rule, "deny", fmt.Sprintf("blocked %s: %s", rule.Category, rule.Pattern))
+		m.recordAction(proc, rule, "deny", fmt.Sprintf("blocked %s: %s", rule.Category, rule.Pattern), 3)
 
 		// Request approval for future attempts if applicable
 		if rule.ApprovalKey != "" {
@@ -182,7 +222,7 @@ func (m *Monitor) scan() {
 }
 
 // recordAction writes a trace event for a monitored process.
-func (m *Monitor) recordAction(proc ProcessInfo, rule Rule, decision, reason string) {
+func (m *Monitor) recordAction(proc ProcessInfo, rule Rule, decision, reason string, tier int) {
 	action := &model.Action{
 		Tool:      "syscall",
 		Resource:  proc.Command,
@@ -216,6 +256,7 @@ func (m *Monitor) recordAction(proc ProcessInfo, rule Rule, decision, reason str
 			Action:    audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
 			Decision:  decision,
 			Reason:    reason,
+			Tier:      tier,
 		})
 	}
 }
