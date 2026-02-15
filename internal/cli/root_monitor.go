@@ -12,13 +12,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ppiankov/chainwatch/internal/monitor"
+	"github.com/ppiankov/chainwatch/internal/policy"
 )
 
 var (
-	monitorPID      int
-	monitorProfile  string
-	monitorInterval time.Duration
-	monitorAuditLog string
+	monitorPID        int
+	monitorProfile    string
+	monitorInterval   time.Duration
+	monitorAuditLog   string
+	monitorPolicyPath string
 )
 
 func init() {
@@ -27,6 +29,7 @@ func init() {
 	rootMonitorCmd.Flags().StringVar(&monitorProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	rootMonitorCmd.Flags().DurationVar(&monitorInterval, "poll-interval", 100*time.Millisecond, "Poll interval for process scanning")
 	rootMonitorCmd.Flags().StringVar(&monitorAuditLog, "audit-log", "", "Path to audit log JSONL file")
+	rootMonitorCmd.Flags().StringVar(&monitorPolicyPath, "policy", "", "Path to policy YAML (for alert webhooks)")
 	rootMonitorCmd.MarkFlagRequired("pid")
 }
 
@@ -44,6 +47,11 @@ func runRootMonitor(cmd *cobra.Command, args []string) error {
 		PollInterval: monitorInterval,
 		Actor:        map[string]any{"monitor": "chainwatch root-monitor", "target_pid": monitorPID},
 		AuditLogPath: monitorAuditLog,
+	}
+
+	// Load alert config from policy if available
+	if policyCfg, err := policy.LoadConfig(monitorPolicyPath); err == nil {
+		cfg.Alerts = policyCfg.Alerts
 	}
 
 	watcher := &monitor.ProcfsWatcher{}

@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ppiankov/chainwatch/internal/alert"
 	"github.com/ppiankov/chainwatch/internal/model"
 )
 
@@ -51,11 +52,12 @@ type Rule struct {
 
 // PolicyConfig holds all configurable policy parameters.
 type PolicyConfig struct {
-	EnforcementMode    string             `yaml:"enforcement_mode"`
-	MinTier            int                `yaml:"min_tier"`
-	Thresholds         Thresholds         `yaml:"thresholds"`
-	SensitivityWeights SensitivityWeights `yaml:"sensitivity_weights"`
-	Rules              []Rule             `yaml:"rules"`
+	EnforcementMode    string              `yaml:"enforcement_mode"`
+	MinTier            int                 `yaml:"min_tier"`
+	Thresholds         Thresholds          `yaml:"thresholds"`
+	SensitivityWeights SensitivityWeights  `yaml:"sensitivity_weights"`
+	Rules              []Rule              `yaml:"rules"`
+	Alerts             []alert.AlertConfig `yaml:"alerts"`
 }
 
 // DefaultConfig returns the built-in policy config matching previous hardcoded values.
@@ -261,5 +263,18 @@ rules:
     decision: require_approval
     reason: "access to salary data is not allowed for SOC efficiency tasks without approval"
     approval_key: soc_salary_access
+
+# Alert webhooks — fire HTTP notifications on specific decisions.
+# Format: "generic" (raw JSON), "slack" (Block Kit), "pagerduty" (Events API v2).
+# Events: list of decision types to trigger on.
+# alerts:
+#   - url: https://hooks.slack.com/services/XXX
+#     format: slack
+#     events: [deny, require_approval, break_glass_used]
+#   - url: https://events.pagerduty.com/v2/enqueue
+#     format: pagerduty
+#     events: [deny]
+#     headers:
+#       routing_key: YOUR_ROUTING_KEY
 `
 }

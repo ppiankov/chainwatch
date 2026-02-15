@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/alert"
 	"github.com/ppiankov/chainwatch/internal/approval"
 	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/breakglass"
@@ -41,6 +42,7 @@ type Server struct {
 	policyCfg  *policy.PolicyConfig
 	approvals  *approval.Store
 	bgStore    *breakglass.Store
+	dispatcher *alert.Dispatcher
 	tracer     *tracer.TraceAccumulator
 	auditLog   *audit.Log
 	policyHash string
@@ -98,6 +100,7 @@ func NewServer(cfg Config) (*Server, error) {
 		policyCfg:  policyCfg,
 		approvals:  approvalStore,
 		bgStore:    bgStore,
+		dispatcher: alert.NewDispatcher(policyCfg.Alerts),
 		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
 		auditLog:   auditLog,
 		policyHash: policyHash,
@@ -157,6 +160,37 @@ func (s *Server) TraceSummary() map[string]any {
 	return s.tracer.ToJSON()
 }
 
+func (s *Server) dispatchAlert(action *model.Action, result model.PolicyResult) {
+	if s.dispatcher != nil {
+		s.dispatcher.Dispatch(alert.AlertEvent{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Tool:       action.Tool,
+			Resource:   action.Resource,
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			Tier:       result.Tier,
+			PolicyHash: s.policyHash,
+		})
+	}
+}
+
+func (s *Server) dispatchBreakGlass(action *model.Action, result model.PolicyResult) {
+	if s.dispatcher != nil {
+		s.dispatcher.Dispatch(alert.AlertEvent{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Tool:       action.Tool,
+			Resource:   action.Resource,
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			Tier:       result.Tier,
+			PolicyHash: s.policyHash,
+			Type:       "break_glass_used",
+		})
+	}
+}
+
 func (s *Server) recordAudit(action *model.Action, result model.PolicyResult) {
 	if s.auditLog != nil {
 		s.auditLog.Record(audit.AuditEntry{
@@ -195,6 +229,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	s.recordAudit(action, result)
+	s.dispatchAlert(action, result)
 
 	// Break-glass override (CW-23.2)
 	if result.Tier >= 2 && s.bgStore != nil {
@@ -220,6 +255,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
 				})
 			}
+			s.dispatchBreakGlass(action, result)
 		}
 	}
 
@@ -312,6 +348,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	s.recordAudit(action, result)
+	s.dispatchAlert(action, result)
 
 	// Break-glass override (CW-23.2)
 	if result.Tier >= 2 && s.bgStore != nil {
@@ -337,6 +374,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 					ExpiresAt:        token.ExpiresAt.Format(time.RFC3339),
 				})
 			}
+			s.dispatchBreakGlass(action, result)
 		}
 	}
 
