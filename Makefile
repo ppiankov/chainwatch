@@ -123,6 +123,14 @@ go-intercept: ## Start chainwatch LLM response interceptor on port 9999
 go-audit-verify: ## Verify audit log integrity
 	go run ./cmd/chainwatch audit verify $(AUDIT_LOG)
 
+.PHONY: go-serve
+go-serve: ## Start gRPC policy server on port 50051
+	go run ./cmd/chainwatch serve --port 50051
+
+.PHONY: go-proto
+go-proto: ## Regenerate protobuf Go code
+	PATH="$$PATH:$$HOME/go/bin" protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/proto/chainwatch/v1/chainwatch.proto
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
 
