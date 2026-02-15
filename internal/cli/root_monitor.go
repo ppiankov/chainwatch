@@ -18,6 +18,7 @@ var (
 	monitorPID      int
 	monitorProfile  string
 	monitorInterval time.Duration
+	monitorAuditLog string
 )
 
 func init() {
@@ -25,6 +26,7 @@ func init() {
 	rootMonitorCmd.Flags().IntVar(&monitorPID, "pid", 0, "Target process PID to monitor (required)")
 	rootMonitorCmd.Flags().StringVar(&monitorProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	rootMonitorCmd.Flags().DurationVar(&monitorInterval, "poll-interval", 100*time.Millisecond, "Poll interval for process scanning")
+	rootMonitorCmd.Flags().StringVar(&monitorAuditLog, "audit-log", "", "Path to audit log JSONL file")
 	rootMonitorCmd.MarkFlagRequired("pid")
 }
 
@@ -41,6 +43,7 @@ func runRootMonitor(cmd *cobra.Command, args []string) error {
 		ProfileName:  monitorProfile,
 		PollInterval: monitorInterval,
 		Actor:        map[string]any{"monitor": "chainwatch root-monitor", "target_pid": monitorPID},
+		AuditLogPath: monitorAuditLog,
 	}
 
 	watcher := &monitor.ProcfsWatcher{}
@@ -48,6 +51,7 @@ func runRootMonitor(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create monitor: %w", err)
 	}
+	defer mon.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

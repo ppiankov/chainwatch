@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/approval"
+	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
@@ -28,18 +29,21 @@ type Config struct {
 	ProfileName  string
 	Purpose      string
 	Actor        map[string]any
+	AuditLogPath string
 }
 
 // Server is a forward HTTP proxy that enforces chainwatch policy on outbound requests.
 // MITM-free: no TLS interception. HTTPS CONNECT sees hostname only.
 type Server struct {
-	cfg       Config
-	dl        *denylist.Denylist
-	policyCfg *policy.PolicyConfig
-	approvals *approval.Store
-	tracer    *tracer.TraceAccumulator
-	mu        sync.Mutex // protects tracer state
-	srv       *http.Server
+	cfg        Config
+	dl         *denylist.Denylist
+	policyCfg  *policy.PolicyConfig
+	approvals  *approval.Store
+	tracer     *tracer.TraceAccumulator
+	auditLog   *audit.Log
+	policyHash string
+	mu         sync.Mutex // protects tracer state
+	srv        *http.Server
 }
 
 // NewServer creates a proxy server with the given configuration.
@@ -49,7 +53,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to load denylist: %w", err)
 	}
 
-	policyCfg, err := policy.LoadConfig(cfg.PolicyPath)
+	policyCfg, policyHash, err := policy.LoadConfigWithHash(cfg.PolicyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load policy config: %w", err)
 	}
@@ -76,12 +80,22 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.Purpose = "general"
 	}
 
+	var auditLog *audit.Log
+	if cfg.AuditLogPath != "" {
+		auditLog, err = audit.Open(cfg.AuditLogPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open audit log: %w", err)
+		}
+	}
+
 	s := &Server{
-		cfg:       cfg,
-		dl:        dl,
-		policyCfg: policyCfg,
-		approvals: approvalStore,
-		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
+		cfg:        cfg,
+		dl:         dl,
+		policyCfg:  policyCfg,
+		approvals:  approvalStore,
+		tracer:     tracer.NewAccumulator(tracer.NewTraceID()),
+		auditLog:   auditLog,
+		policyHash: policyHash,
 	}
 
 	s.srv = &http.Server{
@@ -123,11 +137,32 @@ func (s *Server) Addr() string {
 	return s.srv.Addr
 }
 
+// Close closes the audit log if configured.
+func (s *Server) Close() error {
+	if s.auditLog != nil {
+		return s.auditLog.Close()
+	}
+	return nil
+}
+
 // TraceSummary exports the trace for debugging/audit.
 func (s *Server) TraceSummary() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.tracer.ToJSON()
+}
+
+func (s *Server) recordAudit(action *model.Action, result model.PolicyResult) {
+	if s.auditLog != nil {
+		s.auditLog.Record(audit.AuditEntry{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    s.tracer.State.TraceID,
+			Action:     audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+			Decision:   string(result.Decision),
+			Reason:     result.Reason,
+			PolicyHash: s.policyHash,
+		})
+	}
 }
 
 // ServeHTTP dispatches incoming requests to the appropriate handler.
@@ -152,6 +187,8 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		"approval_key": result.ApprovalKey,
 	}, "")
 	s.mu.Unlock()
+
+	s.recordAudit(action, result)
 
 	if result.Decision == model.Deny {
 		writeBlocked(w, http.StatusForbidden, result)
@@ -239,6 +276,8 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		"approval_key": result.ApprovalKey,
 	}, "")
 	s.mu.Unlock()
+
+	s.recordAudit(action, result)
 
 	if result.Decision == model.Deny {
 		http.Error(w, fmt.Sprintf("CONNECT blocked: %s", result.Reason), http.StatusForbidden)

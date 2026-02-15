@@ -107,6 +107,10 @@ go-mcp: ## Start MCP tool server (stdio)
 go-intercept: ## Start chainwatch LLM response interceptor on port 9999
 	go run ./cmd/chainwatch intercept --port 9999
 
+.PHONY: go-audit-verify
+go-audit-verify: ## Verify audit log integrity
+	go run ./cmd/chainwatch audit verify $(AUDIT_LOG)
+
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
 

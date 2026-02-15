@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/approval"
+	"github.com/ppiankov/chainwatch/internal/audit"
 	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/tracer"
@@ -20,6 +21,7 @@ type Config struct {
 	PolicyPath   string
 	PollInterval time.Duration
 	Actor        map[string]any
+	AuditLogPath string
 }
 
 // Monitor watches an agent process tree and blocks root-level operations.
@@ -29,6 +31,7 @@ type Monitor struct {
 	rules     []Rule
 	approvals *approval.Store
 	tracer    *tracer.TraceAccumulator
+	auditLog  *audit.Log
 	seen      map[int]bool // PIDs already evaluated
 	mu        sync.Mutex
 }
@@ -57,12 +60,21 @@ func New(cfg Config, watcher Watcher) (*Monitor, error) {
 		return nil, fmt.Errorf("failed to create approval store: %w", err)
 	}
 
+	var auditLog *audit.Log
+	if cfg.AuditLogPath != "" {
+		auditLog, err = audit.Open(cfg.AuditLogPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open audit log: %w", err)
+		}
+	}
+
 	return &Monitor{
 		cfg:       cfg,
 		watcher:   watcher,
 		rules:     rules,
 		approvals: approvalStore,
 		tracer:    tracer.NewAccumulator(tracer.NewTraceID()),
+		auditLog:  auditLog,
 		seen:      make(map[int]bool),
 	}, nil
 }
@@ -196,6 +208,24 @@ func (m *Monitor) recordAction(proc ProcessInfo, rule Rule, decision, reason str
 		"reason": reason,
 	}, "")
 	m.mu.Unlock()
+
+	if m.auditLog != nil {
+		m.auditLog.Record(audit.AuditEntry{
+			Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:   m.tracer.State.TraceID,
+			Action:    audit.AuditAction{Tool: action.Tool, Resource: action.Resource},
+			Decision:  decision,
+			Reason:    reason,
+		})
+	}
+}
+
+// Close closes the audit log if configured.
+func (m *Monitor) Close() error {
+	if m.auditLog != nil {
+		return m.auditLog.Close()
+	}
+	return nil
 }
 
 // TraceSummary exports the trace for debugging/audit.

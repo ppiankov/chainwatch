@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -105,6 +107,39 @@ func LoadConfig(path string) (*PolicyConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// LoadConfigWithHash loads policy configuration and returns its SHA-256 hash.
+// The hash is computed over the raw YAML bytes on disk.
+// When no file exists (defaults used), the hash is the SHA-256 of empty input.
+func LoadConfigWithHash(path string) (*PolicyConfig, string, error) {
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			h := sha256.Sum256(nil)
+			return DefaultConfig(), "sha256:" + hex.EncodeToString(h[:]), nil
+		}
+		path = filepath.Join(home, ".chainwatch", "policy.yaml")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			h := sha256.Sum256(nil)
+			return DefaultConfig(), "sha256:" + hex.EncodeToString(h[:]), nil
+		}
+		return nil, "", fmt.Errorf("failed to read policy config: %w", err)
+	}
+
+	h := sha256.Sum256(data)
+	hash := "sha256:" + hex.EncodeToString(h[:])
+
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, "", fmt.Errorf("failed to parse policy config: %w", err)
+	}
+
+	return cfg, hash, nil
 }
 
 // matchRule checks if a rule applies to the given purpose and resource.
