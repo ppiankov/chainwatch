@@ -10,9 +10,15 @@
 
 - **...understand what Chainwatch is** → Start with [README.md](../README.md)
 - **...understand the core philosophy** → Read [irreversible-boundaries.md](#irreversible-boundaries)
+- **...understand the governance doctrine** → Read [governance-doctrine.md](#governance-doctrine)
 - **...see the evolution roadmap** → Read [monotonic-irreversibility.md](#monotonic-irreversibility)
 - **...implement v0.2.0** → Read [design/v0.2.0-specification.md](#v020-specification)
+- **...understand enforcement rules** → Read [design/three-laws.md](#three-laws-of-root-actions)
+- **...understand what is protected** → Read [design/invariants.md](#five-invariant-categories)
+- **...configure enforcement modes** → Read [design/enforcement-modes.md](#enforcement-modes)
 - **...configure boundaries** → Read [boundary-configuration.md](#boundary-configuration)
+- **...run adversarial tests** → Read [design/dogfight-test-plan.md](#dogfight-test-plan)
+- **...write agent-ready tasks** → Read [design/agent-task-quality.md](#agent-task-quality)
 - **...use Chainwatch today** → Read [Quick Start](../README.md#quick-start) and [getting-started.md](#getting-started)
 - **...understand RootOps** → Read [DESIGN_BASELINE.md](#design-baseline) and [rootops-antipatterns.md](#rootops-antipatterns)
 - **...learn about forbidden architectures** → Read [security-classes.md](#security-classes)
@@ -33,6 +39,28 @@ For newcomers, read in this order:
 - Implementation → [design/v0.2.0-specification.md](#v020-specification)
 - Configuration → [boundary-configuration.md](#boundary-configuration)
 - RootOps → [security-classes.md](#security-classes), [rootops-antipatterns.md](#rootops-antipatterns)
+
+---
+
+## Governance
+
+### Governance Doctrine
+
+**File:** `governance-doctrine.md`
+
+**Autonomy, Contained.** Full root-capable autonomy inside enforceable human guardrails.
+
+**What it covers:**
+- Positioning: confidence scaffolding, not adversarial security
+- First principle: "First, do no irreversible harm"
+- Nuclear launch cycle (dual-authorization for irreversible actions)
+- Refusal character: calm, predictable, explainable, actionable
+- Ecosystem position (Runforge, Chainwatch, Spectre family)
+
+**Key quote:**
+> "Guardrails cannot be modified by the same automation cycle they govern."
+
+**When to read:** To understand what Chainwatch stands for and how it fits the ecosystem.
 
 ---
 
@@ -167,6 +195,94 @@ Instructions for testing with external agents:
 
 ---
 
+## Enforcement Design
+
+### Three Laws of Root Actions
+
+**File:** `design/three-laws.md`
+
+Asimov-inspired, implementable enforcement rules:
+- Law 1: No catastrophic blast radius (refuse/escalate destructive actions)
+- Law 2: Obey only within declared intent + policy (scope enforcement)
+- Law 3: Protect itself non-destructively (tamper-evident, break-glass)
+
+**When to read:** To understand the enforcement rule hierarchy.
+
+---
+
+### Five Invariant Categories
+
+**File:** `design/invariants.md`
+
+What chainwatch protects:
+- A: Guardrail integrity (block changes to chainwatch itself)
+- B: Verification integrity (block test/CI reduction)
+- C: Permission budget (escalate privilege increases)
+- D: Change budget (escalate oversized work orders)
+- E: Reversibility requirement (escalate if no rollback path)
+
+Also defines the **mutation manifest** format for agent work orders.
+
+**When to read:** To understand what invariants enforcement checks against.
+
+---
+
+### Enforcement Modes
+
+**File:** `design/enforcement-modes.md`
+
+Three operational modes:
+- **Advisory** — observe + score + warn (easy adoption)
+- **Guarded** (default) — block high-risk, confirm medium, allow low
+- **Locked** — strict allowlists only (regulated environments)
+
+Includes mode transition rules and configuration examples.
+
+**When to read:** When deploying chainwatch and choosing strictness level.
+
+---
+
+### Cybercancer Prevention
+
+**File:** `design/cybercancer-prevention.md`
+
+Detecting mutations that erode system integrity:
+- Constraint weakening, blast radius expansion, reversibility destruction
+- Intent obfuscation, self-protection attacks
+- Structural diff analysis (deterministic, no ML)
+
+**When to read:** To understand long-term integrity protection.
+
+---
+
+### Dogfight Test Plan
+
+**File:** `design/dogfight-test-plan.md`
+
+Battlefield testing: chainwatch vs. autonomous agents with root access:
+- 5 test rounds (legitimate work → direct attack → reboot survival)
+- Adversary roster (Ansible, Terraform, eBPF, polite root agent)
+- VM setup and scoring criteria
+
+**When to read:** Before running adversarial validation.
+
+---
+
+### Agent Task Quality
+
+**File:** `design/agent-task-quality.md`
+
+Standards for agent-executable work orders:
+- Contract-style documentation (inputs, outputs, side effects, failure modes)
+- Structured I/O constraints
+- Think/do split (cheap model plans, expensive model executes)
+- Work order templates (refactor, bugfix, migration, investigation)
+- Agentic leverage levels (1-5)
+
+**When to read:** When writing skills, work orders, or task definitions.
+
+---
+
 ## RootOps and Security
 
 ### Security Classes
@@ -281,23 +397,36 @@ Integration strategy with Clawbot and autonomous agents.
 ## Document Hierarchy
 
 ```
-Foundation (Philosophy - WHY)
-├── DESIGN_BASELINE.md          [Principiis obsta]
-├── irreversible-boundaries.md  [Core concept]
-└── monotonic-irreversibility.md [Evolution path]
+Governance (Positioning - WHO)
+└── governance-doctrine.md         [Autonomy, Contained]
        ↓
-Design (What & How)
+Foundation (Philosophy - WHY)
+├── DESIGN_BASELINE.md             [Principiis obsta]
+├── irreversible-boundaries.md     [Core concept]
+└── monotonic-irreversibility.md   [Evolution path]
+       ↓
+Enforcement Design (WHAT)
+├── design/three-laws.md           [Three Laws of Root Actions]
+├── design/invariants.md           [Five Invariant Categories]
+├── design/enforcement-modes.md    [Advisory / Guarded / Locked]
+├── design/cybercancer-prevention.md [Mutation detection]
+└── design/agent-task-quality.md   [Work order standards]
+       ↓
+Design (HOW)
 ├── design/v0.2.0-specification.md [Implementation blueprint]
 └── boundary-configuration.md      [Configuration guide]
        ↓
 Security (Forbidden Architectures)
-├── security-classes.md         [CW-01 through CW-05]
-└── rootops-antipatterns.md     [Convenient Trust Amplifier]
+├── security-classes.md            [CW-01 through CW-05]
+└── rootops-antipatterns.md        [Convenient Trust Amplifier]
+       ↓
+Validation
+└── design/dogfight-test-plan.md   [Adversarial testing]
        ↓
 Implementation (Usage)
-├── getting-started.md          [Onboarding]
-├── testing-guide.md            [Testing]
-└── integrations/               [Integration guides]
+├── getting-started.md             [Onboarding]
+├── testing-guide.md               [Testing]
+└── integrations/                  [Integration guides]
 ```
 
 **Rule:** Read philosophy before implementing. Always.
@@ -368,7 +497,7 @@ From all philosophical documents:
 
 ---
 
-**Last updated:** 2026-02-03
+**Last updated:** 2026-02-16
 
 **Maintained by:** Philosophy-first development process
 
