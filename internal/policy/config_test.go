@@ -317,7 +317,7 @@ func TestEvaluateWithNilConfigMatchesDefault(t *testing.T) {
 	}
 
 	state1 := model.NewTraceState("test1")
-	resultNil := Evaluate(action, state1, "SOC_efficiency", nil, nil)
+	resultNil := Evaluate(action, state1, "SOC_efficiency", "", nil, nil)
 
 	action2 := &model.Action{
 		Tool:      "file_read",
@@ -326,7 +326,7 @@ func TestEvaluateWithNilConfigMatchesDefault(t *testing.T) {
 		RawMeta:   map[string]any{"sensitivity": "high", "egress": "internal"},
 	}
 	state2 := model.NewTraceState("test2")
-	resultDefault := Evaluate(action2, state2, "SOC_efficiency", nil, DefaultConfig())
+	resultDefault := Evaluate(action2, state2, "SOC_efficiency", "", nil, DefaultConfig())
 
 	if resultNil.Decision != resultDefault.Decision {
 		t.Errorf("nil config decision=%s, default config decision=%s", resultNil.Decision, resultDefault.Decision)
@@ -353,7 +353,7 @@ func TestCustomThresholdsChangeDecision(t *testing.T) {
 		Rules:              []Rule{},
 	}
 
-	result := Evaluate(action, state, "general", nil, cfg)
+	result := Evaluate(action, state, "general", "", nil, cfg)
 	if result.Decision != model.Allow {
 		t.Errorf("expected Allow with high AllowMax threshold, got %s (%s)", result.Decision, result.Reason)
 	}

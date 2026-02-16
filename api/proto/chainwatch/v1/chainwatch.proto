@@ -23,6 +23,7 @@ message EvalRequest {
   Action action = 1;
   string purpose = 2;
   string trace_id = 3;
+  string agent_id = 4;
 }
 
 message EvalResponse {

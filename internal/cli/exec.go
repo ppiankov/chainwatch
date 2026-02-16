@@ -27,6 +27,7 @@ var (
 	execDryRun   bool
 	execAuditLog string
 	execRemote   string
+	execAgent    string
 )
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 	execCmd.Flags().BoolVar(&execDryRun, "dry-run", false, "Check policy without executing")
 	execCmd.Flags().StringVar(&execAuditLog, "audit-log", "", "Path to audit log JSONL file")
 	execCmd.Flags().StringVar(&execRemote, "remote", "", "Remote policy server address (e.g., localhost:50051)")
+	execCmd.Flags().StringVar(&execAgent, "agent", "", "Agent identity for scoped policy enforcement")
 }
 
 var execCmd = &cobra.Command{
@@ -75,7 +77,7 @@ func runExecRemote(args []string) error {
 		Params:    map[string]any{"command": name, "args": cmdArgs},
 	}
 
-	result, err := c.Evaluate(action, execPurpose)
+	result, err := c.Evaluate(action, execPurpose, execAgent)
 	if err != nil {
 		return fmt.Errorf("remote evaluation failed: %w", err)
 	}
@@ -142,6 +144,7 @@ func runExecLocal(args []string) error {
 		PolicyPath:   execPolicy,
 		ProfileName:  execProfile,
 		Purpose:      execPurpose,
+		AgentID:      execAgent,
 		Actor:        map[string]any{"cli": "chainwatch exec"},
 		AuditLogPath: execAuditLog,
 	}

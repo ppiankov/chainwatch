@@ -19,6 +19,7 @@ var (
 	mcpProfile  string
 	mcpPurpose  string
 	mcpAuditLog string
+	mcpAgent    string
 )
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 	mcpCmd.Flags().StringVar(&mcpProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	mcpCmd.Flags().StringVar(&mcpPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
 	mcpCmd.Flags().StringVar(&mcpAuditLog, "audit-log", "", "Path to audit log JSONL file")
+	mcpCmd.Flags().StringVar(&mcpAgent, "agent", "", "Agent identity for scoped policy enforcement")
 }
 
 var mcpCmd = &cobra.Command{
@@ -43,6 +45,7 @@ func runMCP(cmd *cobra.Command, args []string) error {
 		PolicyPath:   mcpPolicy,
 		ProfileName:  mcpProfile,
 		Purpose:      mcpPurpose,
+		AgentID:      mcpAgent,
 		AuditLogPath: mcpAuditLog,
 	}
 

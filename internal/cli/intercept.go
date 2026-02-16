@@ -21,6 +21,7 @@ var (
 	interceptProfile  string
 	interceptPurpose  string
 	interceptAuditLog string
+	interceptAgent    string
 )
 
 func init() {
@@ -32,6 +33,7 @@ func init() {
 	interceptCmd.Flags().StringVar(&interceptProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	interceptCmd.Flags().StringVar(&interceptPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
 	interceptCmd.Flags().StringVar(&interceptAuditLog, "audit-log", "", "Path to audit log JSONL file")
+	interceptCmd.Flags().StringVar(&interceptAgent, "agent", "", "Agent identity for scoped policy enforcement")
 }
 
 var interceptCmd = &cobra.Command{
@@ -49,6 +51,7 @@ func runIntercept(cmd *cobra.Command, args []string) error {
 		PolicyPath:   interceptPolicy,
 		ProfileName:  interceptProfile,
 		Purpose:      interceptPurpose,
+		AgentID:      interceptAgent,
 		Actor:        map[string]any{"intercept": "chainwatch", "port": interceptPort},
 		AuditLogPath: interceptAuditLog,
 	}

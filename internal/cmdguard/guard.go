@@ -27,6 +27,7 @@ type Config struct {
 	PolicyPath   string
 	ProfileName  string
 	Purpose      string
+	AgentID      string
 	Actor        map[string]any
 	AuditLogPath string
 }
@@ -128,7 +129,7 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 	action := buildActionFromCommand(name, args)
 
 	g.mu.Lock()
-	result := policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl, g.policyCfg)
+	result := policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.cfg.AgentID, g.dl, g.policyCfg)
 	g.tracer.RecordAction(g.cfg.Actor, g.cfg.Purpose, action, map[string]any{
 		"result":       string(result.Decision),
 		"reason":       result.Reason,
@@ -280,7 +281,7 @@ func (g *Guard) Check(name string, args []string) model.PolicyResult {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.dl, g.policyCfg)
+	return policy.Evaluate(action, g.tracer.State, g.cfg.Purpose, g.cfg.AgentID, g.dl, g.policyCfg)
 }
 
 // Close closes the audit log if configured.
