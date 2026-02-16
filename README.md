@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/logo.png" alt="chainwatch" width="128">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.png">
+    <img src="assets/logo.png" alt="chainwatch" width="128">
+  </picture>
 </p>
 
 <p align="center"><em>Autonomy, Contained.</em></p>
