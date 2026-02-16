@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 // Sensitivity classifies data sensitivity level.
 type Sensitivity string
 
@@ -161,6 +163,9 @@ type TraceState struct {
 	// v0.3.0: agent identity
 	AgentID   string `json:"agent_id,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
+
+	// v0.4.0: budget enforcement
+	StartedAt time.Time `json:"started_at"`
 }
 
 // NewTraceState creates a TraceState with safe defaults.
@@ -173,6 +178,7 @@ func NewTraceState(traceID string) *TraceState {
 		Tags:           []string{},
 		Zone:           Safe,
 		ZonesEntered:   make(map[Zone]bool),
+		StartedAt:      time.Now().UTC(),
 	}
 }
 
