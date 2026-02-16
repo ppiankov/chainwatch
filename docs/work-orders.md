@@ -145,11 +145,17 @@ Monitors the agent process tree and blocks:
 
 ---
 
-# Phase 1: Integration Layer
+# Phase 1: Integration Layer (COMPLETE — ✅)
 
-## WO-CW08: MCP Tool Server
+## WO-CW08: MCP Tool Server ✅
 
 **Goal:** Expose chainwatch as an MCP (Model Context Protocol) server so any MCP-compatible agent gets policy enforcement at the tool boundary with zero agent code changes.
+
+### Implementation
+- `internal/mcp/server.go` — MCP server with MCP SDK integration (`github.com/modelcontextprotocol/go-sdk/mcp`), stdio transport
+- `internal/mcp/handlers.go` — Tool handlers for all 5 MCP tools: `chainwatch_exec`, `chainwatch_http`, `chainwatch_check`, `chainwatch_approve`, `chainwatch_pending`
+- `internal/cli/mcp.go` — `chainwatch mcp` command with `--profile`, `--policy`, `--denylist`, `--agent` flags
+- Full integration with denylist, policy config, approval store, audit logging, alert dispatcher
 
 ### Context
 Chainwatch enforces policy through proxy (CW02) and exec wrapper (CW03). Both require agents to be explicitly routed through chainwatch. An MCP server wraps chainwatch's enforcement pipeline as MCP tools, making it a transparent policy layer for Claude, GPT, and any MCP-compatible framework.
@@ -185,9 +191,17 @@ Chainwatch enforces policy through proxy (CW02) and exec wrapper (CW03). Both re
 
 ---
 
-## WO-CW09: Python SDK
+## WO-CW09: Python SDK ✅
 
 **Goal:** `pip install chainwatch` — decorator-based enforcement for Python agent frameworks (LangChain, CrewAI, AutoGen).
+
+### Implementation
+- `sdk/python/chainwatch_sdk/client.py` — `ChainwatchClient` class with `check()`, `execute()`, `approve()` methods
+- `sdk/python/chainwatch_sdk/decorators.py` — `@guard` decorator with `configure()` function
+- `sdk/python/chainwatch_sdk/middleware.py` — Request/response middleware
+- `sdk/python/chainwatch_sdk/types.py` — `BlockedError`, `BinaryNotFoundError`, `CheckResult` dataclasses
+- `sdk/python/chainwatch_sdk/_subprocess.py` — Subprocess wrapper for CLI communication
+- `sdk/python/pyproject.toml` — Package metadata, Black/Ruff config
 
 ### Context
 The Go binary is the enforcement engine. The Python SDK is a thin client that shells out to `chainwatch exec` / `chainwatch check` or communicates with the MCP server. No re-implementation of policy logic in Python.
@@ -229,9 +243,17 @@ if result.decision == "deny":
 
 ---
 
-## WO-CW10: Go SDK
+## WO-CW10: Go SDK ✅
 
 **Goal:** `chainwatch.Wrap(tool)` — in-process policy enforcement for Go agent frameworks without subprocess overhead.
+
+### Implementation
+- `sdk/go/chainwatch/client.go` — `Client` struct with `Check()`, `Evaluate()`, `TraceSummary()` methods
+- `sdk/go/chainwatch/guard.go` — `Wrap()` function wrapping with policy enforcement
+- `sdk/go/chainwatch/options.go` — `WithProfile()`, `WithPolicy()`, `WithDenylist()`, `WithPurpose()`, `WithAgent()`, `WrapWithPurpose()`, `WrapWithAgent()`
+- `sdk/go/chainwatch/middleware.go` — Generic HTTP middleware pattern
+- `sdk/go/chainwatch/types.go` — `Action`, `Result`, `Decision`, `BlockedError`
+- Direct in-process evaluation (zero subprocess overhead), thread-safe with mutex
 
 ### Context
 Unlike the Python SDK (subprocess-based), the Go SDK links directly against chainwatch's internal packages. This means in-process policy evaluation with no IPC overhead.
@@ -265,9 +287,16 @@ result, err := wrapped(ctx, args)  // policy-enforced
 
 ---
 
-## WO-CW11: Function-Call Interceptor Proxy
+## WO-CW11: Function-Call Interceptor Proxy ✅
 
 **Goal:** HTTP proxy between agent and LLM API that inspects `tool_use` / `function_call` blocks before the agent executes them.
+
+### Implementation
+- `internal/intercept/proxy.go` — Reverse HTTP proxy intercepting LLM API responses
+- `internal/intercept/parse.go` — Extracts `tool_use` blocks from Anthropic/OpenAI response formats
+- `internal/intercept/rewrite.go` — Replaces blocked tool calls with error responses
+- `internal/cli/intercept.go` — `chainwatch intercept --port --upstream` command with `--profile`, `--agent` flags
+- Policy evaluation on each extracted tool call before forwarding response to agent
 
 ### Context
 CW02 is a forward proxy for agent *outbound* requests. This interceptor sits between the agent and the *LLM API*, inspecting the LLM's response before the agent acts on it. It catches intent before action — the LLM says "call rm -rf /" and the interceptor blocks before the agent ever runs it.
@@ -299,11 +328,18 @@ CW02 is a forward proxy for agent *outbound* requests. This interceptor sits bet
 
 ---
 
-# Phase 2: Audit & Compliance
+# Phase 2: Audit & Compliance (COMPLETE — ✅)
 
-## WO-CW12: Structured Audit Log
+## WO-CW12: Structured Audit Log ✅
 
 **Goal:** Append-only JSONL audit log with cryptographic hash chaining for tamper-evident trace of every decision.
+
+### Implementation
+- `internal/audit/log.go` — `AuditLog` with append-only writes, SHA-256 hash chaining, fsync after each record
+- `internal/audit/entry.go` — `AuditEntry` struct with trace_id, agent_id, session_id, action, decision, tier, policy_hash, prev_hash, break-glass fields
+- `internal/audit/verify.go` — `Verify(path)` validates hash chain integrity
+- `internal/cli/audit.go` — `chainwatch audit verify <path>` and `chainwatch audit tail <path>` commands
+- Genesis hash (`sha256:0000...`) for new logs; wired into proxy, guard, monitor, MCP, gRPC server
 
 ### Context
 The tracer (CW01) records events in memory and exports JSON. This WO persists events to disk with integrity guarantees. Each event includes the SHA-256 hash of the previous event, forming a hash chain. Any tampering breaks the chain.
@@ -337,9 +373,15 @@ The tracer (CW01) records events in memory and exports JSON. This WO persists ev
 
 ---
 
-## WO-CW13: Session Replay
+## WO-CW13: Session Replay ✅
 
 **Goal:** Given a trace ID, reconstruct the full decision timeline with human-readable output.
+
+### Implementation
+- `internal/audit/replay.go` — `Replay(logPath, filter)` with trace ID and time range filtering, returns `ReplayResult` with entries and summary stats
+- `internal/audit/format.go` — `FormatTimeline()` for human-readable output, `FormatJSON()` for structured export
+- `internal/cli/replay.go` — `chainwatch replay <trace-id> --log <path> [--from TIME] [--to TIME] [--format text|json]`
+- Summary includes decision counts (allow, deny, require_approval, redact, break_glass_used) and max tier
 
 ### Context
 The audit log (CW12) stores raw events. Session replay reads the audit log, filters by trace ID, and renders a timeline showing what the agent did, what was blocked, and why.
@@ -376,9 +418,16 @@ Summary: 12 allow, 3 deny, 2 redact, 1 approval | Max zone: Commitment
 
 ---
 
-## WO-CW14: Alert Webhooks
+## WO-CW14: Alert Webhooks ✅
 
 **Goal:** Real-time notifications (Slack, PagerDuty, generic HTTP) when blocked events fire.
+
+### Implementation
+- `internal/alert/config.go` — `AlertConfig` struct (URL, format, events filter, custom headers)
+- `internal/alert/webhook.go` — HTTP webhook sender with 5s timeout, 3x retry with exponential backoff on 5xx
+- `internal/alert/dispatcher.go` — Routes events to matching webhooks, filters by event type
+- `internal/alert/format.go` — Payload formatting for generic JSON, Slack Block Kit, PagerDuty Events API v2
+- Wired into proxy, guard, MCP, intercept, and gRPC server decision paths
 
 ### Context
 Operators need to know in real time when policy blocks an agent, not after reviewing logs. Webhook alerts fire on configurable decision types.
@@ -417,11 +466,19 @@ alerts:
 
 ---
 
-# Phase 3: Multi-Agent & Production
+# Phase 3: Multi-Agent & Production (COMPLETE — ✅)
 
-## WO-CW15: Central Policy Server (gRPC)
+## WO-CW15: Central Policy Server (gRPC) ✅
 
 **Goal:** Single policy source for multiple agents via gRPC. Hot-reload without restart.
+
+### Implementation
+- `api/proto/chainwatch/v1/chainwatch.proto` — gRPC service with `Evaluate`, `Approve`, `Deny`, `ListPending` RPCs
+- `api/proto/chainwatch/v1/chainwatch.pb.go` / `chainwatch_grpc.pb.go` — Generated Go bindings
+- `internal/server/server.go` — gRPC server with per-session `TraceAccumulator`, denylist, policy config, audit log, alert dispatcher
+- `internal/server/reload.go` — Policy hot-reload via fsnotify file watcher
+- `internal/client/client.go` — gRPC client with fail-closed behavior (RPC errors → Deny), 5s timeout
+- `internal/cli/serve.go` — `chainwatch serve --port --policy --denylist --audit-log --profile` command
 
 ### Context
 File-based policy works for single-agent setups. Production deployments need one policy server, many agent clients. The gRPC server loads policy.yaml and serves evaluation requests. Agents use a lightweight gRPC client instead of loading policy locally.
@@ -457,9 +514,19 @@ service Chainwatch {
 
 ---
 
-## WO-CW16: Agent Identity & Sessions
+## WO-CW16: Agent Identity & Sessions ✅
 
 **Goal:** Bind policy decisions to agent identity, not just purpose strings. Per-agent, per-session enforcement.
+
+### Implementation
+- `internal/identity/registry.go` — `Registry` with `Lookup()`, `ValidatePurpose()`, `MatchResource()`, `MatchPattern()` (glob-like: contains/suffix/prefix/exact, case-insensitive)
+- `internal/identity/session.go` — `Session` struct with agent ID, session ID (random 8-byte hex), created_at
+- `internal/model/types.go` — `TraceState` extended with `AgentID`, `SessionID` fields
+- `internal/policy/evaluate.go` — Step 3.5 agent enforcement: no agents config → deny, unknown agent → deny, purpose validation → deny, resource scope → deny, sensitivity cap → deny, per-agent rules (first match wins) → fall through
+- `internal/policy/config.go` — `Agents map[string]*identity.AgentConfig` in PolicyConfig, agents section in DefaultConfigYAML
+- All 5 server types (cmdguard, proxy, mcp, intercept, gRPC) pass `--agent` flag through to `Evaluate`
+- SDK extended with `WithAgent()` and `WrapWithAgent()` options
+- Tracer and audit entry include agent_id and session_id fields
 
 ### Context
 Currently, purpose is a free-text string ("SOC_efficiency"). This WO adds structured agent identity: agents register with a session, and policies bind to agent IDs. "Agent clawbot-prod can read HR data; clawbot-staging cannot."
@@ -499,9 +566,18 @@ agents:
 
 ---
 
-## WO-CW17: Budget Enforcement
+## WO-CW17: Budget Enforcement ✅
 
 **Goal:** Track and cap API token spend, compute time, and network bytes per agent per session.
+
+### Implementation
+- `internal/budget/config.go` — `BudgetConfig` struct (MaxBytes, MaxRows, MaxDuration); zero = unlimited
+- `internal/budget/tracker.go` — `Usage` struct, `Snapshot()` reads from `TraceState` (VolumeBytes, VolumeRows, time.Since(StartedAt))
+- `internal/budget/enforcer.go` — `Check()` compares usage vs limits (first exceeded dimension wins), `Evaluate()` for pipeline integration with lookup order: `budgets[agentID]` → `budgets["*"]` → skip
+- `internal/model/types.go` — `TraceState` extended with `StartedAt time.Time`, set in `NewTraceState`
+- `internal/policy/evaluate.go` — Step 3.75 budget enforcement between agent enforcement and purpose-bound rules
+- `internal/policy/config.go` — `Budgets map[string]*budget.BudgetConfig` in PolicyConfig, budgets section in DefaultConfigYAML
+- `internal/cli/budget.go` — `chainwatch budget status` command shows configured limits
 
 ### Steps
 1. Create `internal/budget/tracker.go` — `Tracker` accumulating spend, bytes, duration per agent/session
