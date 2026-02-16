@@ -150,7 +150,7 @@ func (s *Server) Evaluate(ctx context.Context, req *pb.EvalRequest) (*pb.EvalRes
 	policyHash := s.policyHash
 	s.mu.RUnlock()
 
-	result := policy.Evaluate(action, ta.State, purpose, dl, policyCfg)
+	result := policy.Evaluate(action, ta.State, purpose, req.AgentId, dl, policyCfg)
 
 	ta.RecordAction(
 		map[string]any{"grpc": "chainwatch.v1.Evaluate"},

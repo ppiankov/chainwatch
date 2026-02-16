@@ -102,6 +102,7 @@ type EvalRequest struct {
 	Action        *Action                `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
 	Purpose       string                 `protobuf:"bytes,2,opt,name=purpose,proto3" json:"purpose,omitempty"`
 	TraceId       string                 `protobuf:"bytes,3,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -153,6 +154,13 @@ func (x *EvalRequest) GetPurpose() string {
 func (x *EvalRequest) GetTraceId() string {
 	if x != nil {
 		return x.TraceId
+	}
+	return ""
+}
+
+func (x *EvalRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
 	}
 	return ""
 }
@@ -613,11 +621,12 @@ const file_api_proto_chainwatch_v1_chainwatch_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
 	"\tMetaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"q\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x01\n" +
 	"\vEvalRequest\x12-\n" +
 	"\x06action\x18\x01 \x01(\v2\x15.chainwatch.v1.ActionR\x06action\x12\x18\n" +
 	"\apurpose\x18\x02 \x01(\tR\apurpose\x12\x19\n" +
-	"\btrace_id\x18\x03 \x01(\tR\atraceId\"\xb1\x01\n" +
+	"\btrace_id\x18\x03 \x01(\tR\atraceId\x12\x19\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentId\"\xb1\x01\n" +
 	"\fEvalResponse\x12\x1a\n" +
 	"\bdecision\x18\x01 \x01(\tR\bdecision\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x12\n" +

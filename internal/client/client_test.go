@@ -66,7 +66,7 @@ func TestClientEvaluateAllowed(t *testing.T) {
 		Tool:      "command",
 		Resource:  "echo hello",
 		Operation: "execute",
-	}, "general")
+	}, "general", "")
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
@@ -94,7 +94,7 @@ commands:
 		Tool:      "command",
 		Resource:  "rm -rf /",
 		Operation: "execute",
-	}, "general")
+	}, "general", "")
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestClientFailClosed(t *testing.T) {
 		Tool:      "command",
 		Resource:  "echo hello",
 		Operation: "execute",
-	}, "general")
+	}, "general", "")
 	if err != nil {
 		t.Fatalf("Evaluate returned error (should not): %v", err)
 	}
@@ -164,7 +164,7 @@ rules:
 		Tool:      "http_proxy",
 		Resource:  "https://internal.corp/api/salary",
 		Operation: "get",
-	}, "general")
+	}, "general", "")
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestClientConnectsToServer(t *testing.T) {
 		Tool:      "command",
 		Resource:  "ls",
 		Operation: "execute",
-	}, "general")
+	}, "general", "")
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}

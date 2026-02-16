@@ -16,7 +16,7 @@ func TestLowRiskAllowed(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	if result.Decision != model.Allow {
 		t.Errorf("expected Allow for known-safe read, got %s", result.Decision)
@@ -38,7 +38,7 @@ func TestHighSensitivityElevated(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	// High sensitivity → not known-safe → tier 1 (elevated) → Allow in guarded mode
 	if result.Decision != model.Allow {
@@ -58,7 +58,7 @@ func TestSalaryBlockedForSOC(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "SOC_efficiency", nil, nil)
+	result := Evaluate(action, state, "SOC_efficiency", "", nil, nil)
 
 	if result.Decision != model.RequireApproval {
 		t.Errorf("expected RequireApproval for salary, got %s", result.Decision)
@@ -81,7 +81,7 @@ func TestDenylistBlocksFirst(t *testing.T) {
 	state := model.NewTraceState("test")
 	dl := denylist.NewDefault()
 
-	result := Evaluate(action, state, "general", dl, nil)
+	result := Evaluate(action, state, "general", "", dl, nil)
 
 	if result.Decision != model.Deny {
 		t.Errorf("expected Deny for denylisted URL, got %s", result.Decision)
@@ -103,7 +103,7 @@ func TestIrreversibleZoneDenies(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	if result.Decision != model.Deny {
 		t.Errorf("expected Deny for IRREVERSIBLE zone (checkout), got %s", result.Decision)
@@ -126,7 +126,7 @@ func TestCommitmentZoneRequiresApproval(t *testing.T) {
 		RawMeta:   map[string]any{"sensitivity": "low"},
 	}
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	if result.Decision != model.RequireApproval {
 		t.Errorf("expected RequireApproval for COMMITMENT zone, got %s", result.Decision)
@@ -150,7 +150,7 @@ func TestExternalEgressElevated(t *testing.T) {
 	state := model.NewTraceState("test")
 	state.SeenSources = append(state.SeenSources, "other_tool")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	// /data/report.csv does not trigger any zone patterns.
 	// high sensitivity → not known-safe → tier 1 (elevated) → Allow in guarded mode
@@ -172,7 +172,7 @@ func TestZoneEscalationPersistsAcrossEvaluations(t *testing.T) {
 		Operation: "read",
 		RawMeta:   map[string]any{"sensitivity": "high"},
 	}
-	Evaluate(action1, state, "general", nil, nil)
+	Evaluate(action1, state, "general", "", nil, nil)
 
 	// State should now have SENSITIVE_DATA zone
 	if !state.ZonesEntered[model.ZoneSensitiveData] {
@@ -186,7 +186,7 @@ func TestZoneEscalationPersistsAcrossEvaluations(t *testing.T) {
 		Operation: "read",
 		RawMeta:   map[string]any{"sensitivity": "low"},
 	}
-	Evaluate(action2, state, "general", nil, nil)
+	Evaluate(action2, state, "general", "", nil, nil)
 
 	// SENSITIVE_DATA zone should still be present
 	if !state.ZonesEntered[model.ZoneSensitiveData] {
@@ -203,7 +203,7 @@ func TestSelfTargetingActionDenied(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	if result.Decision != model.Deny {
 		t.Errorf("expected Deny for self-targeting action, got %s", result.Decision)
@@ -222,7 +222,7 @@ func TestKnownSafeActionTier0(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	if result.Decision != model.Allow {
 		t.Errorf("expected Allow for ls command, got %s", result.Decision)
@@ -241,7 +241,7 @@ func TestUnknownActionDefaultsTier1(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 
 	if result.Tier != TierElevated {
 		t.Errorf("expected tier 1 for unknown action, got %d", result.Tier)
@@ -264,7 +264,7 @@ func TestAdvisoryModeAllowsAll(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, cfg)
+	result := Evaluate(action, state, "general", "", nil, cfg)
 
 	if result.Decision != model.Allow {
 		t.Errorf("expected Allow in advisory mode, got %s", result.Decision)
@@ -287,7 +287,7 @@ func TestLockedModeDeniesAboveTier1(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, cfg)
+	result := Evaluate(action, state, "general", "", nil, cfg)
 
 	if result.Decision != model.RequireApproval {
 		t.Errorf("expected RequireApproval for tier 1 in locked mode, got %s", result.Decision)
@@ -309,7 +309,7 @@ func TestMinTierPromotesAction(t *testing.T) {
 	}
 	state := model.NewTraceState("test")
 
-	result := Evaluate(action, state, "general", nil, cfg)
+	result := Evaluate(action, state, "general", "", nil, cfg)
 
 	// Known-safe action would be tier 0, but MinTier promotes to tier 2
 	if result.Tier != TierGuarded {
@@ -330,7 +330,7 @@ func TestTierFieldPresentInAllResults(t *testing.T) {
 		Operation: "read",
 		RawMeta:   map[string]any{"sensitivity": "low"},
 	}
-	result := Evaluate(action, state, "general", nil, nil)
+	result := Evaluate(action, state, "general", "", nil, nil)
 	if result.Tier < 0 || result.Tier > 3 {
 		t.Errorf("expected tier 0-3, got %d", result.Tier)
 	}
@@ -343,7 +343,7 @@ func TestTierFieldPresentInAllResults(t *testing.T) {
 		Operation: "navigate",
 	}
 	state2 := model.NewTraceState("test2")
-	result2 := Evaluate(action2, state2, "general", dl, nil)
+	result2 := Evaluate(action2, state2, "general", "", dl, nil)
 	if result2.Tier != TierCritical {
 		t.Errorf("expected tier 3 for denylist, got %d", result2.Tier)
 	}

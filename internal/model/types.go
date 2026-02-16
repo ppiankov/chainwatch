@@ -157,6 +157,10 @@ type TraceState struct {
 	// v0.2.0: monotonic irreversibility tracking
 	Zone         BoundaryZone  `json:"zone"`
 	ZonesEntered map[Zone]bool `json:"zones_entered"`
+
+	// v0.3.0: agent identity
+	AgentID   string `json:"agent_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // NewTraceState creates a TraceState with safe defaults.

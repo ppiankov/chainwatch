@@ -12,6 +12,8 @@ type AuditAction struct {
 type AuditEntry struct {
 	Timestamp  string      `json:"ts"`
 	TraceID    string      `json:"trace_id"`
+	AgentID    string      `json:"agent_id,omitempty"`
+	SessionID  string      `json:"session_id,omitempty"`
 	Action     AuditAction `json:"action"`
 	Decision   string      `json:"decision"`
 	Reason     string      `json:"reason"`

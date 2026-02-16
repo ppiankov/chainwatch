@@ -89,7 +89,7 @@ func runSOCDemo(cmd *cobra.Command, args []string) error {
 		action := buildFileAction(path, name)
 
 		// Evaluate policy
-		result := policy.Evaluate(action, acc.State, purpose, dl, policyCfg)
+		result := policy.Evaluate(action, acc.State, purpose, "", dl, policyCfg)
 
 		// Record event
 		acc.RecordAction(actor, purpose, action, map[string]any{

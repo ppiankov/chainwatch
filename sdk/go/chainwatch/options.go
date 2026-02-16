@@ -8,6 +8,7 @@ type clientConfig struct {
 	policyPath   string
 	denylistPath string
 	purpose      string
+	agentID      string
 	actor        map[string]any
 }
 
@@ -36,14 +37,25 @@ func WithActor(actor map[string]any) Option {
 	return func(c *clientConfig) { c.actor = actor }
 }
 
+// WithAgent sets the agent identity for scoped policy enforcement.
+func WithAgent(agentID string) Option {
+	return func(c *clientConfig) { c.agentID = agentID }
+}
+
 // WrapOption configures a single Wrap call.
 type WrapOption func(*wrapConfig)
 
 type wrapConfig struct {
 	purpose string
+	agentID string
 }
 
 // WrapWithPurpose overrides the client-level purpose for this wrap.
 func WrapWithPurpose(purpose string) WrapOption {
 	return func(w *wrapConfig) { w.purpose = purpose }
+}
+
+// WrapWithAgent overrides the client-level agent identity for this wrap.
+func WrapWithAgent(agentID string) WrapOption {
+	return func(w *wrapConfig) { w.agentID = agentID }
 }

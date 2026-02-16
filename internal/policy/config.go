@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ppiankov/chainwatch/internal/alert"
+	"github.com/ppiankov/chainwatch/internal/identity"
 	"github.com/ppiankov/chainwatch/internal/model"
 )
 
@@ -52,12 +53,13 @@ type Rule struct {
 
 // PolicyConfig holds all configurable policy parameters.
 type PolicyConfig struct {
-	EnforcementMode    string              `yaml:"enforcement_mode"`
-	MinTier            int                 `yaml:"min_tier"`
-	Thresholds         Thresholds          `yaml:"thresholds"`
-	SensitivityWeights SensitivityWeights  `yaml:"sensitivity_weights"`
-	Rules              []Rule              `yaml:"rules"`
-	Alerts             []alert.AlertConfig `yaml:"alerts"`
+	EnforcementMode    string                           `yaml:"enforcement_mode"`
+	MinTier            int                              `yaml:"min_tier"`
+	Thresholds         Thresholds                       `yaml:"thresholds"`
+	SensitivityWeights SensitivityWeights               `yaml:"sensitivity_weights"`
+	Rules              []Rule                           `yaml:"rules"`
+	Alerts             []alert.AlertConfig              `yaml:"alerts"`
+	Agents             map[string]*identity.AgentConfig `yaml:"agents,omitempty"`
 }
 
 // DefaultConfig returns the built-in policy config matching previous hardcoded values.
@@ -276,5 +278,22 @@ rules:
 #     events: [deny]
 #     headers:
 #       routing_key: YOUR_ROUTING_KEY
+
+# Agent identity — scope enforcement per registered agent.
+# When agent_id is passed to Evaluate, the agent must be registered here.
+# Unknown agents are denied (fail-closed).
+# agents:
+#   clawbot-prod:
+#     purposes: [SOC_efficiency, compliance_check]
+#     allow_resources: ["/hr/*", "/finance/*"]
+#     max_sensitivity: high
+#     rules:
+#       - resource_pattern: "*salary*"
+#         decision: allow
+#         reason: "clawbot-prod authorized for salary access"
+#   clawbot-staging:
+#     purposes: [testing]
+#     allow_resources: ["/test/*"]
+#     max_sensitivity: medium
 `
 }

@@ -137,7 +137,7 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 	action := buildHTTPAction(input)
 
 	s.mu.Lock()
-	result := policy.Evaluate(action, s.tracer.State, s.purpose, s.dl, s.policyCfg)
+	result := policy.Evaluate(action, s.tracer.State, s.purpose, s.agentID, s.dl, s.policyCfg)
 	s.tracer.RecordAction(
 		map[string]any{"mcp": "chainwatch_http"},
 		s.purpose, action,
@@ -254,7 +254,7 @@ func (s *Server) handleCheck(ctx context.Context, req *mcpsdk.CallToolRequest, i
 	action := buildCheckAction(input)
 
 	s.mu.Lock()
-	result := policy.Evaluate(action, s.tracer.State, s.purpose, s.dl, s.policyCfg)
+	result := policy.Evaluate(action, s.tracer.State, s.purpose, s.agentID, s.dl, s.policyCfg)
 	s.tracer.RecordAction(
 		map[string]any{"mcp": "chainwatch_check"},
 		s.purpose, action,

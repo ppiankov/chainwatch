@@ -33,6 +33,7 @@ type Config struct {
 	PolicyPath   string
 	ProfileName  string
 	Purpose      string
+	AgentID      string
 	Actor        map[string]any
 	AuditLogPath string
 }
@@ -406,7 +407,7 @@ func (s *Server) evaluateToolCall(tc ToolCall) model.PolicyResult {
 	action := buildActionFromToolCall(tc)
 
 	s.mu.Lock()
-	result := policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.dl, s.policyCfg)
+	result := policy.Evaluate(action, s.tracer.State, s.cfg.Purpose, s.cfg.AgentID, s.dl, s.policyCfg)
 	s.tracer.RecordAction(s.cfg.Actor, s.cfg.Purpose, action, map[string]any{
 		"result":       string(result.Decision),
 		"reason":       result.Reason,
