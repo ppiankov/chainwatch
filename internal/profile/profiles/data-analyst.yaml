@@ -1,0 +1,57 @@
+name: data-analyst
+description: Safety profile for data analysis and reporting AI agents
+
+authority_boundaries:
+  - pattern: "DELETE|DROP|TRUNCATE|ALTER"
+    reason: "Destructive database operations blocked"
+  - pattern: "INSERT|UPDATE"
+    reason: "Database write operations blocked for analyst"
+  - pattern: "send.*external|upload|transmit"
+    reason: "External data egress blocked"
+  - pattern: "execute.*command|run.*script"
+    reason: "Arbitrary command execution blocked"
+
+execution_boundaries:
+  urls:
+    - "*/upload*"
+    - "*/send*"
+    - "*/external*"
+    - "*/admin*"
+    - "*/checkout*"
+    - "*/payment*"
+  files:
+    - "**/.env"
+    - "**/credentials*"
+    - "~/.ssh/*"
+    - "~/.aws/*"
+  commands:
+    - "curl"
+    - "wget"
+    - "scp"
+    - "rsync"
+    - "rm -rf"
+    - "sudo"
+    - "ssh"
+
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*ssn*"
+      decision: deny
+      reason: "raw SSN access blocked by data-analyst profile"
+    - purpose: "*"
+      resource_pattern: "*password*"
+      decision: deny
+      reason: "password access blocked by data-analyst profile"
+    - purpose: "*"
+      resource_pattern: "*credit_card*"
+      decision: deny
+      reason: "credit card access blocked by data-analyst profile"
+    - purpose: "*"
+      resource_pattern: "*salary*"
+      decision: require_approval
+      reason: "salary data requires approval per data-analyst profile"
+    - purpose: "*"
+      resource_pattern: "*compensation*"
+      decision: require_approval
+      reason: "compensation data requires approval per data-analyst profile"

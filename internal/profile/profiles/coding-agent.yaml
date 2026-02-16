@@ -1,0 +1,52 @@
+name: coding-agent
+description: Safety profile for code-generation and development AI agents
+
+authority_boundaries:
+  - pattern: "deploy.*prod"
+    reason: "Production deployment requires human approval"
+  - pattern: "kubectl.*apply"
+    reason: "Kubernetes cluster modification blocked"
+  - pattern: "migrate.*database"
+    reason: "Database migration blocked"
+  - pattern: "ALTER\\s+TABLE"
+    reason: "Schema modification blocked"
+  - pattern: "DROP\\s+TABLE"
+    reason: "Schema destruction blocked"
+  - pattern: "publish.*package"
+    reason: "Package publish requires human approval"
+
+execution_boundaries:
+  urls:
+    - "*/deploy*"
+    - "*/releases/create*"
+    - "*/settings/secrets*"
+    - "*/api/keys*"
+  files:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/credentials*"
+    - "~/.ssh/*"
+    - "~/.aws/*"
+    - "~/.gcloud/*"
+    - "**/secrets.yaml"
+    - "**/secrets.json"
+  commands:
+    - "rm -rf"
+    - "npm publish"
+    - "pip upload"
+    - "cargo publish"
+    - "gem push"
+    - "kubectl apply"
+    - "terraform apply"
+    - "docker push"
+
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*credentials*"
+      decision: deny
+      reason: "credential access blocked by coding-agent profile"
+    - purpose: "*"
+      resource_pattern: "*secret*"
+      decision: deny
+      reason: "secret access blocked by coding-agent profile"

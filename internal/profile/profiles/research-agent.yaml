@@ -1,0 +1,46 @@
+name: research-agent
+description: Read-only safety profile for research and analysis AI agents
+min_tier: 2
+
+authority_boundaries:
+  - pattern: "write|delete|create|modify|update|insert|drop|alter"
+    reason: "Write operations blocked for read-only agent"
+  - pattern: "execute.*command"
+    reason: "Command execution blocked for research agent"
+  - pattern: "send.*email|send.*message"
+    reason: "External communication blocked"
+  - pattern: "upload|export|transmit"
+    reason: "Data egress blocked for research agent"
+
+execution_boundaries:
+  urls:
+    - "*/api/write*"
+    - "*/api/delete*"
+    - "*/api/update*"
+    - "*/upload*"
+    - "*/send*"
+    - "*/checkout*"
+    - "*/payment*"
+  files:
+    - "**/.env"
+    - "**/credentials*"
+    - "~/.ssh/*"
+    - "~/.aws/*"
+  commands:
+    - "rm"
+    - "mv"
+    - "cp"
+    - "curl"
+    - "wget"
+    - "scp"
+    - "rsync"
+    - "sudo"
+    - "chmod"
+    - "chown"
+
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*password*"
+      decision: deny
+      reason: "credential access blocked by research-agent profile"
