@@ -599,7 +599,7 @@ agents:
 
 ---
 
-## WO-CW18: Rate Limiting
+## WO-CW18: Rate Limiting ✅
 
 **Goal:** Per-agent rate limits on tool call frequency. Prevents runaway loops.
 
@@ -622,9 +622,9 @@ agents:
 
 ---
 
-# Phase 4: Simulation & Testing
+# Phase 4: Simulation & Testing (COMPLETE — ✅)
 
-## WO-CW19: Policy Simulator
+## WO-CW19: Policy Simulator ✅
 
 **Goal:** Replay recorded traces against new policies. "If I tighten this threshold, which past actions would have been blocked?"
 
@@ -660,7 +660,7 @@ Simulating new-policy.yaml against 1,247 recorded actions...
 
 ---
 
-## WO-CW20: CI Policy Gate
+## WO-CW20: CI Policy Gate ✅
 
 **Goal:** `chainwatch check --scenario tests/*.yaml` — run policy assertions in CI. If any scenario allows an action that should be blocked, CI fails.
 
@@ -699,7 +699,7 @@ cases:
 
 ---
 
-## WO-CW21: Policy Diff
+## WO-CW21: Policy Diff ✅
 
 **Goal:** `chainwatch diff policy-v1.yaml policy-v2.yaml` — show what changed in human-readable terms.
 
@@ -736,9 +736,9 @@ Policy diff: policy-v1.yaml → policy-v2.yaml
 
 ---
 
-# Phase 5: Ecosystem
+# Phase 5: Ecosystem (COMPLETE — ✅)
 
-## WO-CW22: Profile Marketplace
+## WO-CW22: Profile Marketplace ✅
 
 **Goal:** Community-contributed safety profiles beyond clawbot. Built-in profiles for common agent archetypes.
 
@@ -768,7 +768,7 @@ Policy diff: policy-v1.yaml → policy-v2.yaml
 
 ---
 
-## WO-CW23: Agent Certification
+## WO-CW23: Agent Certification ✅
 
 **Goal:** `chainwatch certify --profile enterprise-safe` — run a standardized safety test suite and produce a pass/fail report.
 
@@ -803,13 +803,13 @@ Builds on CW20 (CI gate). Certification is a curated, versioned set of scenarios
 - `chainwatch certify --profile permissive` fails with specific failure details
 ---
 
-# Phase 5.5: Three Laws of Root Actions
+# Phase 5.5: Three Laws of Root Actions (COMPLETE — ✅)
 
 **Context:** Asimov's Three Laws are inspiration, not implementation. The practical translation for chainwatch: prevent catastrophic actions by default, obey only within declared scoped intent, and make tampering non-silent with a break-glass escape hatch. This formalizes what chainwatch already does partially (zones, profiles, approval) into a coherent risk tier model with emergency override.
 
 ---
 
-## WO-CW23.1: Risk Tier Formalization
+## WO-CW23.1: Risk Tier Formalization ✅
 
 **Goal:** Replace ad-hoc denylist matching with a 4-tier risk classification that maps every action to a deterministic enforcement response.
 
@@ -865,7 +865,7 @@ Mode set in `policy.yaml`: `enforcement_mode: guarded`
 
 ---
 
-## WO-CW23.2: Break-Glass Emergency Override
+## WO-CW23.2: Break-Glass Emergency Override ✅
 
 **Goal:** Sometimes the human must do the harmful thing to prevent bigger harm. Break-glass is a time-limited, single-use, logged override that bypasses tier 2-3 enforcement.
 
