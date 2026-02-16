@@ -17,11 +17,18 @@
 - **...understand what is protected** → Read [design/invariants.md](#five-invariant-categories)
 - **...configure enforcement modes** → Read [design/enforcement-modes.md](#enforcement-modes)
 - **...configure boundaries** → Read [boundary-configuration.md](#boundary-configuration)
+- **...configure agent identity** → See [Agent Identity & Sessions](#agent-identity--sessions)
+- **...configure budget limits** → See [Budget Enforcement](#budget-enforcement)
+- **...use the Go SDK** → See [Go SDK](#go-sdk)
+- **...use the Python SDK** → See [Python SDK](#python-sdk)
+- **...set up MCP integration** → See [MCP Tool Server](#mcp-tool-server)
+- **...set up gRPC policy server** → See [Central Policy Server](#central-policy-server-grpc)
 - **...run adversarial tests** → Read [design/dogfight-test-plan.md](#dogfight-test-plan)
 - **...write agent-ready tasks** → Read [design/agent-task-quality.md](#agent-task-quality)
 - **...use Chainwatch today** → Read [Quick Start](../README.md#quick-start) and [getting-started.md](#getting-started)
 - **...understand RootOps** → Read [DESIGN_BASELINE.md](#design-baseline) and [rootops-antipatterns.md](#rootops-antipatterns)
 - **...learn about forbidden architectures** → Read [security-classes.md](#security-classes)
+- **...see implementation progress** → Read [work-orders.md](work-orders.md)
 
 ---
 
@@ -164,7 +171,7 @@ Quick onboarding for first-time users:
 
 **File:** `design/v0.2.0-specification.md` (1000+ lines)
 
-**Status:** Design complete, ready to implement
+**Status:** Core implemented (CW-01 through CW-17 complete)
 
 **What it covers:**
 - Two-stage boundary enforcement (authority BEFORE execution)
@@ -192,6 +199,72 @@ Instructions for testing with external agents:
 - Testing with Aider, OpenHands, or other Python-based agents
 - Creating custom test scenarios
 - What works now vs what needs HTTP proxy mode (v0.2.0)
+
+---
+
+## Implemented Features
+
+### Evaluation Pipeline
+
+The policy evaluation pipeline runs in this fixed order:
+
+```
+Step 1:    Denylist check → deny (tier 3)
+Step 2:    Zone escalation → update state
+Step 3:    Tier classification → safe(0) / elevated(1) / guarded(2) / critical(3)
+Step 3.5:  Agent enforcement → scope, purpose, sensitivity, per-agent rules (CW-16)
+Step 3.75: Budget enforcement → per-agent session resource caps (CW-17)
+Step 4:    Purpose-bound rules → first match wins
+Step 5:    Tier enforcement → mode + tier → decision
+```
+
+### Five Interception Points
+
+All implemented, all wired to the same evaluation pipeline:
+
+| Interception Point | Package | CLI Command | WO |
+|---|---|---|---|
+| Subprocess wrapper | `internal/cmdguard/` | `chainwatch exec` | CW-03 |
+| HTTP forward proxy | `internal/proxy/` | `chainwatch proxy` | CW-02 |
+| MCP tool server | `internal/mcp/` | `chainwatch mcp` | CW-08 |
+| LLM response interceptor | `internal/intercept/` | `chainwatch intercept` | CW-11 |
+| gRPC policy server | `internal/server/` | `chainwatch serve` | CW-15 |
+
+### SDKs
+
+| SDK | Package | Integration Style | WO |
+|---|---|---|---|
+| Go SDK | `sdk/go/chainwatch/` | In-process (zero overhead) | CW-10 |
+| Python SDK | `sdk/python/chainwatch_sdk/` | Subprocess (calls CLI) | CW-09 |
+
+### Agent Identity & Sessions
+
+**Package:** `internal/identity/`
+
+Per-agent, per-session enforcement. Agents register in `policy.yaml` with allowed purposes, resource scopes, sensitivity caps, and per-agent rules. Unknown agents are denied (fail-closed). Configured via `agents:` section in policy.yaml and `--agent` CLI flag.
+
+### Budget Enforcement
+
+**Package:** `internal/budget/`
+
+Per-agent session caps on bytes, rows, and duration. When a budget is exceeded, the next action is denied. Configured via `budgets:` section in policy.yaml. Lookup order: agent-specific → global `"*"` fallback → skip. View with `chainwatch budget status`.
+
+### Audit & Compliance
+
+| Feature | Package | CLI Command | WO |
+|---|---|---|---|
+| Hash-chained audit log | `internal/audit/` | `chainwatch audit verify/tail` | CW-12 |
+| Session replay | `internal/audit/` + `internal/cli/` | `chainwatch replay <trace-id>` | CW-13 |
+| Alert webhooks | `internal/alert/` | Configured in policy.yaml | CW-14 |
+
+### Additional Features
+
+| Feature | Package | CLI Command | WO |
+|---|---|---|---|
+| Safety profiles | `internal/profile/` | `chainwatch profile list/check/apply` | CW-05 |
+| Approval workflow | `internal/approval/` | `chainwatch approve/deny/pending` | CW-06 |
+| Break-glass override | `internal/breakglass/` | `chainwatch break-glass` | CW-23.2 |
+| Root access monitor | `internal/monitor/` | `chainwatch root-monitor` | CW-07 |
 
 ---
 
@@ -381,7 +454,11 @@ Integration strategy with Clawbot and autonomous agents.
 
 - `file-ops-wrapper.md` - FileGuard capabilities and limitations
 - `clawbot-denylist.md` - Clawbot integration today
-- `browser-checkout-gate.md` - v0.2.0 browser wrapper spec
+- `browser-checkout-gate.md` - Browser wrapper spec
+- `agent-runtime-hooks.md` - Agent runtime integration patterns
+- `http-proxy.md` - HTTP proxy integration
+- `output-interception.md` - LLM response interception
+- `tool-wrapper.md` - Tool wrapping patterns
 
 ---
 
@@ -426,7 +503,8 @@ Validation
 Implementation (Usage)
 ├── getting-started.md             [Onboarding]
 ├── testing-guide.md               [Testing]
-└── integrations/                  [Integration guides]
+├── integrations/                  [Integration guides]
+└── work-orders.md                 [Full implementation roadmap]
 ```
 
 **Rule:** Read philosophy before implementing. Always.
@@ -491,8 +569,9 @@ From all philosophical documents:
 
 ## Version Status
 
-- **v0.1.2 (current):** Conceptual foundation complete
-- **v0.2.0 (designed):** Specification complete, ready to implement
+- **v0.1.x:** Conceptual foundation, pattern-based boundaries
+- **v0.2.0 (current):** Monotonic state machine, 5 interception points, agent identity, budget enforcement, audit log, SDKs, gRPC server — Phases 0-3 complete (CW-01 through CW-17)
+- **Next:** Phase 4 (rate limiting, policy simulator, CI gate, policy diff) and Phase 5 (profile marketplace, agent certification)
 - **v0.3.0+ (planned):** See monotonic-irreversibility.md evolution path
 
 ---
