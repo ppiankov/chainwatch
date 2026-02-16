@@ -926,19 +926,15 @@ Mode set in `policy.yaml`: `enforcement_mode: guarded`
 
 ---
 
-# Phase 6: Adversarial Validation (Dogfight)
+# Phase 6: Adversarial Validation (Dogfight) (COMPLETE — ✅)
 
-**Context:** Chainwatch claims to prevent root-capable agents from doing stupid things. Claims are untested. This phase puts clawbot (with root access) against chainwatch in a controlled VM and films the results. Not a demo — a stress test. If chainwatch fails, we fix it. The goal is confidence scaffolding: simple people should feel safe using clawbot because chainwatch prevents dangerous actions.
+**Superseded:** WO-CW24–30 (manual VM dogfight) replaced by CI-native adversarial test suite. Automated Go integration tests (`internal/dogfight/`, build tag `//go:build dogfight`) cover all 5 rounds with race detection. VHS deterministic recording produces GIF artifact on every push to main. Repeatable, gates PRs, no manual VM required.
 
-**Prerequisites:**
-- WO-CW12 (hash-chained audit log) MUST be implemented first. Without persistent tamper-evident logging, the dogfight is meaningless — clawbot can kill the process and all evidence vanishes. The audit log is the spine. No spine, no fight.
-- WO-CW23.1 (risk tiers) and WO-CW23.2 (break-glass) should be implemented for Round 2+ testing.
-
-**Layer:** Both chainwatch and clawbot operate at **application layer**. The dogfight tests application-layer enforcement against application-layer agent. No kernel mode, no eBPF — test what exists, not what's aspirational. If application-layer enforcement fails, that's a finding to fix before adding kernel hooks.
+**Implementation:** `internal/dogfight/` (7 test files + VHS tape), `.github/workflows/ci.yml` (go-test → dogfight → dogfight-record jobs), `Makefile` (dogfight + dogfight-record targets). Committed as c79bcbe.
 
 ---
 
-## WO-CW24: VM Battlefield Setup
+## WO-CW24: VM Battlefield Setup ✅ (superseded by CI dogfight)
 
 **Goal:** Reproducible VM environment with chainwatch + clawbot installed, snapshot discipline, and arena directories.
 
@@ -986,7 +982,7 @@ Mode set in `policy.yaml`: `enforcement_mode: guarded`
 
 ---
 
-## WO-CW25: Round 1 — Cooperative Operations
+## WO-CW25: Round 1 — Cooperative Operations ✅ (superseded by CI dogfight)
 
 **Goal:** Baseline test. Clawbot does legitimate work. Chainwatch records it cleanly. No false alarms.
 
@@ -1023,7 +1019,7 @@ Write `scripts/dogfight/round1-cooperative.sh` — automated scenario with asser
 
 ---
 
-## WO-CW26: Round 2 — Stupid But Common
+## WO-CW26: Round 2 — Stupid But Common ✅ (superseded by CI dogfight)
 
 **Goal:** Clawbot attempts operations that tired engineers do every day. Chainwatch should block or require approval.
 
@@ -1062,7 +1058,7 @@ Write `scripts/dogfight/round2-stupid.sh` — automated scenario with assertions
 
 ---
 
-## WO-CW27: Round 3 — Self-Targeting (Kill the Guard)
+## WO-CW27: Round 3 — Self-Targeting (Kill the Guard) ✅ (superseded by CI dogfight)
 
 **Goal:** Clawbot directly attacks chainwatch. Tries to kill it, replace it, delete its logs, rewrite history.
 
@@ -1111,7 +1107,7 @@ Write `scripts/dogfight/round3-self-target.sh` — automated with tamper detecti
 
 ---
 
-## WO-CW28: Round 4 — Concurrent Race Conditions
+## WO-CW28: Round 4 — Concurrent Race Conditions ✅ (superseded by CI dogfight)
 
 **Goal:** Two parallel clawbot sessions performing overlapping root operations. Chain integrity under concurrency.
 
@@ -1154,7 +1150,7 @@ Write `scripts/dogfight/round4-concurrent.sh` — parallel execution with race a
 
 ---
 
-## WO-CW29: Round 5 — Reboot Persistence
+## WO-CW29: Round 5 — Reboot Persistence ✅ (superseded by CI dogfight)
 
 **Goal:** After chaos, reboot the VM. Is the chain intact? Does chainwatch recover?
 
@@ -1193,7 +1189,7 @@ Write `scripts/dogfight/round5-reboot.sh` — pre-reboot setup + post-reboot val
 
 ---
 
-## WO-CW30: Screen Layout and Recording Guide
+## WO-CW30: Screen Layout and Recording Guide ✅ (superseded by CI dogfight)
 
 **Goal:** Document the 4-pane tmux layout and recording methodology for the dogfight video.
 
