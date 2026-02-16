@@ -34,13 +34,14 @@ func New(addr string) (*Client, error) {
 
 // Evaluate sends an action to the remote policy server for evaluation.
 // Fail-closed: returns Deny on any RPC error.
-func (c *Client) Evaluate(action *model.Action, purpose string) (model.PolicyResult, error) {
+func (c *Client) Evaluate(action *model.Action, purpose string, agentID string) (model.PolicyResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := c.client.Evaluate(ctx, &pb.EvalRequest{
 		Action:  actionToProto(action),
 		Purpose: purpose,
+		AgentId: agentID,
 	})
 	if err != nil {
 		// Fail-closed: unreachable server → deny

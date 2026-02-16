@@ -15,7 +15,7 @@ type ToolFunc func(ctx context.Context, action Action) (any, error)
 // Wrap returns a new ToolFunc that evaluates policy before calling fn.
 // If policy denies the action, returns a *BlockedError without calling fn.
 func (c *Client) Wrap(fn ToolFunc, opts ...WrapOption) ToolFunc {
-	wcfg := wrapConfig{purpose: c.cfg.purpose}
+	wcfg := wrapConfig{purpose: c.cfg.purpose, agentID: c.cfg.agentID}
 	for _, o := range opts {
 		o(&wcfg)
 	}
@@ -24,7 +24,7 @@ func (c *Client) Wrap(fn ToolFunc, opts ...WrapOption) ToolFunc {
 		internal := toInternalAction(action)
 
 		c.mu.Lock()
-		result := policy.Evaluate(internal, c.tracer.State, wcfg.purpose, c.dl, c.policyCfg)
+		result := policy.Evaluate(internal, c.tracer.State, wcfg.purpose, wcfg.agentID, c.dl, c.policyCfg)
 		c.tracer.RecordAction(c.cfg.actor, wcfg.purpose, internal, map[string]any{
 			"result":       string(result.Decision),
 			"reason":       result.Reason,

@@ -71,7 +71,7 @@ func (c *Client) Check(action Action) Result {
 	internal := toInternalAction(action)
 
 	c.mu.Lock()
-	pr := policy.Evaluate(internal, c.tracer.State, c.cfg.purpose, c.dl, c.policyCfg)
+	pr := policy.Evaluate(internal, c.tracer.State, c.cfg.purpose, c.cfg.agentID, c.dl, c.policyCfg)
 	c.mu.Unlock()
 
 	return toResult(pr)

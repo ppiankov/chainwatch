@@ -110,6 +110,8 @@ func (ta *TraceAccumulator) BuildEvent(
 		TraceID:      ta.State.TraceID,
 		SpanID:       spanID,
 		ParentSpanID: parentSpanID,
+		AgentID:      ta.State.AgentID,
+		SessionID:    ta.State.SessionID,
 		Actor:        actor,
 		Purpose:      purpose,
 		Action: map[string]any{
@@ -162,20 +164,28 @@ func (ta *TraceAccumulator) ToJSON() map[string]any {
 		zonesStr = append(zonesStr, string(z))
 	}
 
+	stateMap := map[string]any{
+		"trace_id":              ta.State.TraceID,
+		"seen_sources":          ta.State.SeenSources,
+		"max_sensitivity":       string(ta.State.MaxSensitivity),
+		"volume_rows":           ta.State.VolumeRows,
+		"volume_bytes":          ta.State.VolumeBytes,
+		"egress":                string(ta.State.Egress),
+		"tags":                  ta.State.Tags,
+		"zone":                  ta.State.Zone.String(),
+		"zones_entered":         zonesStr,
+		"irreversibility_level": ta.State.Zone.String(),
+	}
+	if ta.State.AgentID != "" {
+		stateMap["agent_id"] = ta.State.AgentID
+	}
+	if ta.State.SessionID != "" {
+		stateMap["session_id"] = ta.State.SessionID
+	}
+
 	return map[string]any{
-		"trace_state": map[string]any{
-			"trace_id":              ta.State.TraceID,
-			"seen_sources":          ta.State.SeenSources,
-			"max_sensitivity":       string(ta.State.MaxSensitivity),
-			"volume_rows":           ta.State.VolumeRows,
-			"volume_bytes":          ta.State.VolumeBytes,
-			"egress":                string(ta.State.Egress),
-			"tags":                  ta.State.Tags,
-			"zone":                  ta.State.Zone.String(),
-			"zones_entered":         zonesStr,
-			"irreversibility_level": ta.State.Zone.String(),
-		},
-		"events": ta.Events,
+		"trace_state": stateMap,
+		"events":      ta.Events,
 	}
 }
 

@@ -20,6 +20,7 @@ var (
 	proxyProfile  string
 	proxyPurpose  string
 	proxyAuditLog string
+	proxyAgent    string
 )
 
 func init() {
@@ -30,6 +31,7 @@ func init() {
 	proxyCmd.Flags().StringVar(&proxyProfile, "profile", "", "Safety profile to apply (e.g., clawbot)")
 	proxyCmd.Flags().StringVar(&proxyPurpose, "purpose", "general", "Purpose identifier for policy evaluation")
 	proxyCmd.Flags().StringVar(&proxyAuditLog, "audit-log", "", "Path to audit log JSONL file")
+	proxyCmd.Flags().StringVar(&proxyAgent, "agent", "", "Agent identity for scoped policy enforcement")
 }
 
 var proxyCmd = &cobra.Command{
@@ -46,6 +48,7 @@ func runProxy(cmd *cobra.Command, args []string) error {
 		PolicyPath:   proxyPolicy,
 		ProfileName:  proxyProfile,
 		Purpose:      proxyPurpose,
+		AgentID:      proxyAgent,
 		Actor:        map[string]any{"proxy": "chainwatch", "port": proxyPort},
 		AuditLogPath: proxyAuditLog,
 	}

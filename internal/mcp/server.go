@@ -27,6 +27,7 @@ type Config struct {
 	PolicyPath   string
 	ProfileName  string
 	Purpose      string
+	AgentID      string
 	AuditLogPath string
 }
 
@@ -43,6 +44,7 @@ type Server struct {
 	auditLog   *audit.Log
 	policyHash string
 	purpose    string
+	agentID    string
 	mu         sync.Mutex
 }
 
@@ -80,6 +82,7 @@ func New(cfg Config) (*Server, error) {
 		PolicyPath:   cfg.PolicyPath,
 		ProfileName:  cfg.ProfileName,
 		Purpose:      cfg.Purpose,
+		AgentID:      cfg.AgentID,
 		Actor:        map[string]any{"mcp": "chainwatch"},
 		AuditLogPath: cfg.AuditLogPath,
 	}
@@ -114,6 +117,7 @@ func New(cfg Config) (*Server, error) {
 		auditLog:   auditLog,
 		policyHash: policyHash,
 		purpose:    purpose,
+		agentID:    cfg.AgentID,
 	}
 
 	s.mcpServer = mcpsdk.NewServer(

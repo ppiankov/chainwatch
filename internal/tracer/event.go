@@ -6,6 +6,8 @@ type Event struct {
 	TraceID      string         `json:"trace_id"`
 	SpanID       string         `json:"span_id"`
 	ParentSpanID string         `json:"parent_span_id,omitempty"`
+	AgentID      string         `json:"agent_id,omitempty"`
+	SessionID    string         `json:"session_id,omitempty"`
 	Actor        map[string]any `json:"actor"`
 	Purpose      string         `json:"purpose"`
 	Action       map[string]any `json:"action"`
