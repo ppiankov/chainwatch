@@ -3,27 +3,44 @@ package policy
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ppiankov/chainwatch/internal/budget"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/identity"
 	"github.com/ppiankov/chainwatch/internal/model"
+	"github.com/ppiankov/chainwatch/internal/ratelimit"
 	"github.com/ppiankov/chainwatch/internal/zone"
 )
 
 // Evaluate evaluates a single action in the context of the current trace state.
 //
 // Evaluation order (must not be changed):
-//  1. Denylist check — hard block, tier 3
-//  2. Zone escalation — update state
-//  3. Tier classification — zones + self-targeting + known-safe + min_tier
-//     3.5. Agent enforcement — scope, purpose, sensitivity, per-agent rules (only if agentID != "")
-//     3.75. Budget enforcement — per-agent session resource caps (only if budgets configured)
-//  4. Purpose-bound rules — explicit overrides (first match wins)
-//  5. Tier enforcement — mode + tier → decision
+//
+//	0.5. Rate limiting — per-agent per-tool-category caps (before any state mutation)
+//	1. Denylist check — hard block, tier 3
+//	2. Zone escalation — update state
+//	3. Tier classification — zones + self-targeting + known-safe + min_tier
+//	   3.5. Agent enforcement — scope, purpose, sensitivity, per-agent rules (only if agentID != "")
+//	   3.75. Budget enforcement — per-agent session resource caps (only if budgets configured)
+//	4. Purpose-bound rules — explicit overrides (first match wins)
+//	5. Tier enforcement — mode + tier → decision
 func Evaluate(action *model.Action, state *model.TraceState, purpose string, agentID string, dl *denylist.Denylist, cfg *PolicyConfig) model.PolicyResult {
 	if cfg == nil {
 		cfg = DefaultConfig()
+	}
+
+	// Step 0.5: Rate limiting (per-agent per-tool-category, before any state mutation)
+	if len(cfg.RateLimits) > 0 {
+		effectiveAgent := agentID
+		if effectiveAgent == "" {
+			effectiveAgent = "*"
+		}
+		if result, handled := ratelimit.Evaluate(
+			effectiveAgent, action.Tool, state, cfg.RateLimits, time.Now(),
+		); handled {
+			return result
+		}
 	}
 
 	// Step 1: Denylist check (hard block, highest priority, always tier 3)
