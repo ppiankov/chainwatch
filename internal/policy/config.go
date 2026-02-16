@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ppiankov/chainwatch/internal/alert"
+	"github.com/ppiankov/chainwatch/internal/budget"
 	"github.com/ppiankov/chainwatch/internal/identity"
 	"github.com/ppiankov/chainwatch/internal/model"
 )
@@ -60,6 +61,7 @@ type PolicyConfig struct {
 	Rules              []Rule                           `yaml:"rules"`
 	Alerts             []alert.AlertConfig              `yaml:"alerts"`
 	Agents             map[string]*identity.AgentConfig `yaml:"agents,omitempty"`
+	Budgets            map[string]*budget.BudgetConfig  `yaml:"budgets,omitempty"`
 }
 
 // DefaultConfig returns the built-in policy config matching previous hardcoded values.
@@ -295,5 +297,21 @@ rules:
 #     purposes: [testing]
 #     allow_resources: ["/test/*"]
 #     max_sensitivity: medium
+
+# Budget enforcement — per-agent, per-session resource caps.
+# When a budget is exceeded, the next action is denied.
+# Lookup order: budgets[agentID] -> budgets["*"] -> no budget (skip).
+# Zero values mean unlimited (no enforcement for that dimension).
+# budgets:
+#   clawbot-prod:
+#     max_bytes: 1073741824    # 1GB
+#     max_rows: 1000000
+#     max_duration: 1h
+#   clawbot-staging:
+#     max_bytes: 104857600     # 100MB
+#     max_duration: 15m
+#   "*":                       # global fallback
+#     max_bytes: 536870912     # 512MB
+#     max_duration: 30m
 `
 }
