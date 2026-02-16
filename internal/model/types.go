@@ -166,19 +166,25 @@ type TraceState struct {
 
 	// v0.4.0: budget enforcement
 	StartedAt time.Time `json:"started_at"`
+
+	// v0.5.0: rate limiting
+	ToolCallCounts       map[string]int `json:"tool_call_counts,omitempty"`
+	RateLimitWindowStart time.Time      `json:"rate_limit_window_start"`
 }
 
 // NewTraceState creates a TraceState with safe defaults.
 func NewTraceState(traceID string) *TraceState {
 	return &TraceState{
-		TraceID:        traceID,
-		SeenSources:    []string{},
-		MaxSensitivity: SensLow,
-		Egress:         EgressInternal,
-		Tags:           []string{},
-		Zone:           Safe,
-		ZonesEntered:   make(map[Zone]bool),
-		StartedAt:      time.Now().UTC(),
+		TraceID:              traceID,
+		SeenSources:          []string{},
+		MaxSensitivity:       SensLow,
+		Egress:               EgressInternal,
+		Tags:                 []string{},
+		Zone:                 Safe,
+		ZonesEntered:         make(map[Zone]bool),
+		StartedAt:            time.Now().UTC(),
+		ToolCallCounts:       make(map[string]int),
+		RateLimitWindowStart: time.Now().UTC(),
 	}
 }
 
