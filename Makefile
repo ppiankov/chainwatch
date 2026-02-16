@@ -134,6 +134,16 @@ go-proto: ## Regenerate protobuf Go code
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
 
+# ── Dogfight (adversarial tests) ──────────────────────
+
+.PHONY: dogfight
+dogfight: ## Run adversarial dogfight test suite
+	go test -race -v -tags dogfight -timeout 5m ./internal/dogfight/
+
+.PHONY: dogfight-record
+dogfight-record: go-build ## Record dogfight video with VHS
+	vhs internal/dogfight/tapes/dogfight.tape
+
 # ── Python SDK targets ─────────────────────────────────
 
 .PHONY: sdk-python-test
