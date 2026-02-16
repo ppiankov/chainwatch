@@ -14,6 +14,7 @@ import (
 	"github.com/ppiankov/chainwatch/internal/budget"
 	"github.com/ppiankov/chainwatch/internal/identity"
 	"github.com/ppiankov/chainwatch/internal/model"
+	"github.com/ppiankov/chainwatch/internal/ratelimit"
 )
 
 // Thresholds defines risk score boundaries for policy decisions.
@@ -54,14 +55,15 @@ type Rule struct {
 
 // PolicyConfig holds all configurable policy parameters.
 type PolicyConfig struct {
-	EnforcementMode    string                           `yaml:"enforcement_mode"`
-	MinTier            int                              `yaml:"min_tier"`
-	Thresholds         Thresholds                       `yaml:"thresholds"`
-	SensitivityWeights SensitivityWeights               `yaml:"sensitivity_weights"`
-	Rules              []Rule                           `yaml:"rules"`
-	Alerts             []alert.AlertConfig              `yaml:"alerts"`
-	Agents             map[string]*identity.AgentConfig `yaml:"agents,omitempty"`
-	Budgets            map[string]*budget.BudgetConfig  `yaml:"budgets,omitempty"`
+	EnforcementMode    string                               `yaml:"enforcement_mode"`
+	MinTier            int                                  `yaml:"min_tier"`
+	Thresholds         Thresholds                           `yaml:"thresholds"`
+	SensitivityWeights SensitivityWeights                   `yaml:"sensitivity_weights"`
+	Rules              []Rule                               `yaml:"rules"`
+	Alerts             []alert.AlertConfig                  `yaml:"alerts"`
+	Agents             map[string]*identity.AgentConfig     `yaml:"agents,omitempty"`
+	Budgets            map[string]*budget.BudgetConfig      `yaml:"budgets,omitempty"`
+	RateLimits         map[string]ratelimit.RateLimitConfig `yaml:"rate_limits,omitempty"`
 }
 
 // DefaultConfig returns the built-in policy config matching previous hardcoded values.
@@ -313,5 +315,21 @@ rules:
 #   "*":                       # global fallback
 #     max_bytes: 536870912     # 512MB
 #     max_duration: 30m
+
+# Rate limiting — per-agent, per-tool-category request caps.
+# Fixed-window counter: resets when the window expires.
+# Lookup order: rate_limits[agentID] -> rate_limits["*"] -> no limit (skip).
+# rate_limits:
+#   clawbot-prod:
+#     command:
+#       max_requests: 10
+#       window: 1m
+#     http_request:
+#       max_requests: 100
+#       window: 1m
+#   "*":                       # global fallback
+#     command:
+#       max_requests: 20
+#       window: 1m
 `
 }
