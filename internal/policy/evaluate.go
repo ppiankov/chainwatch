@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ppiankov/chainwatch/internal/budget"
 	"github.com/ppiankov/chainwatch/internal/denylist"
 	"github.com/ppiankov/chainwatch/internal/identity"
 	"github.com/ppiankov/chainwatch/internal/model"
@@ -17,6 +18,7 @@ import (
 //  2. Zone escalation — update state
 //  3. Tier classification — zones + self-targeting + known-safe + min_tier
 //     3.5. Agent enforcement — scope, purpose, sensitivity, per-agent rules (only if agentID != "")
+//     3.75. Budget enforcement — per-agent session resource caps (only if budgets configured)
 //  4. Purpose-bound rules — explicit overrides (first match wins)
 //  5. Tier enforcement — mode + tier → decision
 func Evaluate(action *model.Action, state *model.TraceState, purpose string, agentID string, dl *denylist.Denylist, cfg *PolicyConfig) model.PolicyResult {
@@ -74,6 +76,17 @@ func Evaluate(action *model.Action, state *model.TraceState, purpose string, age
 		state.AgentID = agentID
 
 		if result, handled := evaluateAgent(agentID, action, purpose, tier, cfg); handled {
+			return result
+		}
+	}
+
+	// Step 3.75: Budget enforcement (only if budgets configured)
+	if len(cfg.Budgets) > 0 {
+		effectiveAgent := agentID
+		if effectiveAgent == "" {
+			effectiveAgent = "*"
+		}
+		if result, handled := budget.Evaluate(effectiveAgent, state, cfg.Budgets, tier); handled {
 			return result
 		}
 	}
