@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="assets/logo.png" alt="chainwatch" width="128">
+</p>
+
+<p align="center"><em>Autonomy, Contained.</em></p>
+
 # Chainwatch (prototype)
 
 [![CI](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml)
