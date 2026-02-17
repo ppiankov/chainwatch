@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-02-17
+
+### Added
+
+**Go control plane with gRPC, MCP, and CLI**
+
+Complete rewrite from Python prototype to production Go binary with deterministic policy enforcement at agent tool-call boundaries.
+
+#### Core Engine
+- **gRPC server** (`chainwatch serve`) — Evaluate, Approve, Deny, ListPending RPCs
+- **MCP server** (`chainwatch mcp`) — Model Context Protocol integration for Claude Desktop
+- **HTTP proxy** (`chainwatch proxy`) — intercept and enforce on agent HTTP traffic
+- **LLM intercept proxy** (`chainwatch intercept`) — streaming tool-call extraction from OpenAI/Anthropic responses
+- **Policy engine** — deterministic risk scoring with YAML-configurable rules, thresholds, and per-purpose/per-agent scoping
+- **Denylist** — pattern-based hard blocks for URLs, commands, file paths loaded from YAML
+- **Approval workflows** — file-backed approval store with TTL, consume-on-use, and deny support
+- **Breakglass** — emergency override tokens with audit trail and automatic revocation
+- **Audit log** — append-only JSONL with SHA-256 hash chain and tamper verification
+- **Alert dispatcher** — webhook and log-based alerting on policy violations
+- **Trace accumulator** — per-session state tracking with monotonic risk escalation
+- **Hot reload** — fsnotify-based policy/denylist reload without restart
+
+#### CLI Commands (22 total)
+- `exec` — wrap and enforce a single command
+- `serve` — start gRPC server
+- `proxy` — start HTTP enforcement proxy
+- `intercept` — start LLM streaming intercept proxy
+- `mcp` — start MCP server
+- `evaluate` — one-shot policy evaluation
+- `approve` / `deny` / `pending` — approval management
+- `breakglass create` / `consume` / `revoke` / `list` — emergency overrides
+- `audit verify` — hash chain integrity check
+- `policy diff` / `policy simulate` — policy comparison and audit replay
+- `policy gate` — CI assertion engine for policy scenarios
+- `certify` — agent certification against safety suites
+- `init-denylist` / `init-policy` — generate default configs
+- `version` — version info
+
+#### Built-in Agent Profiles
+- `clawbot` — autonomous coding agent (conservative)
+- `devin` — software engineering agent
+- `manus` — general-purpose agent
+- `soc-analyst` — security operations
+- `data-pipeline` — ETL/data processing
+
+#### SDKs
+- **Go SDK** (`sdk/go/chainwatch`) — native gRPC client with fail-closed semantics
+- **Python SDK** (`sdk/python/chainwatch_sdk`) — subprocess wrapper for `chainwatch exec`
+
+#### Security Hardening
+- SSRF prevention — URL scheme validation (http/https only) in MCP handlers
+- Path traversal prevention — key/ID validation in approval and breakglass stores
+- OOM prevention — streaming buffer caps (1MB) in LLM intercept parser
+- Unbounded I/O prevention — `LimitReader` on proxy responses (10MB/100MB)
+- gRPC session TTL — background eviction (1hr TTL, 5min sweep)
+- Proper error propagation — `rand.Read`, `json.Unmarshal`, cleanup errors
+
+#### Testing
+- Unit tests with `-race` for all internal packages
+- CI-native adversarial test suite (dogfight) — 5 rounds, 44 subtests
+- VHS-recorded dogfight GIF artifact on every main push
+- Fuzz tests for denylist, policy YAML, LLM response parsing, audit verification
+- Benchmarks for policy evaluation, denylist matching, audit operations
+- Demo gate in CI — salary access MUST be blocked
+
+#### CI/CD
+- GitHub Actions: Go tests, Python tests (3.10-3.12 × ubuntu/macos), lint, demo gate, dogfight, recording
+- Policy gate assertions for CI integration
+
+### Changed
+- Rewritten from Python library to Go binary
+- Policy engine: explicit YAML rules replace hardcoded Python weights
+- Denylist: compiled regex patterns with URL host extraction
+- Architecture: `cmd/chainwatch/main.go` + `internal/` packages
+
+### Breaking Changes
+- **Complete rewrite** — Python library API replaced by Go CLI/gRPC/MCP interfaces
+- Python SDK wraps the Go binary via subprocess (not a native library)
+
 ## [0.1.2] - 2026-02-01
 
 ### Changed
@@ -311,7 +390,8 @@ If the chain crosses a hard boundary, the system refuses.
 - **Path-based classification**: False positives/negatives expected (e.g., /finance vs /hr/salary)
 - **Monkey-patching limitations**: Won't catch C extension file I/O or subprocess calls
 
-[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ppiankov/chainwatch/compare/v0.1.2...v1.0.0
 [0.1.2]: https://github.com/ppiankov/chainwatch/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ppiankov/chainwatch/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ppiankov/chainwatch/releases/tag/v0.1.0
