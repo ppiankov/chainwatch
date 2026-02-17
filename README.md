@@ -8,6 +8,14 @@
 
 <p align="center"><em>Autonomy, Contained.</em></p>
 
+<p align="center">
+  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/dogfight-demo.gif">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/dogfight-demo.gif" alt="Dogfight Demo — Clawbot vs Chainwatch" width="700">
+  </a>
+  <br>
+  <em>Clawbot agent receives hazardous instructions. Chainwatch blocks every one.</em>
+</p>
+
 # Chainwatch
 
 [![CI](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml)
