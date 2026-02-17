@@ -31,6 +31,7 @@ func startTestServer(t *testing.T, policyPath, denylistPath string) (string, fun
 	cfg := server.Config{
 		PolicyPath:   policyPath,
 		DenylistPath: denylistPath,
+		ApprovalDir:  filepath.Join(t.TempDir(), "approvals"),
 	}
 
 	srv, err := server.New(cfg)

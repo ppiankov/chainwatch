@@ -22,6 +22,7 @@ func testServer(t *testing.T, policyPath, denylistPath string) (pb.ChainwatchSer
 	cfg := Config{
 		PolicyPath:   policyPath,
 		DenylistPath: denylistPath,
+		ApprovalDir:  filepath.Join(t.TempDir(), "approvals"),
 	}
 
 	srv, err := New(cfg)
