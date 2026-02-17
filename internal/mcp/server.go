@@ -123,7 +123,7 @@ func New(cfg Config) (*Server, error) {
 	s.mcpServer = mcpsdk.NewServer(
 		&mcpsdk.Implementation{
 			Name:    "chainwatch",
-			Version: "0.1.0",
+			Version: "1.0.0",
 		},
 		nil,
 	)
