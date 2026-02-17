@@ -36,6 +36,33 @@ jobs:
             done
           done
 
+      - name: Build native binary for dogfight
+        run: go build -o ./chainwatch ./cmd/chainwatch
+
+      - name: Run dogfight test suite
+        run: go test -race -v -tags dogfight -timeout 5m ./internal/dogfight/
+
+      - name: Install VHS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg tmux jq
+          sudo curl -sL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
+          sudo chmod +x /usr/local/bin/ttyd
+
+      - name: Install VHS
+        run: go install github.com/charmbracelet/vhs@latest
+
+      - name: Record dogfight demo
+        run: vhs internal/dogfight/tapes/release.tape
+
+      - name: Verify recording
+        run: |
+          if [ ! -f dogfight-demo.gif ]; then
+            echo "ERROR: dogfight-demo.gif was not produced"
+            exit 1
+          fi
+          ls -lh dogfight-demo.gif
+
       - name: Generate checksums
         run: |
           cd dist
@@ -48,3 +75,4 @@ jobs:
           files: |
             dist/chainwatch-*
             dist/checksums.txt
+            dogfight-demo.gif
