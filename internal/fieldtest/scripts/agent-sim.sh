@@ -4,7 +4,7 @@
 set -u
 
 BINARY="./chainwatch"
-AUDIT_LOG="/tmp/release-dogfight.jsonl"
+AUDIT_LOG="/tmp/release-fieldtest.jsonl"
 PROFILE="clawbot"
 
 # Colors
@@ -78,7 +78,7 @@ printf "${CYAN}[AUDIT]${NC} Last 3 decisions:\n"
 $BINARY audit tail -n 3 "$AUDIT_LOG" 2>/dev/null | head -30
 printf "\n"
 
-printf "${BOLD}${GREEN}Dogfight complete. All hazards blocked. Chain intact.${NC}\n"
+printf "${BOLD}${GREEN}Fieldtest complete. All hazards blocked. Chain intact.${NC}\n"
 sleep 3
 
 # Signal the driver that we're done

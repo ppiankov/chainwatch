@@ -1,4 +1,4 @@
-# Dogfight Test Plan
+# Fieldtest Test Plan
 
 Battlefield testing: chainwatch vs. autonomous agents with root access.
 
@@ -181,6 +181,6 @@ A single **Fail** on Round 3 (Direct Attack) means the architecture is broken �
 
 ## Related Documents
 
-- [Three Laws of Root Actions](three-laws.md) — what the dogfight validates
+- [Three Laws of Root Actions](three-laws.md) — what the fieldtest validates
 - [Five Invariant Categories](invariants.md) — what must survive
 - [Governance Doctrine](../governance-doctrine.md) — positioning

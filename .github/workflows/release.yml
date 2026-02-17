@@ -36,11 +36,11 @@ jobs:
             done
           done
 
-      - name: Build native binary for dogfight
+      - name: Build native binary for fieldtest
         run: go build -o ./chainwatch ./cmd/chainwatch
 
-      - name: Run dogfight test suite
-        run: go test -race -v -tags dogfight -timeout 5m ./internal/dogfight/
+      - name: Run fieldtest test suite
+        run: go test -race -v -tags fieldtest -timeout 5m ./internal/fieldtest/
 
       - name: Install VHS dependencies
         run: |
@@ -52,16 +52,16 @@ jobs:
       - name: Install VHS
         run: go install github.com/charmbracelet/vhs@latest
 
-      - name: Record dogfight demo
-        run: vhs internal/dogfight/tapes/release.tape
+      - name: Record fieldtest demo
+        run: vhs internal/fieldtest/tapes/release.tape
 
       - name: Verify recording
         run: |
-          if [ ! -f dogfight-demo.gif ]; then
-            echo "ERROR: dogfight-demo.gif was not produced"
+          if [ ! -f fieldtest-demo.gif ]; then
+            echo "ERROR: fieldtest-demo.gif was not produced"
             exit 1
           fi
-          ls -lh dogfight-demo.gif
+          ls -lh fieldtest-demo.gif
 
       - name: Generate checksums
         run: |
@@ -75,4 +75,4 @@ jobs:
           files: |
             dist/chainwatch-*
             dist/checksums.txt
-            dogfight-demo.gif
+            fieldtest-demo.gif

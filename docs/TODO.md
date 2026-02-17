@@ -91,7 +91,7 @@ Replay recorded audit logs against new policies. "If I tighten this threshold, w
 - Risk tier formalization (CW-23.1)
 - Break-glass emergency override (CW-23.2 — already implemented)
 
-### Phase 6: Adversarial Validation — Dogfight (CW-24 through CW-30)
+### Phase 6: Adversarial Validation — Fieldtest (CW-24 through CW-30)
 - VM battlefield setup, 5 test rounds, recording guide
 - Prerequisites: CW-12 (audit log) ✅, CW-23.1 (risk tiers) ✅
 
