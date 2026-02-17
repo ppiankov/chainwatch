@@ -13,7 +13,7 @@
     <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/dogfight-demo.gif" alt="Dogfight Demo — Clawbot vs Chainwatch" width="700">
   </a>
   <br>
-  <em>Clawbot agent receives hazardous instructions. Chainwatch blocks every one.</em>
+  <em>An AI agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
 </p>
 
 # Chainwatch
