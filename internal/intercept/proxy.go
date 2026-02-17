@@ -202,7 +202,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleNonStreaming reads the full response, extracts tool calls, evaluates, rewrites.
 func (s *Server) handleNonStreaming(w http.ResponseWriter, resp *http.Response) {
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to read upstream response: %v", err), http.StatusBadGateway)
 		return

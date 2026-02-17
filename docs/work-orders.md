@@ -1255,12 +1255,197 @@ If yes → fix it. If no → prove it.
 
 ---
 
+# Phase 7: Hardening
+
+**Context:** Security audit found 5 critical input validation gaps, 1 resource leak, zero fuzz tests, zero benchmarks, and 2 ignored errors. All must be fixed before v1.0. No new features — only correctness, robustness, and proof.
+
+---
+
+## WO-CW31: Input Validation & SSRF Prevention
+
+**Goal:** Close all input validation gaps that could allow SSRF, path traversal, or unbounded memory allocation at API boundaries.
+
+### Fixes
+
+1. **MCP HTTP handler SSRF** (`internal/mcp/handlers.go:222`) — no URL scheme validation before `http.NewRequestWithContext`. Attacker-controlled URL could use `file://`, `gopher://`, `data://` schemes. Fix: validate scheme is `http` or `https` before executing request.
+
+2. **Approval key path traversal** (`internal/approval/store.go:214`) — `path(key)` does `filepath.Join(s.dir, key+".json")` with no validation. A key containing `/` or `..` traverses outside the store directory. Fix: reject keys containing `/`, `\`, `..`, or any non-alphanumeric-dash-underscore characters.
+
+3. **Breakglass store path traversal** (`internal/breakglass/store.go`) — same `path(id)` vulnerability on `Consume` and `Revoke` which accept external input. Fix: same key validation as approval store.
+
+4. **Streaming intercept OOM** (`internal/intercept/parse.go:212`) — `AppendDelta` appends to `strings.Builder` without limit. Malicious LLM response could send megabytes of `input_json_delta`. Fix: cap `ArgJSON` at 1MB, discard excess.
+
+5. **Proxy unbounded response** (`internal/proxy/server.go:300`) — `io.Copy(w, resp.Body)` has no limit. Fix: `io.Copy(w, io.LimitReader(resp.Body, 100<<20))`.
+
+6. **Intercept unbounded response** (`internal/intercept/proxy.go:205`) — `io.ReadAll(resp.Body)` has no limit. Fix: `io.ReadAll(io.LimitReader(resp.Body, 10<<20))`.
+
+### Tests
+- MCP: `file://`, `gopher://`, `data://` URLs rejected with clear error
+- Approval: keys with `/`, `..`, `\` rejected
+- Breakglass: same path traversal tests
+- Streaming: 2MB delta payload truncated, tool call still completes
+- Proxy: response body capped at limit
+- Intercept: response body capped at limit
+
+### Acceptance
+- `make go-test` passes with -race
+- No `io.ReadAll` or `io.Copy` on untrusted input without limits
+
+---
+
+## WO-CW32: Resource Leak Fix
+
+**Goal:** Fix gRPC session leak and ignored cleanup errors.
+
+### Fixes
+
+1. **gRPC session TTL** (`internal/server/server.go:277`) — `sessions sync.Map` accumulates `TraceAccumulator` entries indefinitely. Every unique `trace_id` creates a new entry that is never removed. Fix: wrap entries with `createdAt` timestamp, add background goroutine (5min tick) that evicts sessions older than 1hr. Stop goroutine via done channel in server shutdown.
+
+2. **Approval Cleanup errors** (`internal/approval/store.go:208`) — `os.Remove` error ignored. Fix: accumulate errors, return joined error.
+
+3. **Breakglass Cleanup errors** (`internal/breakglass/store.go:208`) — same. Fix: same pattern.
+
+### Tests
+- Session eviction: create sessions, verify old ones evicted after TTL
+- Recent sessions survive cleanup
+- Cleanup reports `os.Remove` errors
+
+### Acceptance
+- `make go-test` passes with -race
+- No unbounded memory growth under sustained gRPC load
+
+---
+
+## WO-CW33: Fuzz Tests
+
+**Goal:** Add Go native fuzz tests for the four highest-value parsing targets. Must not panic on any input.
+
+### Targets
+
+1. **Denylist matching** (`internal/denylist/fuzz_test.go`) — `FuzzIsBlocked`: fuzz resource string and tool type against default patterns.
+2. **Policy YAML parsing** (`internal/policy/fuzz_test.go`) — `FuzzLoadConfigYAML`: fuzz arbitrary bytes as YAML config. Must return valid config or error, never corrupt state.
+3. **LLM response parsing** (`internal/intercept/fuzz_test.go`) — `FuzzExtractToolCalls`: fuzz arbitrary JSON as Anthropic/OpenAI response.
+4. **Audit log verification** (`internal/audit/fuzz_test.go`) — `FuzzVerify`: fuzz arbitrary bytes as JSONL audit log.
+
+### Steps
+1. Create fuzz test files with seed corpus from real data
+2. Add `fuzz` Makefile target: `go test -fuzz=. -fuzztime=30s` per package
+3. Add optional `fuzz` CI job (main-only, after go-test)
+
+### Acceptance
+- `make go-test` passes (fuzz tests run as regular tests with seeds)
+- `make fuzz` runs 30s per target with no panics
+- All fuzz tests pass with -race
+
+---
+
+## WO-CW34: Performance Benchmarks
+
+**Goal:** Establish baselines for hot paths. No optimization — measure so regressions are detectable.
+
+### Targets
+
+1. **Policy evaluation** (`internal/policy/bench_test.go`) — `BenchmarkEvaluate_AllowSimple`, `_DenylistHit`, `_RulesTraversal`, `_AgentScoped`
+2. **Denylist matching** (`internal/denylist/bench_test.go`) — `BenchmarkIsBlocked_NoMatch`, `_Match`, `_PipeToShell`, `_LargeDenylist`
+3. **Audit log** (`internal/audit/bench_test.go`) — `BenchmarkRecord_Single`, `_Sequential100`, `BenchmarkVerify_1000`, `_10000`
+
+### Steps
+1. Create benchmark files
+2. Add `bench` Makefile target: `go test -bench=. -benchmem` per package
+3. Record baseline numbers
+
+### Acceptance
+- `make bench` runs all benchmarks with no failures
+- Policy evaluation < 100µs for simple allow (sanity check)
+
+---
+
+## WO-CW35: Ignored Error Handling
+
+**Goal:** Fix ignored errors in security-critical code paths.
+
+### Fixes
+
+1. **`rand.Read` error** (`internal/breakglass/store.go:245`) — `rand.Read(b)` return error is ignored. Change `generateID()` to `generateID() (string, error)`, propagate through `Create()`.
+
+2. **`json.Unmarshal` error** (`internal/intercept/parse.go:231`) — error silently dropped in `StreamBuffer.Complete()`, leaving `args` nil. Add `ParseError string` field to `ToolCall` struct. Set it when JSON parse fails.
+
+### Tests
+- `TestGenerateID_ReturnsValidFormat` — verify ID format
+- `TestStreamBuffer_MalformedJSON` — verify `ParseError` set
+- `TestStreamBuffer_ValidJSON` — verify `ParseError` empty
+
+### Acceptance
+- `make go-test` passes with -race
+- `go vet ./...` clean
+- No ignored errors in security-critical paths
+
+---
+
+# Phase 8: v1.0 Release
+
+**Context:** After hardening, prepare for public release. Version, changelog, binary distribution, documentation.
+
+---
+
+## WO-CW36: CI Green + Dogfight Recording
+
+**Goal:** Verify the full CI pipeline passes on GitHub Actions, including dogfight and recording.
+
+### Steps
+1. Push hardening changes, all CI jobs pass (test, lint, demo, go-test, dogfight)
+2. Merge to main, verify `dogfight-record` produces GIF artifact
+3. Add optional `fuzz` CI job (main-only, 30s per target)
+4. Add optional `bench` CI job (main-only, upload results as artifact)
+5. Download dogfight GIF, verify it shows all rounds
+
+### Acceptance
+- GitHub Actions badge green on main
+- Dogfight GIF artifact downloadable from Actions
+- Fuzz job runs on main without panics
+
+---
+
+## WO-CW37: v1.0 Release Preparation
+
+**Goal:** Version bump, changelog, binary distribution via GitHub Releases.
+
+### Steps
+1. Version bump: `internal/cli/version.go` → `1.0.0`, `sdk/python/pyproject.toml` → `1.0.0`, `internal/mcp/server.go` → `1.0.0`
+2. CHANGELOG.md: move Unreleased → `[1.0.0] - 2026-02-XX`
+3. Create `.github/workflows/release.yml` — tag-triggered (`v*`), cross-compile for linux/darwin × amd64/arm64, SHA256 checksums, upload to GitHub Release
+4. Tag `v1.0.0`, push, verify release artifacts
+
+### Acceptance
+- `v1.0.0` tag on main
+- GitHub Release with 4 binaries + checksums
+- `chainwatch version` outputs `1.0.0`
+
+---
+
+## WO-CW38: Documentation for v1.0
+
+**Goal:** Update README and docs to reflect shipped v1.0 reality.
+
+### Steps
+1. README.md overhaul: remove "prototype", add installation (go install / GitHub Release), update roadmap
+2. `docs/benchmarks.md`: baseline numbers from WO-CW34
+3. `docs/deployment.md`: single-agent CLI, MCP with Claude Desktop, gRPC multi-agent, Docker
+4. Known limitations (honest): CLI-only, single-node, proc polling not seccomp, Python SDK subprocess-based
+
+### Acceptance
+- README reads as v1.0, not prototype
+- Deployment guide complete with examples
+- Benchmark baselines recorded
+
+---
+
 ## Non-Goals
 
 - No ML or probabilistic safety models
 - No LLM content analysis
 - No "warn mode" that allows irreversible actions through
-- No web UI (CLI only for v0.x)
+- No web UI (CLI only for v1.x)
 - No multi-tenant or SaaS features
 - No proprietary runtime hooks (insert at tool/network/output boundaries only)
 - No full SQL parser or query rewriting

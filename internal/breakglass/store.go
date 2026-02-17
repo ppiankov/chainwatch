@@ -4,13 +4,32 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+// validID matches alphanumeric, dash characters only (bg-<hex>).
+var validID = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+
+// validateID rejects IDs that could cause path traversal.
+func validateID(id string) error {
+	if id == "" {
+		return fmt.Errorf("id must not be empty")
+	}
+	if strings.Contains(id, "..") {
+		return fmt.Errorf("id must not contain '..'")
+	}
+	if !validID.MatchString(id) {
+		return fmt.Errorf("id contains invalid characters")
+	}
+	return nil
+}
 
 const (
 	// DefaultDuration is the default break-glass token validity period.
@@ -75,7 +94,10 @@ func (s *Store) Create(reason string, duration time.Duration) (*Token, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id := generateID()
+	id, err := generateID()
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	token := &Token{
 		ID:        id,
@@ -120,6 +142,10 @@ func (s *Store) FindActive() *Token {
 
 // Consume marks a token as used. Returns error if not active.
 func (s *Store) Consume(id string) error {
+	if err := validateID(id); err != nil {
+		return fmt.Errorf("invalid token id: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -139,6 +165,10 @@ func (s *Store) Consume(id string) error {
 
 // Revoke marks a token as revoked.
 func (s *Store) Revoke(id string) error {
+	if err := validateID(id); err != nil {
+		return fmt.Errorf("invalid token id: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -195,6 +225,7 @@ func (s *Store) Cleanup() error {
 	}
 
 	now := time.Now().UTC()
+	var errs []error
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
@@ -205,11 +236,13 @@ func (s *Store) Cleanup() error {
 			continue
 		}
 		if token.UsedAt != nil || token.RevokedAt != nil || now.After(token.ExpiresAt) {
-			os.Remove(s.path(id))
+			if err := os.Remove(s.path(id)); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (s *Store) path(id string) string {
@@ -240,8 +273,10 @@ func (s *Store) writeAtomic(path string, token *Token) error {
 	return os.Rename(tmp, path)
 }
 
-func generateID() string {
+func generateID() (string, error) {
 	b := make([]byte, 8)
-	rand.Read(b)
-	return "bg-" + hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random ID: %w", err)
+	}
+	return "bg-" + hex.EncodeToString(b), nil
 }

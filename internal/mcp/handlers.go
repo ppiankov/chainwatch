@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -216,6 +217,15 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 			Reason:   result.Reason,
 		}
 		return &mcpsdk.CallToolResult{IsError: true}, out, nil
+	}
+
+	// Validate URL scheme to prevent SSRF via file://, gopher://, etc.
+	parsed, err := url.Parse(input.URL)
+	if err != nil {
+		return nil, HTTPOutput{}, fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, HTTPOutput{}, fmt.Errorf("unsupported URL scheme %q: only http and https are allowed", parsed.Scheme)
 	}
 
 	// Execute HTTP request

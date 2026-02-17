@@ -17,11 +17,12 @@ const (
 // ToolCall is a normalized representation of a tool invocation
 // extracted from either Anthropic or OpenAI response format.
 type ToolCall struct {
-	ID        string         // "toolu_123" or "call_123"
-	Name      string         // tool name: "run_command", "file_write", etc.
-	Arguments map[string]any // parsed arguments
-	Index     int            // position in the content/tool_calls array
-	Format    LLMFormat
+	ID         string         // "toolu_123" or "call_123"
+	Name       string         // tool name: "run_command", "file_write", etc.
+	Arguments  map[string]any // parsed arguments
+	Index      int            // position in the content/tool_calls array
+	Format     LLMFormat
+	ParseError string // set if argument JSON could not be parsed
 }
 
 // DetectFormat examines a parsed JSON response body and determines
@@ -169,6 +170,9 @@ func extractOpenAI(body map[string]any) []ToolCall {
 	return calls
 }
 
+// maxArgSize limits the accumulated argument JSON to prevent OOM from malicious streams.
+const maxArgSize = 1 << 20 // 1MB
+
 // StreamBuffer accumulates streaming tool_use chunks until a complete
 // tool call can be evaluated.
 type StreamBuffer struct {
@@ -177,11 +181,12 @@ type StreamBuffer struct {
 }
 
 type streamingToolCall struct {
-	ID      string
-	Name    string
-	ArgJSON strings.Builder
-	Index   int
-	Events  []string // buffered raw SSE lines
+	ID        string
+	Name      string
+	ArgJSON   strings.Builder
+	Index     int
+	Events    []string // buffered raw SSE lines
+	Truncated bool     // set if ArgJSON exceeded maxArgSize
 }
 
 // NewStreamBuffer creates a StreamBuffer for the detected format.
@@ -209,9 +214,14 @@ func (sb *StreamBuffer) StartToolUse(index int, id, name string, rawEvent string
 }
 
 // AppendDelta adds an input_json_delta chunk to the buffer.
+// Fragments beyond maxArgSize are discarded to prevent OOM.
 func (sb *StreamBuffer) AppendDelta(index int, jsonFragment string, rawEvent string) {
 	if tc, ok := sb.calls[index]; ok {
-		tc.ArgJSON.WriteString(jsonFragment)
+		if !tc.Truncated && tc.ArgJSON.Len()+len(jsonFragment) <= maxArgSize {
+			tc.ArgJSON.WriteString(jsonFragment)
+		} else {
+			tc.Truncated = true
+		}
 		tc.Events = append(tc.Events, rawEvent)
 	}
 }
@@ -227,16 +237,22 @@ func (sb *StreamBuffer) Complete(index int, rawEvent string) (ToolCall, []string
 	events := tc.Events
 
 	var args map[string]any
-	if argStr := tc.ArgJSON.String(); argStr != "" {
-		json.Unmarshal([]byte(argStr), &args)
+	var parseError string
+	if tc.Truncated {
+		parseError = "tool arguments truncated: exceeded 1MB limit"
+	} else if argStr := tc.ArgJSON.String(); argStr != "" {
+		if err := json.Unmarshal([]byte(argStr), &args); err != nil {
+			parseError = "malformed tool arguments: " + err.Error()
+		}
 	}
 
 	call := ToolCall{
-		ID:        tc.ID,
-		Name:      tc.Name,
-		Arguments: args,
-		Index:     tc.Index,
-		Format:    sb.Format,
+		ID:         tc.ID,
+		Name:       tc.Name,
+		Arguments:  args,
+		Index:      tc.Index,
+		Format:     sb.Format,
+		ParseError: parseError,
 	}
 
 	delete(sb.calls, index)

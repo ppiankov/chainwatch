@@ -29,6 +29,18 @@ type Config struct {
 	AuditLogPath string
 }
 
+// sessionTTL is how long idle sessions are kept before eviction.
+const sessionTTL = 1 * time.Hour
+
+// sessionEvictInterval is how often the eviction goroutine runs.
+const sessionEvictInterval = 5 * time.Minute
+
+// sessionEntry wraps a TraceAccumulator with creation time for TTL eviction.
+type sessionEntry struct {
+	ta        *tracer.TraceAccumulator
+	createdAt time.Time
+}
+
 // Server implements the ChainwatchService gRPC server.
 type Server struct {
 	pb.UnimplementedChainwatchServiceServer
@@ -40,10 +52,11 @@ type Server struct {
 	approvals  *approval.Store
 	dispatcher *alert.Dispatcher
 	auditLog   *audit.Log
-	sessions   sync.Map // trace_id → *tracer.TraceAccumulator
+	sessions   sync.Map // trace_id → *sessionEntry
 	cfg        Config
 
 	grpcServer *grpc.Server
+	done       chan struct{} // signals session evictor to stop
 }
 
 // New creates a gRPC server with loaded policy, denylist, and approval store.
@@ -90,7 +103,10 @@ func New(cfg Config) (*Server, error) {
 		auditLog:   auditLog,
 		cfg:        cfg,
 		grpcServer: grpc.NewServer(),
+		done:       make(chan struct{}),
 	}
+
+	go s.evictSessions()
 
 	pb.RegisterChainwatchServiceServer(s.grpcServer, s)
 	return s, nil
@@ -115,8 +131,9 @@ func (s *Server) GracefulStop() {
 	s.grpcServer.GracefulStop()
 }
 
-// Close cleans up resources.
+// Close cleans up resources and stops the session evictor.
 func (s *Server) Close() error {
+	close(s.done)
 	if s.auditLog != nil {
 		return s.auditLog.Close()
 	}
@@ -276,11 +293,37 @@ func (s *Server) ReloadPolicy() error {
 
 func (s *Server) getOrCreateSession(traceID string) *tracer.TraceAccumulator {
 	if v, ok := s.sessions.Load(traceID); ok {
-		return v.(*tracer.TraceAccumulator)
+		return v.(*sessionEntry).ta
 	}
-	ta := tracer.NewAccumulator(traceID)
-	actual, _ := s.sessions.LoadOrStore(traceID, ta)
-	return actual.(*tracer.TraceAccumulator)
+	entry := &sessionEntry{
+		ta:        tracer.NewAccumulator(traceID),
+		createdAt: time.Now(),
+	}
+	actual, _ := s.sessions.LoadOrStore(traceID, entry)
+	return actual.(*sessionEntry).ta
+}
+
+// evictSessions periodically removes sessions older than sessionTTL.
+func (s *Server) evictSessions() {
+	ticker := time.NewTicker(sessionEvictInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-ticker.C:
+			cutoff := time.Now().Add(-sessionTTL)
+			s.sessions.Range(func(key, value any) bool {
+				if entry, ok := value.(*sessionEntry); ok {
+					if entry.createdAt.Before(cutoff) {
+						s.sessions.Delete(key)
+					}
+				}
+				return true
+			})
+		}
+	}
 }
 
 func (s *Server) recordAudit(action *model.Action, decision, reason string, tier int, policyHash, traceID string) {
