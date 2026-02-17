@@ -1261,7 +1261,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW31: Input Validation & SSRF Prevention
+## WO-CW31: Input Validation & SSRF Prevention ✅
 
 **Goal:** Close all input validation gaps that could allow SSRF, path traversal, or unbounded memory allocation at API boundaries.
 
@@ -1293,7 +1293,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW32: Resource Leak Fix
+## WO-CW32: Resource Leak Fix ✅
 
 **Goal:** Fix gRPC session leak and ignored cleanup errors.
 
@@ -1316,7 +1316,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW33: Fuzz Tests
+## WO-CW33: Fuzz Tests ✅
 
 **Goal:** Add Go native fuzz tests for the four highest-value parsing targets. Must not panic on any input.
 
@@ -1339,7 +1339,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW34: Performance Benchmarks
+## WO-CW34: Performance Benchmarks ✅
 
 **Goal:** Establish baselines for hot paths. No optimization — measure so regressions are detectable.
 
@@ -1360,7 +1360,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW35: Ignored Error Handling
+## WO-CW35: Ignored Error Handling ✅
 
 **Goal:** Fix ignored errors in security-critical code paths.
 
@@ -1388,7 +1388,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW36: CI Green + Dogfight Recording
+## WO-CW36: CI Green + Dogfight Recording ✅
 
 **Goal:** Verify the full CI pipeline passes on GitHub Actions, including dogfight and recording.
 
@@ -1406,7 +1406,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW37: v1.0 Release Preparation
+## WO-CW37: v1.0 Release Preparation ✅
 
 **Goal:** Version bump, changelog, binary distribution via GitHub Releases.
 
@@ -1423,7 +1423,7 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW38: Documentation for v1.0
+## WO-CW38: Documentation for v1.0 ✅
 
 **Goal:** Update README and docs to reflect shipped v1.0 reality.
 
