@@ -297,7 +297,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	io.Copy(w, io.LimitReader(resp.Body, 100<<20)) // 100MB limit
 }
 
 // handleConnect handles HTTPS CONNECT tunneling with hostname-only inspection.
