@@ -27,6 +27,7 @@ type Config struct {
 	DenylistPath string
 	ProfileName  string
 	AuditLogPath string
+	ApprovalDir  string // optional: override default approval store directory
 }
 
 // sessionTTL is how long idle sessions are kept before eviction.
@@ -80,7 +81,11 @@ func New(cfg Config) (*Server, error) {
 		policyCfg = profile.ApplyToPolicy(prof, policyCfg)
 	}
 
-	approvalStore, err := approval.NewStore(approval.DefaultDir())
+	approvalDir := cfg.ApprovalDir
+	if approvalDir == "" {
+		approvalDir = approval.DefaultDir()
+	}
+	approvalStore, err := approval.NewStore(approvalDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create approval store: %w", err)
 	}
