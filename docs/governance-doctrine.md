@@ -94,6 +94,6 @@ Chainwatch is the guardrails layer. It does not execute work (that's Runforge). 
 - [Five Invariant Categories](design/invariants.md) — what chainwatch protects
 - [Enforcement Modes](design/enforcement-modes.md) — advisory, guarded, locked
 - [Cybercancer Prevention](design/cybercancer-prevention.md) — mutation detection
-- [Dogfight Test Plan](design/dogfight-test-plan.md) — battlefield testing
+- [Fieldtest Test Plan](design/fieldtest-test-plan.md) — battlefield testing
 - [DESIGN_BASELINE.md](DESIGN_BASELINE.md) — Principiis obsta
 - [irreversible-boundaries.md](irreversible-boundaries.md) — core concept
