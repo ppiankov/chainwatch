@@ -9,8 +9,8 @@
 <p align="center"><em>Autonomy, Contained.</em></p>
 
 <p align="center">
-  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/dogfight-demo.gif">
-    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/dogfight-demo.gif" alt="Dogfight Demo — Clawbot vs Chainwatch" width="700">
+  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-demo.gif">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-demo.gif" alt="Fieldtest Demo — Clawbot vs Chainwatch" width="700">
   </a>
   <br>
   <em>An AI agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
@@ -228,7 +228,7 @@ if result["decision"] == "deny":
 ```bash
 make go-test     # Run Go tests with -race
 make test        # Run Python tests
-make dogfight    # Run adversarial test suite (5 rounds)
+make fieldtest    # Run adversarial test suite (5 rounds)
 make bench       # Run benchmarks
 make fuzz        # Run fuzz tests (30s per target)
 ```

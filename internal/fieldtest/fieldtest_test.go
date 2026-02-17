@@ -1,6 +1,6 @@
-//go:build dogfight
+//go:build fieldtest
 
-package dogfight
+package fieldtest
 
 import (
 	"os"
@@ -15,7 +15,7 @@ var binaryPath string
 func TestMain(m *testing.M) {
 	root := findRepoRoot()
 
-	tmpDir, err := os.MkdirTemp("", "dogfight-bin-*")
+	tmpDir, err := os.MkdirTemp("", "fieldtest-bin-*")
 	if err != nil {
 		panic("failed to create temp dir: " + err.Error())
 	}

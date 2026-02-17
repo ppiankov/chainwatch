@@ -66,14 +66,14 @@ Complete rewrite from Python prototype to production Go binary with deterministi
 
 #### Testing
 - Unit tests with `-race` for all internal packages
-- CI-native adversarial test suite (dogfight) — 5 rounds, 44 subtests
-- VHS-recorded dogfight GIF artifact on every main push
+- CI-native adversarial test suite (fieldtest) — 5 rounds, 44 subtests
+- VHS-recorded fieldtest GIF artifact on every main push
 - Fuzz tests for denylist, policy YAML, LLM response parsing, audit verification
 - Benchmarks for policy evaluation, denylist matching, audit operations
 - Demo gate in CI — salary access MUST be blocked
 
 #### CI/CD
-- GitHub Actions: Go tests, Python tests (3.10-3.12 × ubuntu/macos), lint, demo gate, dogfight, recording
+- GitHub Actions: Go tests, Python tests (3.10-3.12 × ubuntu/macos), lint, demo gate, fieldtest, recording
 - Policy gate assertions for CI integration
 
 ### Changed

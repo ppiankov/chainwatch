@@ -1,6 +1,6 @@
-//go:build dogfight
+//go:build fieldtest
 
-package dogfight
+package fieldtest
 
 import (
 	"os"

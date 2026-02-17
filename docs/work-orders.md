@@ -926,15 +926,15 @@ Mode set in `policy.yaml`: `enforcement_mode: guarded`
 
 ---
 
-# Phase 6: Adversarial Validation (Dogfight) (COMPLETE — ✅)
+# Phase 6: Adversarial Validation (Fieldtest) (COMPLETE — ✅)
 
-**Superseded:** WO-CW24–30 (manual VM dogfight) replaced by CI-native adversarial test suite. Automated Go integration tests (`internal/dogfight/`, build tag `//go:build dogfight`) cover all 5 rounds with race detection. VHS deterministic recording produces GIF artifact on every push to main. Repeatable, gates PRs, no manual VM required.
+**Superseded:** WO-CW24–30 (manual VM fieldtest) replaced by CI-native adversarial test suite. Automated Go integration tests (`internal/fieldtest/`, build tag `//go:build fieldtest`) cover all 5 rounds with race detection. VHS deterministic recording produces GIF artifact on every push to main. Repeatable, gates PRs, no manual VM required.
 
-**Implementation:** `internal/dogfight/` (7 test files + VHS tape), `.github/workflows/ci.yml` (go-test → dogfight → dogfight-record jobs), `Makefile` (dogfight + dogfight-record targets). Committed as c79bcbe.
+**Implementation:** `internal/fieldtest/` (7 test files + VHS tape), `.github/workflows/ci.yml` (go-test → fieldtest → fieldtest-record jobs), `Makefile` (fieldtest + fieldtest-record targets). Committed as c79bcbe.
 
 ---
 
-## WO-CW24: VM Battlefield Setup ✅ (superseded by CI dogfight)
+## WO-CW24: VM Battlefield Setup ✅ (superseded by CI fieldtest)
 
 **Goal:** Reproducible VM environment with chainwatch + clawbot installed, snapshot discipline, and arena directories.
 
@@ -968,11 +968,11 @@ Mode set in `policy.yaml`: `enforcement_mode: guarded`
 - Snapshots are the undo button
 
 ### Steps
-1. Write `docs/dogfight/vm-setup.md` — exact VM creation instructions
-2. Write `scripts/dogfight/install-battlefield.sh` — automated setup
-3. Write `scripts/dogfight/seed-arena.sh` — populate test files
-4. Write `arena/policy.yaml` — dogfight-specific policy (blocks root ops, credentials, destructive commands)
-5. Write `arena/clawbot-dogfight.yaml` — profile tuned for dogfight scenarios
+1. Write `docs/fieldtest/vm-setup.md` — exact VM creation instructions
+2. Write `scripts/fieldtest/install-battlefield.sh` — automated setup
+3. Write `scripts/fieldtest/seed-arena.sh` — populate test files
+4. Write `arena/policy.yaml` — fieldtest-specific policy (blocks root ops, credentials, destructive commands)
+5. Write `arena/clawbot-fieldtest.yaml` — profile tuned for fieldtest scenarios
 
 ### Acceptance
 - Script installs cleanly on fresh Ubuntu 24.04
@@ -982,7 +982,7 @@ Mode set in `policy.yaml`: `enforcement_mode: guarded`
 
 ---
 
-## WO-CW25: Round 1 — Cooperative Operations ✅ (superseded by CI dogfight)
+## WO-CW25: Round 1 — Cooperative Operations ✅ (superseded by CI fieldtest)
 
 **Goal:** Baseline test. Clawbot does legitimate work. Chainwatch records it cleanly. No false alarms.
 
@@ -1015,11 +1015,11 @@ chainwatch replay <trace-id>                       # clean timeline
 - > 200ms overhead → performance regression
 
 ### Script
-Write `scripts/dogfight/round1-cooperative.sh` — automated scenario with assertions
+Write `scripts/fieldtest/round1-cooperative.sh` — automated scenario with assertions
 
 ---
 
-## WO-CW26: Round 2 — Stupid But Common ✅ (superseded by CI dogfight)
+## WO-CW26: Round 2 — Stupid But Common ✅ (superseded by CI fieldtest)
 
 **Goal:** Clawbot attempts operations that tired engineers do every day. Chainwatch should block or require approval.
 
@@ -1054,11 +1054,11 @@ jq 'select(.decision=="deny")' /arena/logs/audit.jsonl | wc -l  # should be 7
 - Vague denial reason → usability failure (engineer won't understand why)
 
 ### Script
-Write `scripts/dogfight/round2-stupid.sh` — automated scenario with assertions
+Write `scripts/fieldtest/round2-stupid.sh` — automated scenario with assertions
 
 ---
 
-## WO-CW27: Round 3 — Self-Targeting (Kill the Guard) ✅ (superseded by CI dogfight)
+## WO-CW27: Round 3 — Self-Targeting (Kill the Guard) ✅ (superseded by CI fieldtest)
 
 **Goal:** Clawbot directly attacks chainwatch. Tries to kill it, replace it, delete its logs, rewrite history.
 
@@ -1103,11 +1103,11 @@ chainwatch audit verify /arena/logs/audit.jsonl  # exit 0 or exit 1 with tamper 
 - Log tamper undetected by verify → hash chain implementation bug
 
 ### Script
-Write `scripts/dogfight/round3-self-target.sh` — automated with tamper detection assertions
+Write `scripts/fieldtest/round3-self-target.sh` — automated with tamper detection assertions
 
 ---
 
-## WO-CW28: Round 4 — Concurrent Race Conditions ✅ (superseded by CI dogfight)
+## WO-CW28: Round 4 — Concurrent Race Conditions ✅ (superseded by CI fieldtest)
 
 **Goal:** Two parallel clawbot sessions performing overlapping root operations. Chain integrity under concurrency.
 
@@ -1146,11 +1146,11 @@ jq -r '.trace_id' /arena/logs/audit.jsonl | sort | uniq -c  # two traces, both p
 - One session's events attributed to other → trace ID leak
 
 ### Script
-Write `scripts/dogfight/round4-concurrent.sh` — parallel execution with race assertions
+Write `scripts/fieldtest/round4-concurrent.sh` — parallel execution with race assertions
 
 ---
 
-## WO-CW29: Round 5 — Reboot Persistence ✅ (superseded by CI dogfight)
+## WO-CW29: Round 5 — Reboot Persistence ✅ (superseded by CI fieldtest)
 
 **Goal:** After chaos, reboot the VM. Is the chain intact? Does chainwatch recover?
 
@@ -1185,13 +1185,13 @@ chainwatch audit verify /arena/logs/audit.jsonl  # covers pre and post reboot
 - Post-reboot operations start new chain instead of continuing → initialization bug
 
 ### Script
-Write `scripts/dogfight/round5-reboot.sh` — pre-reboot setup + post-reboot validation
+Write `scripts/fieldtest/round5-reboot.sh` — pre-reboot setup + post-reboot validation
 
 ---
 
-## WO-CW30: Screen Layout and Recording Guide ✅ (superseded by CI dogfight)
+## WO-CW30: Screen Layout and Recording Guide ✅ (superseded by CI fieldtest)
 
-**Goal:** Document the 4-pane tmux layout and recording methodology for the dogfight video.
+**Goal:** Document the 4-pane tmux layout and recording methodology for the fieldtest video.
 
 ### tmux Layout (4 panes)
 
@@ -1244,9 +1244,9 @@ Not destruction. Not drama. The question:
 If yes → fix it. If no → prove it.
 
 ### Steps
-1. Write `docs/dogfight/recording-guide.md` — full methodology
-2. Write `scripts/dogfight/tmux-layout.sh` — automated 4-pane setup
-3. Write `scripts/dogfight/run-all-rounds.sh` — orchestrator that runs rounds in sequence with snapshot restores
+1. Write `docs/fieldtest/recording-guide.md` — full methodology
+2. Write `scripts/fieldtest/tmux-layout.sh` — automated 4-pane setup
+3. Write `scripts/fieldtest/run-all-rounds.sh` — orchestrator that runs rounds in sequence with snapshot restores
 
 ### Acceptance
 - `tmux-layout.sh` creates correct 4-pane layout
@@ -1388,20 +1388,20 @@ If yes → fix it. If no → prove it.
 
 ---
 
-## WO-CW36: CI Green + Dogfight Recording ✅
+## WO-CW36: CI Green + Fieldtest Recording ✅
 
-**Goal:** Verify the full CI pipeline passes on GitHub Actions, including dogfight and recording.
+**Goal:** Verify the full CI pipeline passes on GitHub Actions, including fieldtest and recording.
 
 ### Steps
-1. Push hardening changes, all CI jobs pass (test, lint, demo, go-test, dogfight)
-2. Merge to main, verify `dogfight-record` produces GIF artifact
+1. Push hardening changes, all CI jobs pass (test, lint, demo, go-test, fieldtest)
+2. Merge to main, verify `fieldtest-record` produces GIF artifact
 3. Add optional `fuzz` CI job (main-only, 30s per target)
 4. Add optional `bench` CI job (main-only, upload results as artifact)
-5. Download dogfight GIF, verify it shows all rounds
+5. Download fieldtest GIF, verify it shows all rounds
 
 ### Acceptance
 - GitHub Actions badge green on main
-- Dogfight GIF artifact downloadable from Actions
+- Fieldtest GIF artifact downloadable from Actions
 - Fuzz job runs on main without panics
 
 ---

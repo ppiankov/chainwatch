@@ -97,8 +97,8 @@ jobs:
       - name: Run Go SDK tests
         run: go test -race -v ./sdk/go/chainwatch/
 
-  dogfight:
-    name: Dogfight (Adversarial Tests)
+  fieldtest:
+    name: Fieldtest (Adversarial Tests)
     runs-on: ubuntu-latest
     needs: [go-test]
 
@@ -111,12 +111,12 @@ jobs:
           go-version: '1.25'
 
       - name: Run adversarial test suite
-        run: go test -race -v -tags dogfight -timeout 5m ./internal/dogfight/
+        run: go test -race -v -tags fieldtest -timeout 5m ./internal/fieldtest/
 
-  dogfight-record:
-    name: Dogfight Recording
+  fieldtest-record:
+    name: Fieldtest Recording
     runs-on: ubuntu-latest
-    needs: [dogfight]
+    needs: [fieldtest]
     if: github.ref == 'refs/heads/main'
 
     steps:
@@ -140,12 +140,12 @@ jobs:
       - name: Install VHS
         run: go install github.com/charmbracelet/vhs@latest
 
-      - name: Record dogfight
-        run: vhs internal/dogfight/tapes/dogfight.tape
+      - name: Record fieldtest
+        run: vhs internal/fieldtest/tapes/fieldtest.tape
 
       - name: Upload recording
         uses: actions/upload-artifact@v4
         with:
-          name: dogfight-recording
-          path: dogfight.gif
+          name: fieldtest-recording
+          path: fieldtest.gif
           retention-days: 90

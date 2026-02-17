@@ -23,7 +23,7 @@
 - **...use the Python SDK** → See [Python SDK](#python-sdk)
 - **...set up MCP integration** → See [MCP Tool Server](#mcp-tool-server)
 - **...set up gRPC policy server** → See [Central Policy Server](#central-policy-server-grpc)
-- **...run adversarial tests** → Read [design/dogfight-test-plan.md](#dogfight-test-plan)
+- **...run adversarial tests** → Read [design/fieldtest-test-plan.md](#fieldtest-test-plan)
 - **...write agent-ready tasks** → Read [design/agent-task-quality.md](#agent-task-quality)
 - **...use Chainwatch today** → Read [Quick Start](../README.md#quick-start) and [getting-started.md](#getting-started)
 - **...understand RootOps** → Read [DESIGN_BASELINE.md](#design-baseline) and [rootops-antipatterns.md](#rootops-antipatterns)
@@ -328,9 +328,9 @@ Detecting mutations that erode system integrity:
 
 ---
 
-### Dogfight Test Plan
+### Fieldtest Test Plan
 
-**File:** `design/dogfight-test-plan.md`
+**File:** `design/fieldtest-test-plan.md`
 
 Battlefield testing: chainwatch vs. autonomous agents with root access:
 - 5 test rounds (legitimate work → direct attack → reboot survival)
@@ -498,7 +498,7 @@ Security (Forbidden Architectures)
 └── rootops-antipatterns.md        [Convenient Trust Amplifier]
        ↓
 Validation
-└── design/dogfight-test-plan.md   [Adversarial testing]
+└── design/fieldtest-test-plan.md   [Adversarial testing]
        ↓
 Implementation (Usage)
 ├── getting-started.md             [Onboarding]

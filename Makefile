@@ -150,15 +150,15 @@ bench: ## Run performance benchmarks
 	go test -bench=. -benchmem -run='^$$' ./internal/denylist/
 	go test -bench=. -benchmem -run='^$$' ./internal/audit/
 
-# ── Dogfight (adversarial tests) ──────────────────────
+# ── Fieldtest (adversarial tests) ──────────────────────
 
-.PHONY: dogfight
-dogfight: ## Run adversarial dogfight test suite
-	go test -race -v -tags dogfight -timeout 5m ./internal/dogfight/
+.PHONY: fieldtest
+fieldtest: ## Run adversarial fieldtest test suite
+	go test -race -v -tags fieldtest -timeout 5m ./internal/fieldtest/
 
-.PHONY: dogfight-record
-dogfight-record: go-build ## Record dogfight video with VHS
-	vhs internal/dogfight/tapes/dogfight.tape
+.PHONY: fieldtest-record
+fieldtest-record: go-build ## Record fieldtest video with VHS
+	vhs internal/fieldtest/tapes/fieldtest.tape
 
 # ── Python SDK targets ─────────────────────────────────
 
