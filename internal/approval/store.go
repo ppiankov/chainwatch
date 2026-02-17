@@ -2,13 +2,32 @@ package approval
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+// validKey matches alphanumeric, dash, underscore, and dot characters only.
+var validKey = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// validateKey rejects keys that could cause path traversal.
+func validateKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("key must not be empty")
+	}
+	if strings.Contains(key, "..") {
+		return fmt.Errorf("key must not contain '..'")
+	}
+	if !validKey.MatchString(key) {
+		return fmt.Errorf("key contains invalid characters: only alphanumeric, dash, underscore, and dot are allowed")
+	}
+	return nil
+}
 
 // Status represents the state of an approval request.
 type Status string
@@ -58,6 +77,10 @@ func DefaultDir() string {
 
 // Request creates a pending approval file. No-op if file already exists.
 func (s *Store) Request(key, reason, policyID, resource string) error {
+	if err := validateKey(key); err != nil {
+		return fmt.Errorf("invalid approval key: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -81,6 +104,10 @@ func (s *Store) Request(key, reason, policyID, resource string) error {
 // Approve marks an approval as approved. If duration > 0, sets expiration.
 // If duration == 0, the approval is one-time (consumed on first use).
 func (s *Store) Approve(key string, duration time.Duration) error {
+	if err := validateKey(key); err != nil {
+		return fmt.Errorf("invalid approval key: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -102,6 +129,10 @@ func (s *Store) Approve(key string, duration time.Duration) error {
 
 // Deny marks an approval as denied.
 func (s *Store) Deny(key string) error {
+	if err := validateKey(key); err != nil {
+		return fmt.Errorf("invalid approval key: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -120,6 +151,10 @@ func (s *Store) Deny(key string) error {
 // Check returns the current status of an approval.
 // Returns StatusExpired if the approval has passed its deadline.
 func (s *Store) Check(key string) (Status, error) {
+	if err := validateKey(key); err != nil {
+		return "", fmt.Errorf("invalid approval key: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -140,6 +175,10 @@ func (s *Store) Check(key string) (Status, error) {
 
 // Consume marks a one-time approval as consumed.
 func (s *Store) Consume(key string) error {
+	if err := validateKey(key); err != nil {
+		return fmt.Errorf("invalid approval key: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -201,14 +240,17 @@ func (s *Store) Cleanup() error {
 		return err
 	}
 
+	var errs []error
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		os.Remove(filepath.Join(s.dir, e.Name()))
+		if err := os.Remove(filepath.Join(s.dir, e.Name())); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (s *Store) path(key string) string {

@@ -134,6 +134,22 @@ go-proto: ## Regenerate protobuf Go code
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
 
+# ── Fuzz & Benchmark ─────────────────────────────────
+
+.PHONY: fuzz
+fuzz: ## Run fuzz tests (30s per target)
+	go test -fuzz=FuzzIsBlocked -fuzztime=30s ./internal/denylist/
+	go test -fuzz=FuzzLoadConfigYAML -fuzztime=30s ./internal/policy/
+	go test -fuzz=FuzzExtractToolCalls -fuzztime=30s ./internal/intercept/
+	go test -fuzz=FuzzStreamBufferDelta -fuzztime=30s ./internal/intercept/
+	go test -fuzz=FuzzVerify -fuzztime=30s ./internal/audit/
+
+.PHONY: bench
+bench: ## Run performance benchmarks
+	go test -bench=. -benchmem -run='^$$' ./internal/policy/
+	go test -bench=. -benchmem -run='^$$' ./internal/denylist/
+	go test -bench=. -benchmem -run='^$$' ./internal/audit/
+
 # ── Dogfight (adversarial tests) ──────────────────────
 
 .PHONY: dogfight
