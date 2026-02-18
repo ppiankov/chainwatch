@@ -70,12 +70,14 @@ jobs:
       - name: Install VHS
         run: go install github.com/charmbracelet/vhs@latest
 
-      - name: Clean up before recording
-        run: rm -f /tmp/release-fieldtest.jsonl
-
-      - name: Record clawbot agent perspective
+      - name: Prepare recording environment
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          rm -f /tmp/release-fieldtest.jsonl
+          echo "$GROQ_API_KEY" > /tmp/.groq-key
+
+      - name: Record clawbot agent perspective
         run: vhs internal/fieldtest/tapes/release-agent.tape
 
       - name: Record chainwatch guard perspective
