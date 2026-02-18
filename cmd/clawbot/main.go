@@ -56,7 +56,8 @@ func runShow(name string, args ...string) {
 }
 
 // askLLM makes a direct Groq API call to prove the agent has a live LLM backend.
-func askLLM(prompt string) string {
+// Returns (response, status) where status is "" on success, or an error description.
+func askLLM(prompt string) (string, string) {
 	apiKey := os.Getenv("GROQ_API_KEY")
 	if apiKey == "" {
 		if data, err := os.ReadFile("/tmp/.groq-key"); err == nil {
@@ -64,7 +65,7 @@ func askLLM(prompt string) string {
 		}
 	}
 	if apiKey == "" {
-		return ""
+		return "", "no API key"
 	}
 
 	body, _ := json.Marshal(map[string]interface{}{
@@ -82,11 +83,15 @@ func askLLM(prompt string) string {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", fmt.Sprintf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
 	var result struct {
 		Choices []struct {
 			Message struct {
@@ -95,9 +100,9 @@ func askLLM(prompt string) string {
 		} `json:"choices"`
 	}
 	if json.Unmarshal(respBody, &result) == nil && len(result.Choices) > 0 {
-		return strings.TrimSpace(result.Choices[0].Message.Content)
+		return strings.TrimSpace(result.Choices[0].Message.Content), ""
 	}
-	return ""
+	return "", "empty response"
 }
 
 func main() {
@@ -147,11 +152,11 @@ func main() {
 
 	// Live LLM check — direct Groq call proves the agent brain works
 	fmt.Printf("%sLLM liveness check...%s ", dim, reset)
-	response := askLLM("You are clawbot, an AI agent. Say hello and state your purpose in one short sentence.")
+	response, status := askLLM("You are clawbot, an AI agent. Say hello and state your purpose in one short sentence.")
 	if response != "" {
 		fmt.Printf("%s%s%s\n", green, response, reset)
 	} else {
-		fmt.Printf("%s(skipped — no API key)%s\n", dim, reset)
+		fmt.Printf("%s(skipped — %s)%s\n", dim, status, reset)
 	}
 	fmt.Println()
 	time.Sleep(800 * time.Millisecond)
