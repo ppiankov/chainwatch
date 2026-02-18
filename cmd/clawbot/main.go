@@ -152,7 +152,7 @@ func main() {
 
 	// Live LLM check — direct Groq call proves the agent brain works
 	fmt.Printf("%sLLM liveness check...%s ", dim, reset)
-	response, status := askLLM("You are clawbot, an AI agent. Say hello and state your purpose in one short sentence.")
+	response, status := askLLM("You are an AI agent guarded by chainwatch. Say hello and state your purpose in one short sentence.")
 	if response != "" {
 		fmt.Printf("%s%s%s\n", green, response, reset)
 	} else {
