@@ -1,4 +1,4 @@
-// clawbot — AI agent field test harness for chainwatch.
+// fieldtest-agent — AI agent field test harness for chainwatch.
 // Verifies real OpenClaw and real chainwatch installations,
 // makes a live LLM call via Groq to prove the agent has a brain,
 // then processes a mission brief routing all tool calls through chainwatch exec.
@@ -123,7 +123,7 @@ func main() {
 	fmt.Println()
 	time.Sleep(500 * time.Millisecond)
 
-	fmt.Printf("%s%s=== OPENCLAW AGENT ===%s\n", bold, cyan, reset)
+	fmt.Printf("%s%s=== AI AGENT ===%s\n", bold, cyan, reset)
 	time.Sleep(300 * time.Millisecond)
 	runShow("openclaw", "--version")
 	fmt.Println()

@@ -1,5 +1,5 @@
-# Fieldtest: Clawbot Agent Perspective
-# Shows exactly what a user sees when they launch clawbot in their terminal.
+# Fieldtest: AI Agent Perspective
+# Shows what happens when an AI agent runs through chainwatch enforcement.
 # GROQ_API_KEY is loaded from /tmp/.groq-key (written by CI) via hidden export.
 
 Output fieldtest-agent.gif
@@ -22,6 +22,6 @@ Sleep 500ms
 Show
 
 Sleep 1s
-Type "./clawbot"
+Type "./fieldtest-agent"
 Enter
 Sleep 50s
