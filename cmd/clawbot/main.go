@@ -75,20 +75,25 @@ func main() {
 	fmt.Println()
 	time.Sleep(500 * time.Millisecond)
 
-	// --- Phase 1: Ask OpenClaw a real question to prove it's live ---
-	fmt.Printf("%s%s=== AGENT LIVENESS CHECK ===%s\n\n", bold, cyan, reset)
+	// --- Phase 1: Verify OpenClaw agent configuration ---
+	fmt.Printf("%s%s=== AGENT STATUS ===%s\n\n", bold, cyan, reset)
 	time.Sleep(300 * time.Millisecond)
-	fmt.Printf("%s$ openclaw agent --message \"What is your name and what can you do? Answer in one sentence.\"%s\n", dim, reset)
+	fmt.Printf("%s$ openclaw agents list%s\n", dim, reset)
 
-	askCmd := exec.Command("openclaw", "agent",
-		"--message", "What is your name and what can you do? Answer in one sentence.",
-		"--timeout", "15")
-	askOut, askErr := askCmd.CombinedOutput()
-	response := strings.TrimSpace(string(askOut))
-	if askErr != nil && response == "" {
-		fmt.Printf("%s(openclaw not configured — skipping liveness check)%s\n", dim, reset)
+	agentsCmd := exec.Command("openclaw", "agents", "list")
+	agentsOut, _ := agentsCmd.CombinedOutput()
+	agentsStr := strings.TrimSpace(string(agentsOut))
+	if agentsStr != "" {
+		// Show just the agent info lines, skip the tagline
+		for _, line := range strings.Split(agentsStr, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "Routing rules map") {
+				continue
+			}
+			fmt.Printf("  %s\n", trimmed)
+		}
 	} else {
-		fmt.Printf("%s%s%s\n", green, response, reset)
+		fmt.Printf("%s(openclaw not installed)%s\n", dim, reset)
 	}
 	fmt.Println()
 	time.Sleep(800 * time.Millisecond)
