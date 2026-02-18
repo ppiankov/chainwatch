@@ -1,5 +1,6 @@
 # Fieldtest: Clawbot Agent Perspective
 # Shows exactly what a user sees when they launch clawbot in their terminal.
+# GROQ_API_KEY is set via ~/.bashrc before VHS starts.
 
 Output fieldtest-agent.gif
 
@@ -10,15 +11,7 @@ Set Theme "Dracula"
 Set FontSize 14
 Set Padding 20
 
-Hide
-Type "export GROQ_API_KEY=$(cat /tmp/.groq-key 2>/dev/null)"
-Enter
-Sleep 500ms
-Type "clear"
-Enter
-Sleep 500ms
-Show
-
+Sleep 1s
 Type "./clawbot"
 Enter
 Sleep 50s
