@@ -10,12 +10,7 @@ Set Theme "Dracula"
 Set FontSize 14
 Set Padding 20
 
-Hide
-Type "rm -f /tmp/release-fieldtest.jsonl"
-Enter
-Sleep 500ms
-Show
-
+Sleep 1s
 Type "./clawbot"
 Enter
 Sleep 50s
