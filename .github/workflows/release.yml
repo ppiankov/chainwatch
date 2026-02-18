@@ -36,8 +36,19 @@ jobs:
             done
           done
 
-      - name: Build native binary for fieldtest
+      - name: Build chainwatch binary
         run: go build -o ./chainwatch ./cmd/chainwatch
+
+      - name: Build clawbot agent binary
+        run: go build -o ./clawbot ./cmd/clawbot
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install OpenClaw agent
+        run: npm install -g openclaw
 
       - name: Run fieldtest test suite
         run: go test -race -v -tags fieldtest -timeout 5m ./internal/fieldtest/
