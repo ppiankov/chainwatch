@@ -10,10 +10,10 @@
 
 <p align="center">
   <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif">
-    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif" alt="Clawbot Agent — mission execution through chainwatch" width="700">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif" alt="AI agent field test — mission execution through chainwatch" width="700">
   </a>
   <br>
-  <em>Real OpenClaw agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
+  <em>AI agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
 </p>
 
 <p align="center">
@@ -92,10 +92,10 @@ chainwatch exec -- rm -rf /
 ### 2. Use a Built-in Profile
 
 ```bash
-# Enforce clawbot safety profile
-chainwatch exec --profile clawbot -- curl https://api.example.com/data
+# Enforce a safety profile
+chainwatch exec --profile coding-agent -- curl https://api.example.com/data
 
-# Available profiles: clawbot, devin, manus, soc-analyst, data-pipeline
+# Available profiles: coding-agent, research-agent, customer-support, data-analyst, clawbot
 ```
 
 ### 3. Initialize Policy

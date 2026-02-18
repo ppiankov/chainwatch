@@ -39,8 +39,8 @@ jobs:
       - name: Build chainwatch binary
         run: go build -o ./chainwatch ./cmd/chainwatch
 
-      - name: Build clawbot agent binary
-        run: go build -o ./clawbot ./cmd/clawbot
+      - name: Build fieldtest agent binary
+        run: go build -o ./fieldtest-agent ./cmd/clawbot
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -89,11 +89,11 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          ./clawbot 2>&1 | head -25
+          ./fieldtest-agent 2>&1 | head -25
           echo "---"
           echo "Key file size: $(wc -c < /tmp/.groq-key 2>/dev/null || echo 'missing') bytes"
 
-      - name: Record clawbot agent perspective
+      - name: Record AI agent perspective
         run: vhs internal/fieldtest/tapes/release-agent.tape
 
       - name: Record chainwatch guard perspective
