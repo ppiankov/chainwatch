@@ -9,11 +9,19 @@
 <p align="center"><em>Autonomy, Contained.</em></p>
 
 <p align="center">
-  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-demo.gif">
-    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-demo.gif" alt="Fieldtest Demo — Clawbot vs Chainwatch" width="700">
+  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif" alt="Clawbot Agent — mission execution through chainwatch" width="700">
   </a>
   <br>
-  <em>An AI agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
+  <em>Real OpenClaw agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-guard.gif">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-guard.gif" alt="Chainwatch Guard — enforcement decisions" width="700">
+  </a>
+  <br>
+  <em>Chainwatch audit log: every decision recorded, hash chain verified.</em>
 </p>
 
 # Chainwatch
