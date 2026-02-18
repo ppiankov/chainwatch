@@ -59,6 +59,11 @@ func runShow(name string, args ...string) {
 func askLLM(prompt string) string {
 	apiKey := os.Getenv("GROQ_API_KEY")
 	if apiKey == "" {
+		if data, err := os.ReadFile("/tmp/.groq-key"); err == nil {
+			apiKey = strings.TrimSpace(string(data))
+		}
+	}
+	if apiKey == "" {
 		return ""
 	}
 
