@@ -78,6 +78,20 @@ jobs:
           echo -n "$GROQ_API_KEY" > /tmp/.groq-key
           echo "export GROQ_API_KEY=\"$GROQ_API_KEY\"" >> ~/.bashrc
           echo "export GROQ_API_KEY=\"$GROQ_API_KEY\"" >> ~/.profile
+          # Verify key file was written
+          if [ -s /tmp/.groq-key ]; then
+            echo "GROQ key file: $(wc -c < /tmp/.groq-key) bytes"
+          else
+            echo "WARNING: GROQ key file is empty — GROQ_API_KEY secret may not be set"
+          fi
+
+      - name: Verify Groq API key
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          ./clawbot 2>&1 | head -25
+          echo "---"
+          echo "Key file size: $(wc -c < /tmp/.groq-key 2>/dev/null || echo 'missing') bytes"
 
       - name: Record clawbot agent perspective
         run: vhs internal/fieldtest/tapes/release-agent.tape
