@@ -1,13 +1,12 @@
 #!/bin/bash
 # release-demo.sh — Orchestrates the split-screen fieldtest demo.
 # Creates a tmux session with two panes:
-#   Left:  clawbot agent simulation (agent-sim.sh)
-#   Right: chainwatch guard log (tail -f on audit JSONL with jq formatting)
+#   Left:  real clawbot agent binary processing a mission
+#   Right: real chainwatch audit log (tail -f on JSONL with jq formatting)
 # Designed to run inside VHS for GIF recording.
 set -eu
 
 AUDIT_LOG="/tmp/release-fieldtest.jsonl"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DONE_MARKER="/tmp/release-demo-done"
 
 # Clean up from previous runs
@@ -28,15 +27,15 @@ tmux send-keys -t fieldtest:0.1 "printf '\\033[1;31m=== CHAINWATCH GUARD ===\\03
 sleep 0.3
 tmux send-keys -t fieldtest:0.1 "tail -f $AUDIT_LOG | jq -r '\"[\\(.decision | ascii_upcase)] \\(.action.tool):\\(.action.resource)\" + if .reason != \"\" then \"\\n         \" + .reason else \"\" end'" Enter
 
-# Left pane (pane 0): clawbot agent simulation
+# Left pane (pane 0): real clawbot agent binary
 tmux select-pane -t fieldtest:0.0
-tmux send-keys -t fieldtest:0.0 "bash $SCRIPT_DIR/agent-sim.sh" Enter
+tmux send-keys -t fieldtest:0.0 "./clawbot" Enter
 
 # Attach so VHS can see both panes
 tmux attach -t fieldtest &
 TMUX_PID=$!
 
-# Wait for the agent script to finish
+# Wait for the clawbot agent to finish
 while [ ! -f "$DONE_MARKER" ]; do
     sleep 1
 done
