@@ -75,7 +75,9 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           rm -f /tmp/release-fieldtest.jsonl
+          echo -n "$GROQ_API_KEY" > /tmp/.groq-key
           echo "export GROQ_API_KEY=\"$GROQ_API_KEY\"" >> ~/.bashrc
+          echo "export GROQ_API_KEY=\"$GROQ_API_KEY\"" >> ~/.profile
 
       - name: Record clawbot agent perspective
         run: vhs internal/fieldtest/tapes/release-agent.tape
