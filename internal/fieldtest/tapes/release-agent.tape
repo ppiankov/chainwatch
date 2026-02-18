@@ -1,6 +1,5 @@
 # Fieldtest: Clawbot Agent Perspective
-# Shows the real clawbot agent receiving a mission and attempting tool calls.
-# Chainwatch blocks dangerous commands, allows safe ones.
+# Shows exactly what a user sees when they launch clawbot in their terminal.
 
 Output fieldtest-agent.gif
 
@@ -11,10 +10,12 @@ Set Theme "Dracula"
 Set FontSize 14
 Set Padding 20
 
-Sleep 1s
+Hide
 Type "rm -f /tmp/release-fieldtest.jsonl"
 Enter
 Sleep 500ms
+Show
+
 Type "./clawbot"
 Enter
-Sleep 45s
+Sleep 50s
