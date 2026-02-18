@@ -82,8 +82,7 @@ func main() {
 
 	askCmd := exec.Command("openclaw", "agent",
 		"--message", "What is your name and what can you do? Answer in one sentence.",
-		"--timeout", "15",
-		"--plain")
+		"--timeout", "15")
 	askOut, askErr := askCmd.CombinedOutput()
 	response := strings.TrimSpace(string(askOut))
 	if askErr != nil && response == "" {
