@@ -1,17 +1,20 @@
-# Chainwatch Release Fieldtest — Split-Screen Proof of Enforcement
-# Left pane: real clawbot agent (OpenClaw + chainwatch guardrail)
-# Right pane: real chainwatch audit log with live enforcement decisions
+# Chainwatch Release Fieldtest — Proof of Enforcement
+# Real clawbot agent binary + real chainwatch + real OpenClaw installation.
 # Run: vhs internal/fieldtest/tapes/release.tape
 
 Output fieldtest-demo.gif
 
 Set Shell "bash"
-Set Width 1400
+Set Width 1200
 Set Height 900
 Set Theme "Dracula"
-Set FontSize 13
-Set Padding 10
+Set FontSize 14
+Set Padding 20
 
-Type "bash internal/fieldtest/scripts/release-demo.sh"
+Sleep 1s
+Type "rm -f /tmp/release-fieldtest.jsonl"
 Enter
-Sleep 55s
+Sleep 500ms
+Type "./clawbot"
+Enter
+Sleep 45s
