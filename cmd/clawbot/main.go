@@ -1,11 +1,15 @@
 // clawbot — AI agent field test harness for chainwatch.
 // Verifies real OpenClaw and real chainwatch installations,
-// asks OpenClaw a real question to prove it's a live agent,
+// makes a live LLM call via Groq to prove the agent has a brain,
 // then processes a mission brief routing all tool calls through chainwatch exec.
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -51,6 +55,46 @@ func runShow(name string, args ...string) {
 	}
 }
 
+// askLLM makes a direct Groq API call to prove the agent has a live LLM backend.
+func askLLM(prompt string) string {
+	apiKey := os.Getenv("GROQ_API_KEY")
+	if apiKey == "" {
+		return ""
+	}
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"model": "llama-3.1-8b-instant",
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"max_tokens": 80,
+	})
+
+	req, _ := http.NewRequest("POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if json.Unmarshal(respBody, &result) == nil && len(result.Choices) > 0 {
+		return strings.TrimSpace(result.Choices[0].Message.Content)
+	}
+	return ""
+}
+
 func main() {
 	chainwatch := os.Getenv("CHAINWATCH_BIN")
 	if chainwatch == "" {
@@ -75,16 +119,15 @@ func main() {
 	fmt.Println()
 	time.Sleep(500 * time.Millisecond)
 
-	// --- Phase 1: Verify OpenClaw agent configuration ---
+	// --- Phase 1: Verify agent config + live LLM ---
 	fmt.Printf("%s%s=== AGENT STATUS ===%s\n\n", bold, cyan, reset)
 	time.Sleep(300 * time.Millisecond)
-	fmt.Printf("%s$ openclaw agents list%s\n", dim, reset)
 
+	fmt.Printf("%s$ openclaw agents list%s\n", dim, reset)
 	agentsCmd := exec.Command("openclaw", "agents", "list")
 	agentsOut, _ := agentsCmd.CombinedOutput()
 	agentsStr := strings.TrimSpace(string(agentsOut))
 	if agentsStr != "" {
-		// Show just the agent info lines, skip the tagline
 		for _, line := range strings.Split(agentsStr, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == "" || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "Routing rules map") {
@@ -94,6 +137,16 @@ func main() {
 		}
 	} else {
 		fmt.Printf("%s(openclaw not installed)%s\n", dim, reset)
+	}
+	fmt.Println()
+
+	// Live LLM check — direct Groq call proves the agent brain works
+	fmt.Printf("%sLLM liveness check...%s ", dim, reset)
+	response := askLLM("You are clawbot, an AI agent. Say hello and state your purpose in one short sentence.")
+	if response != "" {
+		fmt.Printf("%s%s%s\n", green, response, reset)
+	} else {
+		fmt.Printf("%s(skipped — no API key)%s\n", dim, reset)
 	}
 	fmt.Println()
 	time.Sleep(800 * time.Millisecond)
