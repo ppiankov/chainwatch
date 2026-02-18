@@ -56,25 +56,28 @@ jobs:
       - name: Install VHS dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg tmux jq
+          sudo apt-get install -y ffmpeg jq
           sudo curl -sL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
           sudo chmod +x /usr/local/bin/ttyd
 
       - name: Install VHS
         run: go install github.com/charmbracelet/vhs@latest
 
-      - name: Record fieldtest demo
-        env:
-          TERM: xterm-256color
-        run: script -qefc "vhs internal/fieldtest/tapes/release.tape" /dev/null
+      - name: Record clawbot agent perspective
+        run: vhs internal/fieldtest/tapes/release-agent.tape
 
-      - name: Verify recording
+      - name: Record chainwatch guard perspective
+        run: vhs internal/fieldtest/tapes/release-guard.tape
+
+      - name: Verify recordings
         run: |
-          if [ ! -f fieldtest-demo.gif ]; then
-            echo "ERROR: fieldtest-demo.gif was not produced"
-            exit 1
-          fi
-          ls -lh fieldtest-demo.gif
+          for f in fieldtest-agent.gif fieldtest-guard.gif; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: $f was not produced"
+              exit 1
+            fi
+            ls -lh "$f"
+          done
 
       - name: Generate checksums
         run: |
@@ -88,4 +91,5 @@ jobs:
           files: |
             dist/chainwatch-*
             dist/checksums.txt
-            fieldtest-demo.gif
+            fieldtest-agent.gif
+            fieldtest-guard.gif
