@@ -10,7 +10,15 @@ Set Theme "Dracula"
 Set FontSize 14
 Set Padding 20
 
-Sleep 1s
+Hide
+Type "export GROQ_API_KEY=$(cat /tmp/.groq-key 2>/dev/null)"
+Enter
+Sleep 500ms
+Type "clear"
+Enter
+Sleep 500ms
+Show
+
 Type "./clawbot"
 Enter
 Sleep 50s
