@@ -40,6 +40,8 @@ test-*.sh
 !artifacts/**/*.json
 !artifacts/**/*.md
 !docs/**/*.md
+!integrations/**/*.md
+!integrations/**/*.json
 !README.md
 !PRINCIPLES.md
 !LICENSE

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "chainwatch": {
+      "command": "chainwatch",
+      "args": ["mcp", "--profile", "clawbot", "--audit-log", "/tmp/chainwatch-mcp-audit.jsonl"],
+      "env": {}
+    }
+  }
+}
