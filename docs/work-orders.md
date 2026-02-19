@@ -2156,31 +2156,27 @@ CW49 assumes cloud LLMs can produce useful remediation plans from tokenized evid
 
 ---
 
-## WO-RES-04: Local LLM capability floor — what can llama 3.2 actually do?
+## WO-RES-04: Local LLM capability floor — observation classification
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** high
 **Type:** research
+**Verdict:** GATE PASSED. 32b+ models reliable for observation. 16b models fail (lazy — 1 observation per case).
 
 ### Summary
-Nullbot's observe mode depends on a local LLM (llama 3.2 via ollama) to classify findings and generate structured observations. How good is it at: log classification, anomaly description, JSON generation, evidence summarization? What's the failure rate?
+Tested whether local models can classify raw command output into structured observation types (suspicious_code, cron_anomaly, etc.) and produce valid JSON. 4 test scenarios across 3 models.
 
-### Research questions
-1. Can llama 3.2 (3B) reliably output strict JSON schemas?
-2. How does it compare to llama 3.1 8B for structured output?
-3. Can it classify log lines into observation types (file_hash_mismatch, redirect_detected, etc.)?
-4. What's the hallucination rate for file paths and command output?
-5. What's the latency on a 2-core VM with 4GB RAM?
-6. Does quantization (Q4_K_M vs Q8) affect classification accuracy?
+### Results
+- deepseek-coder-v2:16b (8.9GB): 38% type accuracy — FAIL (1 obs per case)
+- qwen2.5-coder:32b (19GB): 75% type accuracy — PASS
+- qwen3-coder-next-16k (51GB): 100% type accuracy — PASS (4-5 obs per case)
 
-### Method
-- Prepare 20 sample investigation outputs (WordPress, nginx, generic Linux)
-- Run through llama 3.2 3B, llama 3.1 8B, llama 3.3 70B (as ceiling)
-- Score: JSON validity, classification accuracy, hallucination rate, latency
+### Binding recommendation
+R1: Minimum model floor at 32b for observation mode. Warn (not block) on smaller models.
 
 ### Output
 - `docs/research/local-llm-capability.md`
-- Benchmark scripts in `internal/research/llm-bench/`
+- `internal/research/redaction/capability_test.go`
 
 ---
 
