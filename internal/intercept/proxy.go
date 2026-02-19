@@ -263,8 +263,14 @@ func (s *Server) handleStreaming(w http.ResponseWriter, r *http.Request, resp *h
 	w.WriteHeader(resp.StatusCode)
 
 	format := DetectStreamingFormat(r.URL.Path, r.Header)
-	if format != FormatAnthropic {
-		// For non-Anthropic streaming, pass through (OpenAI streaming is more complex)
+	switch format {
+	case FormatOpenAI:
+		s.handleOpenAIStreaming(w, flusher, resp)
+		return
+	case FormatAnthropic:
+		// handled below
+	default:
+		// Unknown format — pass through unchanged
 		io.Copy(w, resp.Body)
 		flusher.Flush()
 		return
@@ -399,6 +405,164 @@ func (s *Server) handleStreaming(w http.ResponseWriter, r *http.Request, resp *h
 				flusher.Flush()
 			}
 		}
+	}
+}
+
+// handleOpenAIStreaming processes OpenAI-format SSE streams (including xAI).
+// Tool calls are identified by delta.tool_calls[i].index and accumulated
+// until finish_reason="tool_calls" is received.
+func (s *Server) handleOpenAIStreaming(w http.ResponseWriter, flusher http.Flusher, resp *http.Response) {
+	buf := NewStreamBuffer(FormatOpenAI)
+	scanner := bufio.NewScanner(resp.Body)
+
+	// Track which tool call indices are actively buffering
+	activeTools := make(map[int]bool)
+	var pendingEvents []string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if line == "" {
+			if len(activeTools) == 0 {
+				fmt.Fprint(w, "\n")
+				flusher.Flush()
+			}
+			continue
+		}
+
+		if !strings.HasPrefix(line, "data: ") {
+			if len(activeTools) == 0 {
+				fmt.Fprintf(w, "%s\n", line)
+				flusher.Flush()
+			}
+			continue
+		}
+
+		dataStr := strings.TrimPrefix(line, "data: ")
+
+		if dataStr == "[DONE]" {
+			fmt.Fprintf(w, "%s\n", line)
+			flusher.Flush()
+			continue
+		}
+
+		var chunk map[string]any
+		if err := json.Unmarshal([]byte(dataStr), &chunk); err != nil {
+			if len(activeTools) == 0 {
+				fmt.Fprintf(w, "%s\n", line)
+				flusher.Flush()
+			}
+			continue
+		}
+
+		choices, _ := chunk["choices"].([]any)
+		if len(choices) == 0 {
+			// Usage chunk or similar — pass through
+			fmt.Fprintf(w, "%s\n", line)
+			flusher.Flush()
+			continue
+		}
+
+		choice, _ := choices[0].(map[string]any)
+		delta, _ := choice["delta"].(map[string]any)
+		finishReason, _ := choice["finish_reason"].(string)
+
+		// Check for tool_calls in delta
+		toolCalls, hasToolCalls := delta["tool_calls"].([]any)
+
+		if hasToolCalls {
+			for _, tcAny := range toolCalls {
+				tc, ok := tcAny.(map[string]any)
+				if !ok {
+					continue
+				}
+				idx := intFromAny(tc["index"])
+
+				fn, _ := tc["function"].(map[string]any)
+
+				if !buf.IsBuffering(idx) {
+					// New tool call — start buffering
+					id, _ := tc["id"].(string)
+					name := ""
+					if fn != nil {
+						name, _ = fn["name"].(string)
+					}
+					buf.StartToolUse(idx, id, name, line)
+					activeTools[idx] = true
+				}
+
+				// Append argument fragment
+				if fn != nil {
+					if argFrag, ok := fn["arguments"].(string); ok && argFrag != "" {
+						buf.AppendDelta(idx, argFrag, line)
+					}
+				}
+			}
+			continue
+		}
+
+		// finish_reason="tool_calls" — evaluate all buffered tool calls
+		if finishReason == "tool_calls" {
+			allBlocked := true
+			var anyBlocked bool
+
+			for idx := range activeTools {
+				tc, bufferedEvents, ok := buf.Complete(idx, "")
+				if !ok {
+					continue
+				}
+
+				result := s.evaluateToolCall(tc)
+
+				if result.Decision == model.Allow || result.Decision == model.AllowWithRedaction {
+					allBlocked = false
+					// Emit original buffered events
+					for _, ev := range bufferedEvents {
+						if ev != "" {
+							fmt.Fprintf(w, "%s\n\n", ev)
+							flusher.Flush()
+						}
+					}
+				} else {
+					anyBlocked = true
+					// Emit block message as content chunk
+					rep := RewriteOpenAISSE(tc, result)
+					fmt.Fprintf(w, "%s\n", rep)
+					flusher.Flush()
+				}
+			}
+
+			// Emit finish chunk
+			if allBlocked && anyBlocked {
+				// All blocked — emit stop finish
+				fin := RewriteOpenAISSEFinish()
+				fmt.Fprintf(w, "%s\n", fin)
+				flusher.Flush()
+			} else {
+				// Some or none blocked — emit original finish
+				fmt.Fprintf(w, "%s\n", line)
+				flusher.Flush()
+			}
+
+			activeTools = make(map[int]bool)
+			pendingEvents = nil
+			continue
+		}
+
+		// Non-tool-call chunk — pass through (text content, etc.)
+		if len(activeTools) == 0 {
+			fmt.Fprintf(w, "%s\n", line)
+			flusher.Flush()
+		} else {
+			// If we're buffering tools, stash non-tool events
+			pendingEvents = append(pendingEvents, line)
+		}
+	}
+
+	// Flush any remaining pending events
+	for _, ev := range pendingEvents {
+		fmt.Fprintf(w, "%s\n\n", ev)
+		flusher.Flush()
 	}
 }
 
