@@ -1860,7 +1860,7 @@ After nullbot investigates (observe mode), it produces a structured Work Order â
 
 ## WO-CW51: Nullbot observe mode (read-only investigation)
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** high
 **Depends on:** WO-CW49, WO-CW50
 
@@ -2260,7 +2260,7 @@ Nullbot currently treats each investigation as stateless. Fabrik-Codek (ikchain/
 ## v1.2 â€” Redaction & Observe
 **Gate:** WO-RES-03 (redaction fidelity) and WO-RES-04 (local LLM capability) must complete first.
 - [x] WO-CW49: Redaction engine (extend existing internal/redact with token maps)
-- [ ] WO-CW51: Observe mode (read-only investigation runbooks)
+- [x] WO-CW51: Observe mode (read-only investigation runbooks)
 - [x] WO-CW50: Work Order schema and generator
 - [ ] WO-RES-01: LlamaFirewall comparison (inform future direction)
 
