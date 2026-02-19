@@ -9,7 +9,15 @@ chainwatch exec -- <command>
 chainwatch exec --profile clawbot -- <command>
 ```
 
-Policy and denylist loaded from `~/.chainwatch/` by default:
+Bootstrap all configuration at once:
+
+```bash
+chainwatch init                     # creates policy.yaml, denylist.yaml, profiles/
+chainwatch init --profile clawbot   # also writes a profile
+chainwatch doctor                   # verify setup
+```
+
+Or generate individual configs:
 
 ```bash
 chainwatch init-policy     # creates ~/.chainwatch/policy.yaml

@@ -1440,6 +1440,127 @@ If yes → fix it. If no → prove it.
 
 ---
 
+# Phase 9: Bootstrap & Distribution
+
+**Context:** chainwatch v1.0 shipped but requires manual setup. Bootstrap commands (`init`, `doctor`, `recommend`) and an installer script reduce friction. Driver-level enforcement (seccomp/eBPF) is the long-term "for everyone" track — WOs here are planning only, no implementation.
+
+---
+
+## WO-CW39: Bootstrap CLI commands ✅
+
+**Goal:** `chainwatch init` bootstraps config, `chainwatch doctor` diagnoses readiness, `chainwatch recommend` outputs safety guidance.
+
+### Steps
+1. `chainwatch init [--profile <name>] [--mode user|system] [--install-systemd] [--force]`
+2. `chainwatch doctor` — checks binary, config dir, policy, denylist, profiles, systemd
+3. `chainwatch recommend` — outputs agent-agnostic hardening text
+4. `docs/hardening-agents.md` — neutral guide for containers, seccomp, AppArmor, chainwatch
+5. `scripts/install.sh` — curl-pipe-bash installer with checksum verification
+
+### Acceptance
+- `chainwatch init` creates policy.yaml, denylist.yaml, profiles/ in ~/.chainwatch
+- `chainwatch init --force` overwrites existing files
+- `chainwatch init --install-systemd` installs guarded@ template (Linux only, root)
+- `chainwatch doctor` reports pass/fail for each component
+- `chainwatch recommend` outputs non-salesy safety options
+- `scripts/install.sh` downloads binary, runs init, runs doctor
+- All new code has tests, passes with -race
+
+---
+
+## WO-CW40: Seccomp profile generator
+
+**Status:** `[ ]` planned
+**Priority:** medium
+
+### Summary
+Generate seccomp profiles from chainwatch policy. Agents running inside containers use the generated profile for kernel-level syscall filtering without writing kernel code.
+
+### Steps
+1. Map chainwatch policy rules to seccomp syscall allowlists
+2. `chainwatch generate-seccomp --profile <name> -o seccomp.json`
+3. Output is a standard seccomp JSON profile compatible with Docker `--security-opt seccomp=`
+4. Default: block dangerous syscalls (ptrace, mount, reboot, kexec_load)
+5. Profile-specific: restrict network syscalls for agents that don't need network
+
+### Acceptance
+- Generated profile is valid seccomp JSON
+- `docker run --security-opt seccomp=<generated>` works
+- Default profile blocks ptrace, mount, reboot
+- Profile-specific restrictions applied correctly
+
+---
+
+## WO-CW41: eBPF observe mode
+
+**Status:** `[ ]` planned
+**Priority:** low
+
+### Summary
+Attach eBPF probes to trace exec/file/net syscalls for a process or cgroup. Build policy from observed behavior (learning mode). No blocking — visibility and policy authoring only.
+
+### Steps
+1. `chainwatch observe --pid <pid>` or `chainwatch observe --cgroup <path>`
+2. Trace: execve, open/openat, connect, bind, sendto
+3. Output observed patterns as chainwatch policy YAML
+4. Duration-limited: `--duration 5m` default
+5. Requires root or CAP_BPF
+
+### Acceptance
+- Traces syscalls for target process without affecting it
+- Generated policy YAML loads correctly via `chainwatch exec --policy`
+- Observe mode exits cleanly after duration
+- Works on Linux 5.8+ with BTF
+
+---
+
+## WO-CW42: eBPF/seccomp enforcement
+
+**Status:** `[ ]` planned
+**Priority:** low
+**Depends on:** WO-CW40, WO-CW41
+
+### Summary
+Use seccomp for syscall blocking, eBPF for telemetry. Minimal deterministic block list. Integration with chainwatch policy engine.
+
+### Steps
+1. Combine observe-mode policy with seccomp generator
+2. `chainwatch enforce --profile <name> -- <command>` applies seccomp + eBPF
+3. Seccomp handles blocking (fast, kernel-level)
+4. eBPF handles logging and telemetry (non-blocking)
+5. Violations logged to chainwatch audit trail
+
+### Acceptance
+- Blocked syscalls return EPERM, not SIGSYS
+- Telemetry events appear in audit log
+- No measurable latency for allowed syscalls
+- Works with existing chainwatch policy format
+
+---
+
+## WO-CW43: AppArmor/SELinux profile generator
+
+**Status:** `[ ]` planned
+**Priority:** low
+
+### Summary
+Generate OS security profiles from chainwatch policy. Delegate enforcement to OS-native mandatory access control.
+
+### Steps
+1. `chainwatch generate-apparmor --profile <name> -o agent.apparmor`
+2. `chainwatch generate-selinux --profile <name> -o agent.te`
+3. Map denylist file patterns to AppArmor path rules
+4. Map denylist URL patterns to network restrictions
+5. Map denylist commands to exec restrictions
+
+### Acceptance
+- Generated AppArmor profile loads via `apparmor_parser -r`
+- Generated SELinux type enforcement compiles via `checkmodule`
+- Restrictions match chainwatch policy semantics
+- Documentation for loading and enabling profiles
+
+---
+
 ## Non-Goals
 
 - No ML or probabilistic safety models
