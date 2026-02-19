@@ -14,4 +14,4 @@ Set Padding 20
 Sleep 1s
 Type "bash internal/fieldtest/scripts/show-guard.sh"
 Enter
-Sleep 30s
+Sleep 40s
