@@ -1966,6 +1966,314 @@ Deployment profile for VMs and containers with no local LLM. Redaction is mandat
 
 ---
 
+## WO-CW54: Neurorouter — extract LLM proxy/router as standalone package
+
+**Status:** `[ ]` planned
+**Priority:** medium
+
+### Summary
+Runforge's `internal/proxy/` (Responses API ↔ Chat Completions translation, model-based routing, streaming SSE) and nullbot's `askLLM()` (raw Chat Completions client) overlap. Extract the common LLM routing logic as a standalone Go module: `github.com/ppiankov/neurorouter`.
+
+### What exists today
+- `codexrun/internal/proxy/server.go` — HTTP proxy with model→target routing, health endpoint, streaming + non-streaming
+- `codexrun/internal/proxy/translate.go` — Responses API ↔ Chat Completions translation, SSE stream translator
+- `codexrun/internal/config/settings.go` — ProxyConfig, ProxyTarget with `env:VAR` key resolution
+- `codexrun/internal/runner/` — 4 runner backends (codex, claude, gemini, opencode) with cascade/failover
+- `chainwatch/cmd/nullbot/main.go` — inline `askLLM()` for Chat Completions only
+- `chainwatch/internal/redact/redact.go` — PII masking (5 functions, 12 default keys)
+
+### Package scope
+- `neurorouter.Client` — OpenAI-compatible Chat Completions client (what nullbot needs)
+- `neurorouter.Proxy` — model-based routing proxy server (what runforge needs)
+- `neurorouter.Translate` — Responses API ↔ Chat Completions translation
+- `neurorouter.Config` — targets, API key resolution (`env:VAR`, file, literal)
+- NOT included: runner dispatch, cascade/failover (stays in runforge), redaction (stays in chainwatch)
+
+### Steps
+1. Create `github.com/ppiankov/neurorouter` Go module
+2. Extract proxy server, translation layer, config from codexrun
+3. Add standalone Chat Completions client (extracted from nullbot's askLLM)
+4. Replace codexrun's internal/proxy with neurorouter dependency
+5. Replace nullbot's inline askLLM with neurorouter.Client
+6. Tests: proxy routing, translation round-trip, client against mock server, streaming
+
+### Acceptance
+- `neurorouter` is a standalone Go module with zero chainwatch/runforge dependencies
+- Both codexrun and chainwatch/nullbot import it
+- Existing proxy tests pass after extraction
+- Client works with ollama, Groq, OpenAI, DeepSeek endpoints
+
+---
+
+## WO-CW55: Maildrop → inbox integration
+
+**Status:** `[ ]` planned
+**Priority:** low
+**Depends on:** WO-CW48
+
+### Summary
+Email triggers job creation, not execution. Maildrop (or Postfix pipe) extracts the email body, wraps it as a job JSON, and drops it in nullbot's inbox directory. Nullbot processes it like any other job — investigate, produce WO, wait for approval.
+
+### Design
+- Maildrop pipe script: `/usr/local/bin/nullbot-maildrop.sh`
+- Extracts: sender, subject, body (plain text only, strip HTML)
+- Validates: sender must be in allowlist (prevent spoofed job injection)
+- Creates job JSON with `"source": "maildrop"`, `"brief": <email body>`
+- Atomic write: `.tmp` → rename into inbox
+- Nullbot daemon picks it up via inotify
+
+### Security constraints
+- Sender allowlist: only configured email addresses can create jobs
+- No attachments processed (attachment = potential malware vector)
+- Email body treated as untrusted text — no embedded commands executed
+- Rate limit: max 10 jobs per hour per sender
+- Job type forced to `"investigate"` — email cannot trigger `"remediate"`
+
+### Steps
+1. Create `scripts/nullbot-maildrop.sh` — pipe script for maildrop/postfix
+2. Create sender allowlist config in `/home/nullbot/config/allowed-senders.txt`
+3. Document maildrop configuration in `docs/deployment/maildrop.md`
+4. Add rate limiting per sender (simple file-based counter)
+
+### Acceptance
+- Email to configured address creates job in inbox
+- Unknown sender email silently dropped (logged, not processed)
+- Attachment emails ignored (body-only extraction)
+- Rate limit prevents flood
+- Job type is always `investigate`, never `remediate`
+
+---
+
+## WO-CW56: Approval gateway (human-in-the-loop for WO execution)
+
+**Status:** `[ ]` planned
+**Priority:** high
+**Depends on:** WO-CW50, WO-CW52
+
+### Summary
+Before a WO is executed by runforge, a human must approve the proposed actions. The approval gateway sits between nullbot's WO output and runforge's execution input. Without approval, WOs queue but never execute.
+
+### Design
+- WO lands in outbox with `"status": "pending_approval"`
+- Approval methods (pick one per deployment):
+  - **File-based**: human drops `approve-<wo-id>.json` in approval dir
+  - **CLI**: `nullbot approve <wo-id>` (reads WO, shows summary, confirms)
+  - **Webhook**: POST to configured URL with WO summary, wait for 200 response
+- Approved WO moves to `state/approved/` → runforge picks it up
+- Rejected WO moves to `state/rejected/` with reason
+- Timeout: unapproved WOs expire after configurable TTL (default 24h)
+- No auto-approval — even if the WO looks "safe," a human must act
+
+### Steps
+1. Create `internal/approval/gateway.go` — approval lifecycle (pending → approved/rejected/expired)
+2. Add `nullbot approve <wo-id>` CLI command — displays WO summary, asks for confirmation
+3. Add `nullbot list` CLI command — shows pending WOs
+4. Webhook approval: POST WO summary to configured endpoint, poll for response
+5. Wire into daemon: approved WOs forwarded to runforge, rejected WOs archived
+
+### Acceptance
+- WOs cannot be executed without explicit human approval
+- `nullbot approve` shows clear summary before confirmation
+- Expired WOs cleaned up automatically
+- Approval event recorded in chainwatch audit log
+- All new code has tests, passes with -race
+
+---
+
+# Phase 12: Research WOs
+
+**Context:** These are investigation-only WOs. No implementation — just research, comparison, and written findings. Each produces a document in `docs/research/`. The goal is to make informed decisions before building.
+
+---
+
+## WO-RES-01: LlamaFirewall comparison — content vs runtime enforcement
+
+**Status:** `[ ]` planned
+**Priority:** high
+**Type:** research
+
+### Summary
+Meta's LlamaFirewall is the most visible open-source agent guardrail (2025). Compare its architecture to chainwatch's to understand: what does it do that we don't? What do we do that it doesn't? Where could they complement each other?
+
+### Research questions
+1. What does LlamaFirewall actually enforce? (prompt injection? chain-of-thought misalignment? code safety?)
+2. Does it operate at runtime or build-time?
+3. Does it intercept tool execution (commands, file ops, network)?
+4. Could LlamaFirewall's PromptGuard be used as an input filter before nullbot's mission parsing?
+5. Is AlignmentCheck relevant when the LLM is local and cheap (llama 3.2)?
+6. What's the production deployment story? (Python? sidecar? library?)
+
+### Output
+- `docs/research/llamafirewall-comparison.md`
+
+---
+
+## WO-RES-02: AgentSpec DSL — can chainwatch policy adopt it?
+
+**Status:** `[ ]` planned
+**Priority:** medium
+**Type:** research
+
+### Summary
+AgentSpec (ICSE 2026) defines a DSL for runtime agent safety rules: trigger + predicate + enforcement. Chainwatch's policy.yaml is similar but ad-hoc. Research whether adopting AgentSpec's formal model would improve chainwatch's policy language.
+
+### Research questions
+1. What is the AgentSpec DSL syntax?
+2. How does it compare to chainwatch's profile YAML + denylist?
+3. Would adopting AgentSpec make policies portable across tools?
+4. What's the runtime overhead of AgentSpec evaluation vs chainwatch's current approach?
+5. Is there an implementation we can test, or is it paper-only?
+
+### Output
+- `docs/research/agentspec-comparison.md`
+
+---
+
+## WO-RES-03: Redaction fidelity — can LLMs work with tokenized context?
+
+**Status:** `[ ]` planned
+**Priority:** high
+**Type:** research
+
+### Summary
+CW49 assumes cloud LLMs can produce useful remediation plans from tokenized evidence (e.g., `<<PATH_1>>` instead of `/var/www/site`). This must be tested before building the full pipeline. If the LLM can't reason about tokens, the two-tier architecture breaks.
+
+### Research questions
+1. Can Claude/GPT-4/Llama produce correct shell commands using `<<PATH_1>>` tokens?
+2. Does token density matter? (5 tokens vs 30 tokens in a single WO)
+3. Do some LLMs handle tokens better than others?
+4. What's the failure mode? (hallucinated paths? ignoring tokens? mixing tokens?)
+5. Can the WO schema be structured to minimize token confusion? (e.g., explicit token legend in prompt)
+
+### Method
+- Prepare 5 sample WOs with real evidence → redact → send to Claude, GPT-4, Llama 3.1 8B, Llama 3.2
+- Score: % of commands that use tokens correctly, % that hallucinate paths
+- Document prompt patterns that work vs fail
+
+### Output
+- `docs/research/redaction-fidelity.md`
+- Test scripts in `internal/research/redaction-test/`
+
+---
+
+## WO-RES-04: Local LLM capability floor — what can llama 3.2 actually do?
+
+**Status:** `[ ]` planned
+**Priority:** high
+**Type:** research
+
+### Summary
+Nullbot's observe mode depends on a local LLM (llama 3.2 via ollama) to classify findings and generate structured observations. How good is it at: log classification, anomaly description, JSON generation, evidence summarization? What's the failure rate?
+
+### Research questions
+1. Can llama 3.2 (3B) reliably output strict JSON schemas?
+2. How does it compare to llama 3.1 8B for structured output?
+3. Can it classify log lines into observation types (file_hash_mismatch, redirect_detected, etc.)?
+4. What's the hallucination rate for file paths and command output?
+5. What's the latency on a 2-core VM with 4GB RAM?
+6. Does quantization (Q4_K_M vs Q8) affect classification accuracy?
+
+### Method
+- Prepare 20 sample investigation outputs (WordPress, nginx, generic Linux)
+- Run through llama 3.2 3B, llama 3.1 8B, llama 3.3 70B (as ceiling)
+- Score: JSON validity, classification accuracy, hallucination rate, latency
+
+### Output
+- `docs/research/local-llm-capability.md`
+- Benchmark scripts in `internal/research/llm-bench/`
+
+---
+
+## WO-RES-05: Existing WO/ticket systems — should nullbot output standard format?
+
+**Status:** `[ ]` planned
+**Priority:** low
+**Type:** research
+
+### Summary
+CW50 defines a custom WO schema. But existing systems already have work order / incident formats: STIX/TAXII (threat intelligence), SARIF (static analysis), Jira/GitHub Issues. Should nullbot output a standard format instead of inventing one?
+
+### Research questions
+1. Does STIX/TAXII cover the observation types nullbot produces?
+2. Does SARIF (used by CodeQL, Semgrep) map to file-level observations?
+3. Would GitHub Issues API be a simpler "outbox" than file-based?
+4. Is there an incident response schema (NIST, MITRE ATT&CK) that fits?
+5. What's the tradeoff: standard format (interop) vs custom (tight integration)?
+
+### Output
+- `docs/research/wo-format-comparison.md`
+
+---
+
+## WO-RES-06: Android/iOS agent feasibility
+
+**Status:** `[ ]` planned
+**Priority:** low
+**Type:** research
+
+### Summary
+Nullbot.app is registered. Is a mobile agent even feasible? What would it do? What are the platform constraints?
+
+### Research questions
+1. What can an Android agent observe without root? (installed apps, battery, network, notifications)
+2. What can an iOS agent observe? (almost nothing without MDM or accessibility APIs)
+3. Is there a useful "phone health check" that doesn't require root?
+4. What LLM can run locally on mobile? (llama.cpp on Android, CoreML on iOS)
+5. What's the realistic use case? (device management? accessibility? automation?)
+6. Is Termux + ollama on Android a viable deployment target?
+
+### Output
+- `docs/research/mobile-agent-feasibility.md`
+
+---
+
+# Roadmap
+
+## v1.1 — Installable Agent (current, shipped)
+- [x] Nullbot Cobra CLI with configurable LLM backend
+- [x] Cross-compilation in release workflow (chainwatch + nullbot)
+- [x] `scripts/install-nullbot.sh` curl|bash installer
+- [x] Bootstrap: `chainwatch init`, `doctor`, `recommend`
+- [ ] WO-CW44: Claude Desktop MCP integration guide
+- [ ] WO-CW45: Profile customization guide
+- [ ] WO-CW46: Real-agent fieldtest with openclaw
+- [ ] WO-CW47: FAQ and getting-started update
+
+## v1.2 — Redaction & Observe
+**Gate:** WO-RES-03 (redaction fidelity) and WO-RES-04 (local LLM capability) must complete first.
+- [ ] WO-CW49: Redaction engine (extend existing internal/redact with token maps)
+- [ ] WO-CW51: Observe mode (read-only investigation runbooks)
+- [ ] WO-CW50: Work Order schema and generator
+- [ ] WO-RES-01: LlamaFirewall comparison (inform future direction)
+
+## v1.3 — Daemon & Approval
+**Gate:** v1.2 observe mode working end-to-end.
+- [ ] WO-CW48: Daemon mode (inbox/outbox, inotify, systemd)
+- [ ] WO-CW56: Approval gateway (human-in-the-loop)
+- [ ] WO-CW55: Maildrop integration (email → inbox)
+
+## v1.4 — Two-Tier Pipeline
+**Gate:** v1.3 daemon + WO-RES-05 (WO format decision) complete.
+- [ ] WO-CW52: Runforge WO ingestion
+- [ ] WO-CW54: Neurorouter package extraction
+- [ ] WO-CW53: VM deployment profile
+
+## v2.0 — Full Architecture
+**Gate:** v1.4 working pipeline proven on real infrastructure (personal web server).
+- [ ] WO-CW40: Seccomp profile generator
+- [ ] WO-CW41: eBPF observe mode
+- [ ] WO-CW42: eBPF/seccomp enforcement
+- [ ] WO-CW43: AppArmor/SELinux profile generator
+- [ ] WO-RES-06: Mobile agent feasibility (informs nullbot.app direction)
+
+## Ordering rationale
+1. **Research first, build second.** RES-03 and RES-04 are gates for v1.2 because if LLMs can't work with redacted tokens or local llama can't classify findings, the architecture needs redesigning before code is written.
+2. **Redaction before daemon.** The redaction engine is needed by everything downstream. Building the daemon without it means retrofitting later.
+3. **Observe before WO.** Can't generate WOs without observations. Can't test observations without the redaction layer.
+4. **Approval before pipeline.** The human-in-the-loop gateway is a safety requirement, not a feature. It must exist before WOs flow to cloud agents.
+5. **Neurorouter extraction is v1.4.** Not urgent — nullbot's inline `askLLM()` and runforge's internal proxy both work. Extract when both consumers are stable.
+6. **Driver-level enforcement (seccomp/eBPF) is v2.0.** Kernel-level enforcement is the endgame but depends on the whole pipeline being proven first.
+
 ## Non-Goals
 
 - No ML or probabilistic safety models
