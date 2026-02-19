@@ -2080,6 +2080,56 @@ Before a WO is executed by runforge, a human must approve the proposed actions. 
 
 ---
 
+## WO-CW58: Intercept proxy streaming test suite ✅
+
+**Status:** `[x]` complete
+**Priority:** high
+**Depends on:** WO-CW11
+
+### Summary
+The intercept proxy's SSE streaming path had only two end-to-end tests (one blocked tool, one text passthrough). Field deployment via the OpenClaw integration (CW46) exposed this as a coverage gap — the streaming rewrite path is the real enforcement boundary and needs thorough testing.
+
+### Implementation
+- `internal/intercept/streaming_test.go` — 20 new tests covering:
+
+**StreamBuffer unit tests (7 tests):**
+- Basic buffer lifecycle (start → delta → complete)
+- Fragmented JSON accumulation across many small deltas
+- Truncation when arguments exceed 1MB limit
+- Malformed JSON argument handling
+- Empty arguments (no deltas)
+- Complete on unknown index (returns false)
+- Multiple concurrent tool call buffers
+
+**SSE rewrite verification (2 tests):**
+- RewriteAnthropicSSE structure — validates 3-event replacement (start/delta/stop) with correct types and block message
+- Index preservation — all replacement events carry the original content block index
+
+**End-to-end streaming (7 tests):**
+- Allowed tool passthrough — original SSE events emitted unchanged
+- Mixed text + tool blocks — text passes through, safe tool passes, dangerous tool blocked
+- Multiple blocked tools — both replaced with block messages
+- Fragmented tool arguments — JSON split across many deltas reassembles correctly
+- Message events (start/delta/stop) pass through even during tool buffering
+- [DONE] sentinel passes through unchanged
+- Non-Anthropic streaming (OpenAI) passes through unchanged (not yet intercepted)
+
+**Concurrency (1 test):**
+- 10 concurrent streaming requests with race detection — no data races
+
+**Classification helpers (4 table-driven tests):**
+- classifyToolSensitivity — destructive, credential, sensitive_file, payment patterns
+- inferEgress — HTTP, browser, curl/wget/ssh detection
+- classifyTool — all tool name → category mappings
+- extractResource — argument key priority order and fallbacks
+
+### Acceptance
+- All 39 intercept tests pass with `-race -count=1`
+- Zero lint issues in new test file
+- Full project test suite (30 packages) passes clean
+
+---
+
 # Phase 12: Research WOs
 
 **Context:** These are investigation-only WOs. No implementation — just research, comparison, and written findings. Each produces a document in `docs/research/`. The goal is to make informed decisions before building.
@@ -2363,7 +2413,7 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 ## v1.3.1 — Integration Hardening
 **Gate:** v1.3 complete, OpenClaw field integration done.
 - [ ] WO-CW57: Intercept proxy multi-provider support (xAI/z.ai SSE format)
-- [ ] WO-CW58: Intercept proxy streaming test suite (SSE rewrite path, not just exec)
+- [x] WO-CW58: Intercept proxy streaming test suite (SSE rewrite path, not just exec)
 - [ ] WO-RES-10: OpenClaw exec hook feasibility (upstream feature request — can they add exec.wrapper config?)
 
 ## v1.4 — Two-Tier Pipeline
