@@ -2245,6 +2245,96 @@ Nullbot currently treats each investigation as stateless. Fabrik-Codek (ikchain/
 
 ---
 
+## WO-RES-08: Nullbot sparring mode — idea purifier with structured hostility
+
+**Status:** `[ ]` planned
+**Priority:** medium
+**Type:** research
+**Target:** v2.0+
+
+### Summary
+Nullbot gains a `spar` command that takes a raw idea and runs it through a structured attack pipeline. The problem is not lack of ideas — it is idea velocity without filtering friction. Ideas compete for oxygen, interrupt each other, and create illusion of progress. Sparring mode adds cognitive friction on intake — not suppression, not encouragement, friction.
+
+### Design (three phases)
+
+**Phase 1 — Biased dissection (local LLM):**
+Nullbot receives idea text and produces structured critique:
+1. Core claim extraction (one sentence, no fluff)
+2. Pain reality check (who suffers weekly? how solved today?)
+3. Entropy test (does it reduce noise/cost/load, or add layers?)
+4. Execution brutality (what's boring? what takes 30+ days? hidden dependencies?)
+5. Survival score (1-10: usefulness, theme alignment, feasibility, scope creep risk, abandonment likelihood)
+
+Tone: dry, skeptical, not motivational. The 30-day test: "Would you still build this if it required 30 days of boring implementation?"
+
+**Phase 2 — Cross-examination (cloud LLMs, redacted):**
+Structured idea summary sent to 2-3 models with adversarial prompts:
+- Model A: optimistic lens
+- Model B: hostile lens ("assume founder bias")
+- Model C: market realist lens
+All via redaction pipeline (CW49) — no internal details leak to cloud.
+
+**Phase 3 — Synthesis with prejudice:**
+Nullbot aggregates: overlapping criticisms, unique attacks, repeated weaknesses, surviving strong core. Output: verdict with core signal, illusion layer, scope inflation, recommended action (prototype / A-B test / park / discard).
+
+### Research questions
+1. What prompt engineering produces genuinely hostile critique without being useless noise?
+2. Should the 72-hour cooldown rule be enforced structurally (idea captured → locked for 72h → only then eligible for sparring)?
+3. How to prevent sparring mode from becoming another intellectual playground? Strict 10-minute time limit? Max 1-page output?
+4. Is multi-model triangulation (Claude vs Codex vs local) worth the latency and cost, or does single-model with adversarial system prompt suffice?
+5. What data format should idea capture use? (title + one sentence + timestamp, nothing more)
+
+### Output
+- `docs/research/sparring-mode-design.md`
+
+---
+
+## WO-RES-09: Alert entropy governor (DAKTAKLAKPAK framework)
+
+**Status:** `[ ]` planned
+**Priority:** medium
+**Type:** research
+**Target:** separate project (not chainwatch)
+
+### Summary
+Most monitoring systems decay because alerts are added but never removed. Nobody owns deletion. The result: thousands of alerts, most broken, most noise, real incidents buried. DAKTAKLAKPAK is a 12-dimension entropy taxonomy for alert classification and pruning.
+
+**DAKTAKLAKPAK scoring dimensions:**
+- **D**uplicate — fires alongside other alerts for same root cause
+- **A**ctionless — no runbook, no documented response
+- **K**nown-noise — fires constantly, everyone ignores it
+- **T**hreshold-misaligned — threshold set emotionally, not statistically
+- **A**bandoned — no owner, no team, no update in 6+ months
+- **K**afkaesque — nobody knows why it exists
+- **L**egacy — references decommissioned service or old infra
+- **A**lways-firing — fires >1x/day for >14 days continuously
+- **K**PI-misaligned — measures vanity metric, not business impact
+- **P**aging-abuse — pages for informational-severity issues
+- **A**mbiguous — alert text doesn't answer "what's wrong" or "what to do"
+- **K**illable — deleting it would change nothing observable
+
+### Design
+Input: Prometheus alerting rules + 30-90 day firing history from Alertmanager API.
+Process: score each alert on 12 dimensions (0 or 1 each), rank by total score.
+Output: ranked deletion candidates with evidence (firing frequency, ack rate, resolution time, last real incident).
+
+Phased rollout: mute low-score alerts → observe 30 days → delete if no regression.
+
+Alert must answer three questions to survive: What is wrong? What should I do? What happens if I ignore it?
+
+### Research questions
+1. Can all 12 dimensions be computed from Prometheus/Alertmanager API alone, or do some need human input?
+2. What's the minimum firing history window for statistically meaningful scoring?
+3. Should this be a standalone Go tool, a Prometheus plugin, or a nullbot runbook type?
+4. What's the governance model? Team-level budgets (max N alerts per service)?
+5. What existing alert lifecycle tools exist? (robusta.dev, noisy-neighbor detection in PagerDuty, etc.)
+6. Can Nullbot's observe mode be extended with a `--type prometheus` runbook that pulls alerting rules + history?
+
+### Output
+- `docs/research/alert-entropy-governor.md`
+
+---
+
 # Roadmap
 
 ## v1.1 — Installable Agent (current, shipped)
@@ -2284,6 +2374,8 @@ Nullbot currently treats each investigation as stateless. Fabrik-Codek (ikchain/
 - [ ] WO-CW43: AppArmor/SELinux profile generator
 - [ ] WO-RES-06: Mobile agent feasibility (informs nullbot.app direction)
 - [ ] WO-RES-07: Session learning and knowledge flywheel (informs investigation history)
+- [ ] WO-RES-08: Sparring mode — idea purifier with structured hostility
+- [ ] WO-RES-09: Alert entropy governor (DAKTAKLAKPAK framework, may become separate project)
 
 ## Ordering rationale
 1. **Research first, build second.** RES-03 and RES-04 are gates for v1.2 because if LLMs can't work with redacted tokens or local llama can't classify findings, the architecture needs redesigning before code is written.
