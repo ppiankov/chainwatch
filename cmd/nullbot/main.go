@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/redact"
+	"github.com/ppiankov/chainwatch/internal/wo"
 	"github.com/spf13/cobra"
 )
 
@@ -495,6 +497,186 @@ Rules:
 	runCmd.Flags().IntVar(&flagMaxSteps, "max-steps", defaultMaxSteps, "maximum commands in plan")
 	runCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show plan without executing")
 
+	var (
+		observeScope    string
+		observeType     string
+		observeOutput   string
+		observeClassify bool
+	)
+
+	observeCmd := &cobra.Command{
+		Use:   "observe",
+		Short: "investigate a target system (read-only)",
+		Long: `Runs a read-only investigation runbook against the target scope.
+All reads go through chainwatch exec for policy enforcement and audit trail.
+Produces structured observations as JSON.
+
+Examples:
+  nullbot observe --scope /var/www/site --type wordpress
+  nullbot observe --scope /var/www/site --type linux --output /tmp/observations.json
+  nullbot observe --scope /var/www/site --classify`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if observeScope == "" {
+				return fmt.Errorf("--scope is required")
+			}
+
+			cfg := resolveConfig(flagURL, flagModel, flagProfile, flagMaxSteps, flagDryRun)
+
+			chainwatch := os.Getenv("CHAINWATCH_BIN")
+			if chainwatch == "" {
+				chainwatch = "chainwatch"
+			}
+			auditLog := os.Getenv("AUDIT_LOG")
+			if auditLog == "" {
+				auditLog = "/tmp/nullbot-observe.jsonl"
+			}
+
+			runnerCfg := observe.RunnerConfig{
+				Scope:      observeScope,
+				Type:       observeType,
+				Profile:    cfg.profile,
+				Chainwatch: chainwatch,
+				AuditLog:   auditLog,
+			}
+
+			rb := observe.GetRunbook(observeType)
+
+			fmt.Printf("%s%s=== OBSERVE MODE ===%s\n\n", bold, cyan, reset)
+			fmt.Printf("%sScope:   %s%s\n", dim, observeScope, reset)
+			fmt.Printf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
+			fmt.Printf("%sProfile: %s%s\n", dim, cfg.profile, reset)
+			fmt.Println()
+
+			if cfg.dryRun {
+				fmt.Printf("%s%sDry run — investigation steps:%s\n\n", bold, yellow, reset)
+				for i, step := range rb.Steps {
+					expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", observeScope)
+					fmt.Printf("  %d. %s%s%s\n     %s%s%s\n", i+1, bold, step.Purpose, reset, dim, expanded, reset)
+				}
+				return nil
+			}
+
+			// Execute runbook.
+			fmt.Printf("%sRunning investigation...%s\n\n", dim, reset)
+			result, err := observe.Run(runnerCfg, rb)
+			if err != nil {
+				return fmt.Errorf("observe failed: %w", err)
+			}
+
+			// Display step results.
+			for i, sr := range result.Steps {
+				fmt.Printf("%s[%d/%d]%s %s\n", bold, i+1, len(result.Steps), reset, sr.Purpose)
+				if sr.Blocked {
+					fmt.Printf("  %sBLOCKED%s by chainwatch\n", red, reset)
+				} else if sr.ExitCode != 0 {
+					fmt.Printf("  %sERROR%s exit=%d\n", red, reset, sr.ExitCode)
+				} else if sr.Output == "" {
+					fmt.Printf("  %s(no output)%s\n", dim, reset)
+				} else {
+					lines := strings.SplitN(sr.Output, "\n", 4)
+					for _, line := range lines[:min(len(lines), 3)] {
+						fmt.Printf("  %s%s%s\n", dim, line, reset)
+					}
+					if len(lines) > 3 {
+						fmt.Printf("  %s... (%d more lines)%s\n", dim, strings.Count(sr.Output, "\n")-2, reset)
+					}
+				}
+				fmt.Println()
+			}
+
+			// Collect evidence for classification.
+			evidence := observe.CollectEvidence(result)
+			if evidence == "" {
+				fmt.Printf("%sNo evidence collected (all steps blocked or empty).%s\n", yellow, reset)
+				return nil
+			}
+
+			// Classify with LLM if requested.
+			var observations []wo.Observation
+			if observeClassify {
+				fmt.Printf("%sClassifying findings with %s...%s ", dim, cfg.model, reset)
+				classifyCfg := observe.ClassifierConfig{
+					APIURL: cfg.apiURL,
+					APIKey: cfg.apiKey,
+					Model:  cfg.model,
+				}
+
+				// Redact evidence if cloud mode.
+				classifyEvidence := evidence
+				var tokenMap *redact.TokenMap
+				if cfg.redactMode == redact.ModeCloud {
+					tokenMap = redact.NewTokenMap(fmt.Sprintf("observe-%d", time.Now().UnixNano()))
+					classifyEvidence = redact.Redact(evidence, tokenMap)
+					if tokenMap.Len() > 0 {
+						classifyEvidence = tokenMap.Legend() + "\n" + classifyEvidence
+					}
+				}
+
+				obs, err := observe.Classify(classifyCfg, classifyEvidence)
+				if err != nil {
+					fmt.Printf("%sFAILED%s (%v)\n", red, reset, err)
+					fmt.Printf("%sEvidence collected but classification failed. Use --output to save raw results.%s\n", yellow, reset)
+				} else {
+					observations = obs
+					fmt.Printf("%sOK%s (%d observations)\n", green, reset, len(obs))
+				}
+			}
+
+			// Output.
+			if observeOutput != "" {
+				output := map[string]interface{}{
+					"scope":        observeScope,
+					"type":         observeType,
+					"steps":        result.Steps,
+					"evidence":     evidence,
+					"observations": observations,
+				}
+				data, _ := json.MarshalIndent(output, "", "  ")
+				if err := os.WriteFile(observeOutput, data, 0600); err != nil {
+					return fmt.Errorf("write output: %w", err)
+				}
+				fmt.Printf("\n%sResults written to %s%s\n", green, observeOutput, reset)
+			}
+
+			// Summary.
+			fmt.Printf("\n%s=== SUMMARY ===%s\n", bold, reset)
+			total := len(result.Steps)
+			blocked := 0
+			for _, sr := range result.Steps {
+				if sr.Blocked {
+					blocked++
+				}
+			}
+			fmt.Printf("  Steps: %d  |  %sCompleted: %d%s  |  %sBlocked: %d%s\n",
+				total, green, total-blocked, reset, red, blocked, reset)
+			if len(observations) > 0 {
+				fmt.Printf("  Observations: %d\n", len(observations))
+				for _, obs := range observations {
+					severity := string(obs.Severity)
+					color := dim
+					switch obs.Severity {
+					case wo.SeverityCritical:
+						color = red
+					case wo.SeverityHigh:
+						color = yellow
+					}
+					fmt.Printf("    %s[%s]%s %s: %s\n", color, severity, reset, obs.Type, obs.Detail)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	observeCmd.Flags().StringVar(&observeScope, "scope", "", "target directory to investigate (required)")
+	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type: wordpress, linux")
+	observeCmd.Flags().StringVar(&observeOutput, "output", "", "write results to JSON file")
+	observeCmd.Flags().BoolVar(&observeClassify, "classify", false, "classify findings with local LLM")
+	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")
+	observeCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name for classification (env: NULLBOT_MODEL)")
+	observeCmd.Flags().StringVar(&flagProfile, "profile", defaultProfile, "chainwatch profile (env: NULLBOT_PROFILE)")
+	observeCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show runbook steps without executing")
+
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "print nullbot version",
@@ -503,7 +685,7 @@ Rules:
 		},
 	}
 
-	rootCmd.AddCommand(runCmd, versionCmd)
+	rootCmd.AddCommand(runCmd, observeCmd, versionCmd)
 
 	// CI compatibility: bare invocation with GROQ_API_KEY or NULLBOT_CI runs default mission.
 	// This keeps the release workflow VHS recording working.
