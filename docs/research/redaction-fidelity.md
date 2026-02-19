@@ -130,9 +130,9 @@ The two-tier design (nullbot local → WO → runforge cloud → chainwatch enfo
 ## What's Left Before Implementation
 
 - [x] RES-03: Redaction fidelity (this document)
-- [ ] RES-04: Local LLM capability floor (can llama 3.2 3B do observation/classification?)
+- [x] RES-04: Local LLM capability floor — PASSED (see `docs/research/local-llm-capability.md`)
 
-RES-04 tests whether the smallest deployable model can handle the *observation* half (structured JSON output, log classification). RES-03 tested the *remediation* half (using tokens in commands). Both must pass for v1.2.
+Both gates cleared. v1.2 implementation (CW49, CW50, CW51) is unblocked.
 
 ## Reproducibility
 
