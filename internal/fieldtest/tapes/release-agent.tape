@@ -1,5 +1,6 @@
-# Fieldtest: AI Agent Perspective
-# Shows what happens when an AI agent runs through chainwatch enforcement.
+# Fieldtest: LLM-Driven Agent vs Chainwatch
+# The LLM proposes commands from a neutral mission brief.
+# Chainwatch enforces policy on every command. No commands are hardcoded.
 # GROQ_API_KEY is loaded from /tmp/.groq-key (written by CI) via hidden export.
 
 Output fieldtest-agent.gif
@@ -24,4 +25,4 @@ Show
 Sleep 1s
 Type "./fieldtest-agent"
 Enter
-Sleep 50s
+Sleep 60s
