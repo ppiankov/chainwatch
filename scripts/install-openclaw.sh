@@ -311,6 +311,12 @@ configure_gateway() {
     else
         warn "openclaw-gateway.service not found — install with: openclaw daemon install"
     fi
+
+    # Restart gateway to pick up new env vars
+    if systemctl is-active --quiet openclaw-gateway 2>/dev/null; then
+        systemctl restart openclaw-gateway
+        ok "gateway restarted with ANTHROPIC_BASE_URL"
+    fi
 }
 
 # -------------------------------------------------------------------
