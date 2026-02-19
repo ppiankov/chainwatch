@@ -1662,6 +1662,310 @@ FAQ still says "experimental prototype" and getting-started.md is Python-centric
 
 ---
 
+# Phase 11: Nullbot v2 — Two-Tier Agent Architecture
+
+**Context:** Nullbot v1 is a single-binary CLI agent: LLM proposes commands, chainwatch enforces. v2 splits observe and act into two tiers. Nullbot (local, cheap LLM) collects evidence and produces structured Work Orders. Runforge dispatches WOs to capable cloud agents (Claude, Codex) for remediation — still under chainwatch enforcement on both sides.
+
+**Architecture:**
+```
+[ nullbot ]  local LLM → observe, redact, produce WO
+      ↓
+[ runforge ]  route WO to best cloud agent
+      ↓
+[ cloud agent ]  propose remediation actions
+      ↓
+[ chainwatch ]  enforce execution policy
+```
+
+**Key constraint:** When nullbot has no local LLM (small VM, container), it must call a cloud endpoint. All evidence sent over the wire must be obfuscated — real paths, IPs, credentials replaced with reversible tokens. The mapping table stays on the machine.
+
+---
+
+## WO-CW48: Nullbot daemon mode (inbox/outbox)
+
+**Status:** `[ ]` planned
+**Priority:** high
+
+### Summary
+Nullbot runs as a systemd service watching an inbox directory. Jobs arrive as JSON files (from maildrop, cron, API, or manual drop). Results appear in outbox. State transitions via file moves: `queued` → `processing` → `done`/`failed`.
+
+### Design
+- Dedicated `nullbot` user: no login shell, no SSH, no sudo
+- Directories: `/home/nullbot/inbox/`, `/home/nullbot/outbox/`, `/home/nullbot/state/`
+- Watcher: inotify (Linux) with polling fallback
+- Job file: atomic write via `.tmp` rename into inbox
+- Processing: move to `state/processing/`, execute, move result to outbox
+- Systemd unit: `nullbot.service` with `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=read-only` (except `/home/nullbot`), `CPUQuota=30%`, `MemoryMax=512M`, `TasksMax=50`
+- CLI: `nullbot daemon [--inbox DIR] [--outbox DIR]`
+
+### Job Schema
+```json
+{
+  "id": "job-abc123",
+  "type": "investigate",
+  "target": {"host": "example.com", "scope": "/var/www/site"},
+  "brief": "website redirects to casino domain",
+  "source": "maildrop",
+  "created_at": "2026-02-19T12:00:00Z"
+}
+```
+
+### Result Schema
+```json
+{
+  "id": "job-abc123",
+  "status": "done",
+  "observations": [...],
+  "proposed_wo": {...},
+  "completed_at": "2026-02-19T12:05:00Z"
+}
+```
+
+### Steps
+1. Create `internal/daemon/watcher.go` — inotify watcher with polling fallback
+2. Create `internal/daemon/processor.go` — job lifecycle (validate, move, execute, output)
+3. Create `internal/cli/daemon.go` — `nullbot daemon` Cobra command
+4. Create systemd unit template for nullbot service
+5. Job validation: reject malformed JSON, enforce required fields, reject jobs with embedded instructions
+
+### Acceptance
+- `nullbot daemon` watches inbox, processes jobs, writes results to outbox
+- Malformed jobs moved to `state/failed/` with error detail
+- Systemd sandboxing prevents access outside `/home/nullbot`
+- Graceful shutdown on SIGTERM (finish current job, don't start new ones)
+- All new code has tests, passes with -race
+
+---
+
+## WO-CW49: Redaction engine (cloud-safe mode)
+
+**Status:** `[ ]` planned
+**Priority:** high
+
+### Summary
+When nullbot sends evidence to a cloud LLM (no local model available), sensitive data must be replaced with reversible tokens. The token map stays on-machine. The cloud agent sees sanitized context and proposes actions using token references. Nullbot detokenizes before execution.
+
+### Design
+- Two modes: `local` (no redaction needed, LLM is localhost) and `cloud` (mandatory redaction)
+- Mode auto-detected from `NULLBOT_API_URL`: localhost → local, anything else → cloud
+- Override: `NULLBOT_REDACT=always` or `NULLBOT_REDACT=never`
+- Token format: `<<PATH_1>>`, `<<IP_1>>`, `<<HOST_1>>`, `<<CRED_1>>`, `<<EMAIL_1>>`
+
+### Pattern Detection
+- File paths: `/home/`, `/var/`, `/etc/`, `/root/`, `/usr/` prefixed strings
+- IP addresses: IPv4 and IPv6 patterns
+- Hostnames: FQDN patterns from evidence context
+- Credentials: strings matching `password=`, `secret=`, `token=`, `key=`, base64 blobs > 20 chars adjacent to auth-like keys
+- Email addresses: standard email pattern
+- Usernames: from `/etc/passwd` context or `~username` paths
+
+### Token Map
+```json
+{
+  "PATH_1": "/var/www/clientsite.com",
+  "IP_1": "192.168.1.42",
+  "HOST_1": "prod-web-03.internal",
+  "CRED_1": "db_password=s3cret",
+  "tokens_created_at": "2026-02-19T12:00:00Z",
+  "job_id": "job-abc123"
+}
+```
+Stored in `/home/nullbot/state/tokens/<job-id>.json`. Deleted after job completes or after configurable TTL (default 24h).
+
+### Steps
+1. Create `internal/redact/scanner.go` — pattern detection for paths, IPs, hostnames, credentials, emails
+2. Create `internal/redact/tokenmap.go` — bidirectional map: sensitive string ↔ token
+3. Create `internal/redact/redact.go` — `Redact(text, map) → sanitized` and `Detoken(text, map) → restored`
+4. Create `internal/redact/mode.go` — auto-detect redaction mode from config
+5. Wire into `askLLM()`: redact mission/evidence before sending, detoken response before execution
+6. Token map persistence: write to state dir, cleanup on job completion
+
+### Tests
+- Paths replaced with `<<PATH_N>>` tokens
+- IPs replaced with `<<IP_N>>` tokens
+- Credentials replaced with `<<CRED_N>>` tokens
+- Round-trip: redact → detoken restores original text exactly
+- Same string always maps to same token within a job
+- Different jobs get independent token maps
+- Local mode: no redaction applied
+- Cloud mode: redaction mandatory, sending unredacted text is a hard error
+- Token map cleanup after TTL
+
+### Acceptance
+- `nullbot run --redact=cloud "investigate /var/www"` sends only tokenized paths to cloud endpoint
+- Token map stored locally, never transmitted
+- Detoken restores commands accurately
+- All new code has tests, passes with -race
+
+---
+
+## WO-CW50: Work Order schema and generator
+
+**Status:** `[ ]` planned
+**Priority:** high
+**Depends on:** WO-CW49
+
+### Summary
+After nullbot investigates (observe mode), it produces a structured Work Order — a machine-readable document describing what it found and what it recommends. The WO is the handoff artifact between nullbot (local observer) and runforge (cloud executor).
+
+### WO Schema
+```json
+{
+  "wo_version": "1",
+  "id": "wo-abc123",
+  "created_at": "2026-02-19T12:05:00Z",
+  "incident_id": "job-abc123",
+  "target": {
+    "host": "<<HOST_1>>",
+    "scope": "<<PATH_1>>"
+  },
+  "observations": [
+    {"type": "file_hash_mismatch", "path": "<<PATH_2>>", "expected": "sha256:...", "actual": "sha256:..."},
+    {"type": "redirect_detected", "pattern": "casino-domain.com", "location": "<<PATH_3>>:42"},
+    {"type": "unauthorized_user", "username": "wpadmin2", "created": "2026-02-17"},
+    {"type": "suspicious_code", "pattern": "eval(base64_decode(", "files": ["<<PATH_4>>", "<<PATH_5>>"]}
+  ],
+  "constraints": {
+    "allow_paths": ["<<PATH_1>>"],
+    "deny_paths": ["/etc", "/root", "/home"],
+    "network": false,
+    "sudo": false,
+    "max_steps": 10
+  },
+  "proposed_goals": [
+    "remove malicious plugin files",
+    "restore core files from known-good hashes",
+    "remove unauthorized admin user",
+    "rotate application credentials"
+  ],
+  "redaction_mode": "cloud",
+  "token_map_ref": "state/tokens/job-abc123.json"
+}
+```
+
+### Steps
+1. Create `internal/wo/schema.go` — WO struct with validation
+2. Create `internal/wo/generator.go` — builds WO from observation results + redaction context
+3. Create `internal/wo/validate.go` — strict schema validation (required fields, known types, constraint sanity)
+4. Observation types: `file_hash_mismatch`, `redirect_detected`, `unauthorized_user`, `suspicious_code`, `config_modified`, `unknown_file`, `permission_anomaly`, `cron_anomaly`
+5. WO written to outbox as `wo-<id>.json`
+
+### Acceptance
+- WO schema validates against all observation types
+- Cloud-mode WOs contain only tokenized references
+- Constraints block scope creep (cloud agent cannot exceed declared scope)
+- All new code has tests, passes with -race
+
+---
+
+## WO-CW51: Nullbot observe mode (read-only investigation)
+
+**Status:** `[ ]` planned
+**Priority:** high
+**Depends on:** WO-CW49, WO-CW50
+
+### Summary
+Before nullbot can generate WOs, it needs an observe mode that collects evidence without modifying the target system. All reads go through chainwatch for policy enforcement and audit trail.
+
+### Investigation Runbook (WordPress example)
+1. Check HTTP response chain (curl -L, follow redirects)
+2. Hash core files against known-good checksums
+3. Search for suspicious patterns: `eval(`, `base64_decode(`, `gzinflate`, obfuscated blobs
+4. List wp-content/mu-plugins/ and wp-content/plugins/ for unknown entries
+5. Check for rogue admin users in WP database (read-only query)
+6. Check cron jobs (system and webserver user)
+7. Check .htaccess files for injected rules
+8. Diff wp-config.php against template (redact credentials before comparison)
+
+### Design
+- `nullbot observe --scope /var/www/site --type wordpress` runs the investigation runbook
+- LLM classifies findings, nullbot structures them as observations
+- All file reads go through `chainwatch exec --profile clawbot` (policy-gated)
+- Observe mode produces observations list, not a WO (WO generation is a separate step)
+- Pluggable runbooks: WordPress, generic Linux, nginx, etc.
+
+### Steps
+1. Create `internal/observe/runner.go` — execute investigation steps through chainwatch
+2. Create `internal/observe/wordpress.go` — WordPress-specific runbook
+3. Create `internal/observe/generic.go` — generic Linux system investigation
+4. Create `internal/observe/classify.go` — LLM classifies raw output into typed observations
+5. Wire: `nullbot observe` → runs runbook → collects observations → passes to WO generator
+
+### Acceptance
+- `nullbot observe --scope /var/www/site` produces structured observations
+- All reads go through chainwatch (audit trail exists)
+- No writes to target filesystem in observe mode
+- Observation output is machine-readable JSON
+- All new code has tests, passes with -race
+
+---
+
+## WO-CW52: Runforge WO ingestion
+
+**Status:** `[ ]` planned
+**Priority:** medium
+**Depends on:** WO-CW50
+
+### Summary
+Runforge gains a new input mode: instead of task files with prompt text, it accepts structured WOs from nullbot. The WO constraints become chainwatch policy for the execution agent. Runforge selects the best cloud agent via its existing cascade/failover system.
+
+### Design
+- New task type: `type: work_order` in runforge task file
+- WO constraints map to chainwatch profile overrides:
+  - `allow_paths` → profile filesystem scope
+  - `deny_paths` → denylist additions
+  - `network: false` → deny all outbound
+  - `sudo: false` → deny privilege escalation
+  - `max_steps` → budget enforcement
+- Cloud agent receives: WO observations + proposed goals + constraints
+- Cloud agent responds with: action plan (commands + reasons)
+- Runforge executes each action through chainwatch exec
+
+### Steps
+1. Add WO task type to runforge task schema
+2. Map WO constraints to chainwatch profile at runtime
+3. Build prompt from WO observations + goals (no raw evidence, only structured data)
+4. Execute action plan through chainwatch with WO-derived profile
+5. Collect results, write to nullbot outbox if source was daemon mode
+
+### Acceptance
+- Runforge processes WO task files
+- WO constraints enforced as chainwatch policy during execution
+- Cloud agent never receives raw credentials or unredacted paths
+- Cascade/failover works for WO tasks (e.g., Claude fails → Codex)
+
+---
+
+## WO-CW53: VM deployment profile (no-local-LLM)
+
+**Status:** `[ ]` planned
+**Priority:** medium
+**Depends on:** WO-CW49
+
+### Summary
+Deployment profile for VMs and containers with no local LLM. Redaction is mandatory. Resource limits are strict. Nullbot operates in observe-only mode by default, producing WOs for remote execution.
+
+### Design
+- Profile: `nullbot init --profile vm-cloud`
+- Forces: `NULLBOT_REDACT=always`, observe-only default, strict resource limits
+- Systemd unit with: `CPUQuota=30%`, `MemoryMax=256M`, `TasksMax=30`
+- No local model assumed — API URL must be set or nullbot runs in offline mode (collect evidence, queue WO, wait for connectivity)
+- Offline mode: observations cached in state dir, WO generated when LLM becomes available or sent to runforge raw
+
+### Steps
+1. Create VM cloud profile in `internal/profile/profiles/vm-cloud.yaml`
+2. Add offline observation caching in `internal/observe/cache.go`
+3. `nullbot init --profile vm-cloud` sets up appropriate defaults
+4. Document in `docs/deployment/vm-cloud.md`
+
+### Acceptance
+- `nullbot init --profile vm-cloud` configures mandatory redaction
+- Observe mode works without LLM (raw observations cached)
+- WO generation deferred until LLM available or sent to runforge
+- Resource limits enforced by systemd unit
+
+---
+
 ## Non-Goals
 
 - No ML or probabilistic safety models
@@ -1671,6 +1975,8 @@ FAQ still says "experimental prototype" and getting-started.md is Python-centric
 - No multi-tenant or SaaS features
 - No proprietary runtime hooks (insert at tool/network/output boundaries only)
 - No full SQL parser or query rewriting
-- No agent orchestration or workflow management
 - No plugin system or dynamic code loading
 - No watch mode or continuous file monitoring (that's logtap's job)
+- Nullbot does not fix things directly — it observes, redacts, and produces WOs
+- Cloud agents never receive unredacted credentials or paths
+- Email is never an execution trigger — only a ticket source
