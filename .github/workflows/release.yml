@@ -27,12 +27,14 @@ jobs:
 
       - name: Cross-compile binaries
         run: |
+          VERSION_NUM="${GITHUB_REF#refs/tags/v}"
           mkdir -p dist
           for GOOS in linux darwin; do
             for GOARCH in amd64 arm64; do
-              output="dist/chainwatch-${GOOS}-${GOARCH}"
-              echo "Building ${output}..."
-              GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "${output}" ./cmd/chainwatch
+              echo "Building chainwatch-${GOOS}-${GOARCH}..."
+              GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "dist/chainwatch-${GOOS}-${GOARCH}" ./cmd/chainwatch
+              echo "Building nullbot-${GOOS}-${GOARCH}..."
+              GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w -X main.version=${VERSION_NUM}" -o "dist/nullbot-${GOOS}-${GOARCH}" ./cmd/nullbot
             done
           done
 
@@ -100,7 +102,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum chainwatch-* > checksums.txt
+          sha256sum chainwatch-* nullbot-* > checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -108,6 +110,7 @@ jobs:
           generate_release_notes: true
           files: |
             dist/chainwatch-*
+            dist/nullbot-*
             dist/checksums.txt
             nullbot-fieldtest.gif
             nullbot-guard.gif
