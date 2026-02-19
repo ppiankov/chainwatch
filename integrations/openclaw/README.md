@@ -125,6 +125,32 @@ sudo systemctl enable --now chainwatch-intercept
 
 The bootstrap script (`scripts/install-openclaw.sh`) sets up both paths automatically.
 
+## Threat Model: What This Does and Does Not Enforce
+
+Be honest about what this covers.
+
+### What is enforced (hard blocks)
+
+- **Denylist patterns** — `rm -rf /`, `sudo su`, `dd if=/dev/zero`, `curl|sh`, fork bombs, `git push --force`, credential file access. These are blocked regardless of enforcement mode. Exit code 77, no execution.
+- **Intercept proxy** — tool_use blocks in LLM streaming responses are parsed and evaluated before the agent receives them. Blocked tool calls are replaced with text. The agent never sees them.
+
+### What is cooperative (agent follows instructions)
+
+- **Skill prefix** — the agent is taught to use `chainwatch exec --profile clawbot --` for risky commands. This is an instruction, not a barrier. A sufficiently creative or confused agent can run commands directly without the prefix.
+
+### What is NOT covered
+
+- **Alternate exec paths** — if OpenClaw has internal execution mechanisms that bypass the standard shell tool (subagents, cached tool responses, plugin-triggered commands), those paths do not go through chainwatch.
+- **Root escalation** — the default setup runs everything as root. Chainwatch blocks `sudo su` but the agent already has root. The denylist prevents the worst patterns, but a root process can do damage through paths the denylist does not cover.
+- **Non-command actions** — file writes via the agent's native file tool, HTTP requests through the agent's built-in browser, or API calls made directly by the LLM SDK are not intercepted by the exec wrapper.
+- **Denylist coverage gaps** — the denylist is a pattern list, not a capability model. Novel destructive commands that don't match known patterns will pass through.
+
+### The honest summary
+
+Layer A (skill) is cooperative. Layer D (intercept) is structural. Together they cover the common case. Neither provides complete containment of a root-level agent. For that, you need OS-level isolation (containers, AppArmor, dedicated user accounts).
+
+Optional safety is not safety. Use both layers.
+
 ## Walkthroughs
 
 - **For AI agents:** [docs/openclaw/agent-walkthrough.md](../../docs/openclaw/agent-walkthrough.md) — what to prefix, what runs directly, what gets blocked
