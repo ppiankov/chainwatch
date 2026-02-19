@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -60,12 +61,13 @@ Rules:
 
 // config holds resolved runtime configuration.
 type config struct {
-	apiURL   string
-	apiKey   string
-	model    string
-	profile  string
-	maxSteps int
-	dryRun   bool
+	apiURL     string
+	apiKey     string
+	model      string
+	profile    string
+	maxSteps   int
+	dryRun     bool
+	redactMode redact.Mode
 }
 
 // step is a single command proposed by the LLM.
@@ -142,6 +144,9 @@ func resolveConfig(flagURL, flagModel, flagProfile string, flagMaxSteps int, fla
 			cfg.profile = p
 		}
 	}
+
+	// Resolve redaction mode: localhost → local (no redaction), else → cloud (mandatory).
+	cfg.redactMode = redact.ResolveMode(cfg.apiURL, os.Getenv("NULLBOT_REDACT"))
 
 	return cfg
 }
@@ -271,12 +276,29 @@ func runMission(cfg config, mission string) error {
 		backend = "ollama (local)"
 	}
 	fmt.Printf("%sBackend: %s (%s)%s\n", dim, backend, cfg.model, reset)
+
+	// Redaction: if cloud mode, tokenize sensitive data before sending to LLM.
+	var tokenMap *redact.TokenMap
+	llmMission := mission
+	if cfg.redactMode == redact.ModeCloud {
+		tokenMap = redact.NewTokenMap(fmt.Sprintf("nullbot-%d", time.Now().UnixNano()))
+		llmMission = redact.Redact(mission, tokenMap)
+		if tokenMap.Len() > 0 {
+			llmMission = tokenMap.Legend() + "\n" + llmMission
+			fmt.Printf("%sRedaction: %d tokens (%d sensitive values masked)%s\n", dim, tokenMap.Len(), tokenMap.Len(), reset)
+		} else {
+			fmt.Printf("%sRedaction: cloud mode (no sensitive data detected)%s\n", dim, reset)
+		}
+	} else {
+		fmt.Printf("%sRedaction: local mode (disabled)%s\n", dim, reset)
+	}
+
 	fmt.Printf("%sAsking LLM to propose commands...%s ", dim, reset)
 
 	var p *plan
 	var llmSource string
 
-	if result, err := planFromLLM(cfg, mission); err == nil {
+	if result, err := planFromLLM(cfg, llmMission); err == nil {
 		p = result
 		llmSource = "live"
 		fmt.Printf("%sOK%s\n", green, reset)
@@ -284,7 +306,7 @@ func runMission(cfg config, mission string) error {
 		// Retry once.
 		fmt.Printf("%sretrying...%s ", yellow, reset)
 		time.Sleep(2 * time.Second)
-		if result, err := planFromLLM(cfg, mission); err == nil {
+		if result, err := planFromLLM(cfg, llmMission); err == nil {
 			p = result
 			llmSource = "live (retry)"
 			fmt.Printf("%sOK%s\n", green, reset)
@@ -292,6 +314,28 @@ func runMission(cfg config, mission string) error {
 			p = &fallbackPlan
 			llmSource = "fallback"
 			fmt.Printf("%sfallback%s (%s)\n", yellow, reset, err)
+		}
+	}
+
+	// Post-validation: check for literal leaks in LLM response (R2 from RES-03).
+	if tokenMap != nil && tokenMap.Len() > 0 && llmSource != "fallback" {
+		allCmds := p.Goal
+		for _, s := range p.Steps {
+			allCmds += " " + s.Cmd + " " + s.Why
+		}
+		if leaks := redact.CheckLeaks(allCmds, tokenMap); len(leaks) > 0 {
+			fmt.Printf("\n  %sLEAK DETECTED%s — LLM response contains literal sensitive data:%s\n", bold, red, reset)
+			for _, leak := range leaks {
+				fmt.Printf("    %s• %s%s\n", red, leak, reset)
+			}
+			return fmt.Errorf("redaction leak: LLM exposed %d sensitive values", len(leaks))
+		}
+
+		// Detoken: restore real values in commands before execution.
+		p.Goal = redact.Detoken(p.Goal, tokenMap)
+		for i := range p.Steps {
+			p.Steps[i].Cmd = redact.Detoken(p.Steps[i].Cmd, tokenMap)
+			p.Steps[i].Why = redact.Detoken(p.Steps[i].Why, tokenMap)
 		}
 	}
 

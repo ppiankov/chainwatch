@@ -1739,7 +1739,7 @@ Nullbot runs as a systemd service watching an inbox directory. Jobs arrive as JS
 
 ## WO-CW49: Redaction engine (cloud-safe mode)
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** high
 
 ### Summary
@@ -2223,6 +2223,28 @@ Nullbot.app is registered. Is a mobile agent even feasible? What would it do? Wh
 
 ---
 
+## WO-RES-07: Session learning and knowledge flywheel
+
+**Status:** `[ ]` planned
+**Priority:** low
+**Type:** research
+**Target:** v2.0+
+
+### Summary
+Nullbot currently treats each investigation as stateless. Fabrik-Codek (ikchain/Fabrik-Codek) demonstrates a "data flywheel" pattern: hybrid RAG (vector + knowledge graph) that learns from past sessions with incremental indexing (mtime-tracked, merge-not-replace entity strategy). Should nullbot learn from past investigations to improve future ones?
+
+### Research questions
+1. Should nullbot learn from past investigation sessions? What would "learning" look like for a system operations agent vs a dev assistant?
+2. What's the right storage for investigation history? File-based JSON (current direction), embedded DB (SQLite/bbolt), or knowledge graph (NetworkX-style entity extraction)?
+3. Should nullbot expose a REST API for external tool integration? The daemon mode (CW48) direction suggests yes — evaluate FastAPI-style endpoint patterns vs gRPC vs plain HTTP.
+4. Can investigation patterns be reused across similar hosts? (WordPress compromise runbook → reusable template, incremental graph updates for active infrastructure)
+5. What's the incremental update strategy? Fabrik-Codek uses deterministic entity IDs (MD5 of type + normalized name), edge weight reinforcement (+0.1 per occurrence, capped at 1.0), single-level transitive inference. Is this applicable to ops context?
+
+### Output
+- `docs/research/session-learning-flywheel.md`
+
+---
+
 # Roadmap
 
 ## v1.1 — Installable Agent (current, shipped)
@@ -2237,7 +2259,7 @@ Nullbot.app is registered. Is a mobile agent even feasible? What would it do? Wh
 
 ## v1.2 — Redaction & Observe
 **Gate:** WO-RES-03 (redaction fidelity) and WO-RES-04 (local LLM capability) must complete first.
-- [ ] WO-CW49: Redaction engine (extend existing internal/redact with token maps)
+- [x] WO-CW49: Redaction engine (extend existing internal/redact with token maps)
 - [ ] WO-CW51: Observe mode (read-only investigation runbooks)
 - [ ] WO-CW50: Work Order schema and generator
 - [ ] WO-RES-01: LlamaFirewall comparison (inform future direction)
@@ -2261,6 +2283,7 @@ Nullbot.app is registered. Is a mobile agent even feasible? What would it do? Wh
 - [ ] WO-CW42: eBPF/seccomp enforcement
 - [ ] WO-CW43: AppArmor/SELinux profile generator
 - [ ] WO-RES-06: Mobile agent feasibility (informs nullbot.app direction)
+- [ ] WO-RES-07: Session learning and knowledge flywheel (informs investigation history)
 
 ## Ordering rationale
 1. **Research first, build second.** RES-03 and RES-04 are gates for v1.2 because if LLMs can't work with redacted tokens or local llama can't classify findings, the architecture needs redesigning before code is written.
