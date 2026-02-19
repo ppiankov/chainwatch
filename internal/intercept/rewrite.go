@@ -149,6 +149,50 @@ func blockMessage(tc ToolCall, result model.PolicyResult) string {
 	return msg
 }
 
+// RewriteOpenAISSE generates an SSE chunk that replaces a blocked tool call
+// with a content text message in OpenAI streaming format.
+func RewriteOpenAISSE(tc ToolCall, result model.PolicyResult) string {
+	msg := blockMessage(tc, result)
+
+	chunk := map[string]any{
+		"id":      "chatcmpl-chainwatch-block",
+		"object":  "chat.completion.chunk",
+		"created": 0,
+		"choices": []any{
+			map[string]any{
+				"index": 0,
+				"delta": map[string]any{
+					"content": msg,
+				},
+				"finish_reason": nil,
+			},
+		},
+	}
+
+	data, _ := json.Marshal(chunk)
+	return "data: " + string(data) + "\n"
+}
+
+// RewriteOpenAISSEFinish generates the finish_reason chunk when all tool calls
+// are blocked and need to be replaced with a stop.
+func RewriteOpenAISSEFinish() string {
+	chunk := map[string]any{
+		"id":      "chatcmpl-chainwatch-block",
+		"object":  "chat.completion.chunk",
+		"created": 0,
+		"choices": []any{
+			map[string]any{
+				"index":         0,
+				"delta":         map[string]any{},
+				"finish_reason": "stop",
+			},
+		},
+	}
+
+	data, _ := json.Marshal(chunk)
+	return "data: " + string(data) + "\n"
+}
+
 // RewriteAnthropicSSE generates SSE events that replace a blocked tool_use block
 // with a text content block in streaming format.
 func RewriteAnthropicSSE(index int, tc ToolCall, result model.PolicyResult) []string {
