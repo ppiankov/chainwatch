@@ -1,4 +1,4 @@
-// fieldtest-agent — LLM-driven agent field test harness for chainwatch.
+// nullbot — LLM-driven agent that lives under chainwatch enforcement.
 // The LLM receives a neutral mission brief and proposes shell commands.
 // Every command is routed through chainwatch exec. The LLM chooses;
 // chainwatch enforces. No commands are hardcoded in the mission path.

@@ -9,16 +9,16 @@
 <p align="center"><em>Autonomy, Contained.</em></p>
 
 <p align="center">
-  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif">
-    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-agent.gif" alt="AI agent field test — mission execution through chainwatch" width="700">
+  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/nullbot-fieldtest.gif">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/nullbot-fieldtest.gif" alt="Nullbot fieldtest — LLM proposes commands, chainwatch enforces" width="700">
   </a>
   <br>
-  <em>AI agent receives hazardous instructions. Chainwatch intercepts and blocks every one.</em>
+  <em>LLM proposes commands. Chainwatch enforces policy. No commands are hardcoded.</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-guard.gif">
-    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/fieldtest-guard.gif" alt="Chainwatch Guard — enforcement decisions" width="700">
+  <a href="https://github.com/ppiankov/chainwatch/releases/latest/download/nullbot-guard.gif">
+    <img src="https://github.com/ppiankov/chainwatch/releases/latest/download/nullbot-guard.gif" alt="Chainwatch guard perspective — enforcement decisions" width="700">
   </a>
   <br>
   <em>Chainwatch audit log: every decision recorded, hash chain verified.</em>

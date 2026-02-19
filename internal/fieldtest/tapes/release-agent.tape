@@ -1,9 +1,9 @@
-# Fieldtest: LLM-Driven Agent vs Chainwatch
+# Nullbot Fieldtest: LLM-Driven Agent vs Chainwatch
 # The LLM proposes commands from a neutral mission brief.
 # Chainwatch enforces policy on every command. No commands are hardcoded.
 # GROQ_API_KEY is loaded from /tmp/.groq-key (written by CI) via hidden export.
 
-Output fieldtest-agent.gif
+Output nullbot-fieldtest.gif
 
 Set Shell "bash"
 Set Width 1200
@@ -23,6 +23,6 @@ Sleep 500ms
 Show
 
 Sleep 1s
-Type "./fieldtest-agent"
+Type "./nullbot"
 Enter
 Sleep 60s
