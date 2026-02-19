@@ -1561,6 +1561,107 @@ Generate OS security profiles from chainwatch policy. Delegate enforcement to OS
 
 ---
 
+# Phase 10: Adoption & Proof
+
+**Context:** chainwatch has 5 integration modes, 5 profiles, 5 fieldtest rounds — but all tests use a synthetic agent. No documented walkthrough for a real agent (Claude Desktop, openclaw, LangChain). Without proof against real agents, adoption is aspirational.
+
+---
+
+## WO-CW44: Claude Desktop MCP integration guide
+
+**Status:** `[ ]` planned
+**Priority:** high
+
+### Summary
+Step-by-step guide for running chainwatch as an MCP server inside Claude Desktop. The MCP server already works but there is no user-facing walkthrough.
+
+### Steps
+1. Write `docs/integrations/claude-desktop.md`
+2. Cover: install chainwatch, run `chainwatch init --profile clawbot`, configure `claude_desktop_config.json` to point at `chainwatch mcp`
+3. Show: what happens when Claude attempts a blocked tool call (screenshot or transcript)
+4. Cover: how to customize the profile for Claude Code vs Claude Desktop
+5. Troubleshooting: common MCP connection issues, log locations
+
+### Acceptance
+- Guide is complete enough for a first-time user to follow without prior chainwatch knowledge
+- Includes working `claude_desktop_config.json` snippet
+- Shows at least one blocked tool call example
+
+---
+
+## WO-CW45: Profile customization guide
+
+**Status:** `[ ]` planned
+**Priority:** medium
+
+### Summary
+Guide for forking a built-in profile and adapting it to a custom agent. 5 profiles exist but no documentation explains the syntax, rule precedence, or how to test changes.
+
+### Steps
+1. Write `docs/profiles.md`
+2. Explain: profile YAML schema (authority_boundaries, execution_boundaries, policy overrides)
+3. Walkthrough: fork `coding-agent.yaml`, add a custom denylist pattern, test with `chainwatch exec --profile custom`
+4. Explain: how profile rules merge with global policy (first-match-wins, profile rules prepended)
+5. Reference: all built-in profiles with one-line descriptions
+
+### Acceptance
+- A user can create a working custom profile by following the guide
+- Rule precedence and merge behavior are clearly explained
+- All 5 built-in profiles documented with purpose and key restrictions
+
+---
+
+## WO-CW46: Real-agent fieldtest with openclaw
+
+**Status:** `[ ]` planned
+**Priority:** high
+
+### Summary
+Prove chainwatch works against a real AI agent, not just the synthetic fieldtest-agent. Run openclaw (or Claude Code via MCP) through chainwatch enforcement and record the results. This is the "show, don't tell" artifact.
+
+### Steps
+1. Set up openclaw with chainwatch MCP server or intercept proxy
+2. Give the agent a task that requires tool calls crossing irreversible boundaries
+3. Verify: denylist blocks dangerous commands, approval workflow triggers on sensitive operations
+4. Record: VHS tape or asciinema of the full session (agent perspective + guard perspective)
+5. Add as CI fieldtest or manual test script in `internal/fieldtest/`
+6. Document the setup in `docs/integrations/openclaw.md`
+
+### Acceptance
+- At least one recorded session showing a real agent blocked by chainwatch
+- Recording shows both agent output and chainwatch audit log
+- Setup is reproducible from the integration guide
+- Works with at least one of: openclaw, Claude Desktop MCP, Claude Code
+
+---
+
+## WO-CW47: FAQ and getting-started update for v1.1
+
+**Status:** `[ ]` planned
+**Priority:** medium
+
+### Summary
+FAQ still says "experimental prototype" and getting-started.md is Python-centric (MVP era). Both need updating for Go v1.1 reality.
+
+### Steps
+1. Update `docs/FAQ.md`:
+   - Remove "experimental prototype" — this is v1.1
+   - Add: "How do I integrate with Claude/Claude Code?" → MCP mode
+   - Add: "What's the difference between MCP and CLI mode?" → MCP for Claude Desktop, CLI for wrapping any command
+   - Add: "Can I use this with my custom agent framework?" → yes, via exec, proxy, intercept, or SDK
+   - Add: "What's the performance overhead?" → reference benchmarks doc
+2. Update `docs/getting-started.md`:
+   - Replace Python-centric quickstart with Go binary flow
+   - Start with `chainwatch init` → `chainwatch exec` → `chainwatch doctor`
+   - Reference `scripts/install.sh` for one-liner install
+
+### Acceptance
+- FAQ answers the 5 most common adoption questions
+- Getting-started works end-to-end with the current Go binary
+- No references to Python prototype or v0.x behavior
+
+---
+
 ## Non-Goals
 
 - No ML or probabilistic safety models
