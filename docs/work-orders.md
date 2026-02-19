@@ -2080,6 +2080,58 @@ Before a WO is executed by runforge, a human must approve the proposed actions. 
 
 ---
 
+## WO-CW57: Intercept proxy multi-provider support ✅
+
+**Status:** `[x]` complete
+**Priority:** high
+**Depends on:** WO-CW11
+
+### Summary
+The intercept proxy only intercepted Anthropic SSE streaming. OpenAI-format streams (used by OpenAI, xAI/Grok, and other compatible providers) were passed through unfiltered. This meant dangerous tool calls in OpenAI-format streams were not blocked.
+
+### Implementation
+- `internal/intercept/proxy.go` — new `handleOpenAIStreaming()` method:
+  - Parses OpenAI SSE chunk format (`data: {JSON}`)
+  - Tracks tool calls by `delta.tool_calls[i].index`
+  - Accumulates fragmented argument strings across chunks
+  - On `finish_reason="tool_calls"`, evaluates all buffered tool calls
+  - Blocked calls replaced with content text chunks via `RewriteOpenAISSE()`
+  - Allowed calls have original buffered events emitted
+  - Works with both OpenAI (fragmented args) and xAI (complete-in-one-chunk)
+
+- `internal/intercept/rewrite.go` — two new functions:
+  - `RewriteOpenAISSE()` — generates block message as content delta chunk
+  - `RewriteOpenAISSEFinish()` — generates `finish_reason: "stop"` chunk when all tool calls blocked
+
+- Format routing: `handleStreaming()` now switches on format (Anthropic, OpenAI, Unknown) instead of only handling Anthropic
+
+### Provider compatibility
+| Provider | Format | Status |
+|---|---|---|
+| Anthropic | `/v1/messages` SSE | Intercepted (existing) |
+| OpenAI | `/v1/chat/completions` SSE | Intercepted (new) |
+| xAI/Grok | `/v1/chat/completions` SSE | Intercepted (OpenAI-compatible, complete tool calls in single chunk) |
+| Unknown | — | Pass through unchanged |
+
+### Tests (10 new in streaming_test.go)
+- `TestOpenAIStreamingBlockedToolCall` — dangerous command blocked, finish_reason rewritten
+- `TestOpenAIStreamingAllowedToolCall` — safe command passes through with original events
+- `TestOpenAIStreamingTextPassthrough` — text-only stream unchanged
+- `TestOpenAIStreamingParallelToolCalls` — two parallel calls, one safe one dangerous
+- `TestOpenAIStreamingXAICompleteToolCall` — xAI single-chunk tool call blocked
+- `TestOpenAIStreamingDoneSentinel` — [DONE] passes through
+- `TestOpenAIStreamingFragmentedArgs` — 8-fragment JSON reassembly
+- `TestOpenAIStreamingConcurrent` — 10 concurrent requests with race detection
+- `TestRewriteOpenAISSEStructure` — replacement chunk structure validation
+- `TestRewriteOpenAISSEFinishStructure` — finish chunk structure validation
+
+### Acceptance
+- All 49 intercept tests pass with `-race -count=1`
+- Full project test suite (30 packages) passes clean
+- Zero new lint issues in test file, one pre-existing pattern (unchecked fmt.Fprint) consistent with existing code
+
+---
+
 ## WO-CW58: Intercept proxy streaming test suite ✅
 
 **Status:** `[x]` complete
@@ -2412,7 +2464,7 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 
 ## v1.3.1 — Integration Hardening
 **Gate:** v1.3 complete, OpenClaw field integration done.
-- [ ] WO-CW57: Intercept proxy multi-provider support (xAI/z.ai SSE format)
+- [x] WO-CW57: Intercept proxy multi-provider support (xAI/z.ai SSE format)
 - [x] WO-CW58: Intercept proxy streaming test suite (SSE rewrite path, not just exec)
 - [ ] WO-RES-10: OpenClaw exec hook feasibility (upstream feature request — can they add exec.wrapper config?)
 

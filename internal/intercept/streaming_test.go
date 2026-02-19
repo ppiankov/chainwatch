@@ -527,15 +527,74 @@ func TestStreamingDoneSentinel(t *testing.T) {
 	}
 }
 
-func TestStreamingNonAnthropicPassthrough(t *testing.T) {
-	// OpenAI streaming should pass through unchanged (not yet intercepted)
-	expectedContent := `data: {"id":"chatcmpl-1","choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\"cmd\":\"rm -rf /\"}"}}]}}]}` + "\n\n"
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		flusher := w.(http.Flusher)
-		fmt.Fprint(w, expectedContent)
-		flusher.Flush()
-	}))
+// --- OpenAI streaming tests ---
+
+// openaiSSE builds an OpenAI-format SSE chunk line.
+func openaiSSE(id string, delta map[string]any, finishReason *string) string {
+	choice := map[string]any{
+		"index":         0,
+		"delta":         delta,
+		"finish_reason": nil,
+	}
+	if finishReason != nil {
+		choice["finish_reason"] = *finishReason
+	}
+	chunk := map[string]any{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": 1700000000,
+		"choices": []any{choice},
+	}
+	data, _ := json.Marshal(chunk)
+	return "data: " + string(data) + "\n\n"
+}
+
+func strPtr(s string) *string { return &s }
+
+func TestOpenAIStreamingBlockedToolCall(t *testing.T) {
+	events := []string{
+		// Role assignment + tool call start
+		openaiSSE("chatcmpl-1", map[string]any{
+			"role":    "assistant",
+			"content": nil,
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"id":    "call_abc",
+					"type":  "function",
+					"function": map[string]any{
+						"name":      "run_command",
+						"arguments": "",
+					},
+				},
+			},
+		}, nil),
+		// Argument fragments
+		openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"function": map[string]any{
+						"arguments": `{"command`,
+					},
+				},
+			},
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"function": map[string]any{
+						"arguments": `":"rm -rf /"}`,
+					},
+				},
+			},
+		}, nil),
+		// Finish
+		openaiSSE("chatcmpl-1", map[string]any{}, strPtr("tool_calls")),
+		"data: [DONE]\n\n",
+	}
+	upstream := sseStream(events)
 	defer upstream.Close()
 
 	srv, port := newTestInterceptor(t, upstream.URL)
@@ -543,7 +602,6 @@ func TestStreamingNonAnthropicPassthrough(t *testing.T) {
 	defer cancel()
 
 	client := interceptClient(port)
-	// Use OpenAI path
 	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -553,9 +611,475 @@ func TestStreamingNonAnthropicPassthrough(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	output := string(body)
 
-	// OpenAI streaming is passed through unchanged (per line 266-271 in proxy.go)
-	if !strings.Contains(output, "chatcmpl-1") {
-		t.Errorf("expected OpenAI stream to pass through, got:\n%s", output)
+	if !strings.Contains(output, "[BLOCKED by chainwatch]") {
+		t.Errorf("expected block message for dangerous command, got:\n%s", output)
+	}
+	if !strings.Contains(output, "run_command") {
+		t.Errorf("expected tool name in block message, got:\n%s", output)
+	}
+	// Should have stop finish_reason, not tool_calls
+	if strings.Contains(output, `"finish_reason":"tool_calls"`) {
+		t.Errorf("blocked tool calls should not have finish_reason=tool_calls, got:\n%s", output)
+	}
+	if !strings.Contains(output, "[DONE]") {
+		t.Errorf("expected [DONE] sentinel, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingAllowedToolCall(t *testing.T) {
+	events := []string{
+		openaiSSE("chatcmpl-1", map[string]any{
+			"role":    "assistant",
+			"content": nil,
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"id":    "call_abc",
+					"type":  "function",
+					"function": map[string]any{
+						"name":      "run_command",
+						"arguments": "",
+					},
+				},
+			},
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"function": map[string]any{
+						"arguments": `{"command":"echo hello"}`,
+					},
+				},
+			},
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{}, strPtr("tool_calls")),
+		"data: [DONE]\n\n",
+	}
+	upstream := sseStream(events)
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	client := interceptClient(port)
+	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	output := string(body)
+
+	// Safe command — should pass through without blocking
+	if strings.Contains(output, "[BLOCKED") {
+		t.Errorf("safe command should not be blocked, got:\n%s", output)
+	}
+	if !strings.Contains(output, "call_abc") {
+		t.Errorf("expected tool call ID in output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "run_command") {
+		t.Errorf("expected function name in output, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingTextPassthrough(t *testing.T) {
+	// Pure text streaming — no tool calls
+	events := []string{
+		openaiSSE("chatcmpl-1", map[string]any{
+			"role":    "assistant",
+			"content": "Hello ",
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{
+			"content": "world!",
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{}, strPtr("stop")),
+		"data: [DONE]\n\n",
+	}
+	upstream := sseStream(events)
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	client := interceptClient(port)
+	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	output := string(body)
+
+	if !strings.Contains(output, "Hello ") {
+		t.Errorf("expected text content to pass through, got:\n%s", output)
+	}
+	if !strings.Contains(output, "world!") {
+		t.Errorf("expected text content to pass through, got:\n%s", output)
+	}
+	if strings.Contains(output, "[BLOCKED") {
+		t.Errorf("text-only stream should not be blocked, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingParallelToolCalls(t *testing.T) {
+	// Two parallel tool calls — one safe, one dangerous
+	events := []string{
+		// Both tool calls start in same chunk
+		openaiSSE("chatcmpl-1", map[string]any{
+			"role":    "assistant",
+			"content": nil,
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"id":    "call_safe",
+					"type":  "function",
+					"function": map[string]any{
+						"name":      "run_command",
+						"arguments": "",
+					},
+				},
+			},
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"function": map[string]any{
+						"arguments": `{"command":"echo safe"}`,
+					},
+				},
+			},
+		}, nil),
+		// Second tool call
+		openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 1,
+					"id":    "call_danger",
+					"type":  "function",
+					"function": map[string]any{
+						"name":      "run_command",
+						"arguments": "",
+					},
+				},
+			},
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 1,
+					"function": map[string]any{
+						"arguments": `{"command":"rm -rf /"}`,
+					},
+				},
+			},
+		}, nil),
+		// Finish
+		openaiSSE("chatcmpl-1", map[string]any{}, strPtr("tool_calls")),
+		"data: [DONE]\n\n",
+	}
+	upstream := sseStream(events)
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	client := interceptClient(port)
+	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	output := string(body)
+
+	// Should have exactly one block message (for the dangerous command)
+	blockCount := strings.Count(output, "[BLOCKED by chainwatch]")
+	if blockCount != 1 {
+		t.Errorf("expected 1 block message, got %d in:\n%s", blockCount, output)
+	}
+	// Safe tool should pass through
+	if !strings.Contains(output, "call_safe") {
+		t.Errorf("expected safe tool to pass through, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingXAICompleteToolCall(t *testing.T) {
+	// xAI sends complete tool call in a single chunk (no fragmentation)
+	events := []string{
+		openaiSSE("chatcmpl-xai", map[string]any{
+			"role":    "assistant",
+			"content": nil,
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"id":    "call_xai",
+					"type":  "function",
+					"function": map[string]any{
+						"name":      "run_command",
+						"arguments": `{"command":"rm -rf /"}`,
+					},
+				},
+			},
+		}, nil),
+		openaiSSE("chatcmpl-xai", map[string]any{}, strPtr("tool_calls")),
+		"data: [DONE]\n\n",
+	}
+	upstream := sseStream(events)
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	client := interceptClient(port)
+	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	output := string(body)
+
+	// xAI complete-in-one-chunk should still be blocked
+	if !strings.Contains(output, "[BLOCKED by chainwatch]") {
+		t.Errorf("expected block message for xAI dangerous command, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingDoneSentinel(t *testing.T) {
+	events := []string{
+		openaiSSE("chatcmpl-1", map[string]any{
+			"role":    "assistant",
+			"content": "Hi",
+		}, nil),
+		openaiSSE("chatcmpl-1", map[string]any{}, strPtr("stop")),
+		"data: [DONE]\n\n",
+	}
+	upstream := sseStream(events)
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	client := interceptClient(port)
+	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	output := string(body)
+
+	if !strings.Contains(output, "[DONE]") {
+		t.Errorf("expected [DONE] sentinel to pass through, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingFragmentedArgs(t *testing.T) {
+	// Arguments split across many small chunks (typical OpenAI behavior)
+	events := []string{
+		openaiSSE("chatcmpl-1", map[string]any{
+			"role":    "assistant",
+			"content": nil,
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"id":    "call_frag",
+					"type":  "function",
+					"function": map[string]any{
+						"name":      "run_command",
+						"arguments": "",
+					},
+				},
+			},
+		}, nil),
+	}
+	// Fragment: {"command":"echo hello world"}
+	fragments := []string{`{"co`, `mman`, `d":"`, `echo`, ` hel`, `lo w`, `orld`, `"}`}
+	for _, frag := range fragments {
+		events = append(events, openaiSSE("chatcmpl-1", map[string]any{
+			"tool_calls": []any{
+				map[string]any{
+					"index": 0,
+					"function": map[string]any{
+						"arguments": frag,
+					},
+				},
+			},
+		}, nil))
+	}
+	events = append(events,
+		openaiSSE("chatcmpl-1", map[string]any{}, strPtr("tool_calls")),
+		"data: [DONE]\n\n",
+	)
+
+	upstream := sseStream(events)
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	client := interceptClient(port)
+	resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	output := string(body)
+
+	// Safe command reassembled from fragments — should not be blocked
+	if strings.Contains(output, "[BLOCKED") {
+		t.Errorf("safe fragmented command should not be blocked, got:\n%s", output)
+	}
+	if !strings.Contains(output, "call_frag") {
+		t.Errorf("expected tool call id in output, got:\n%s", output)
+	}
+}
+
+func TestOpenAIStreamingConcurrent(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []string{
+			openaiSSE("chatcmpl-c", map[string]any{
+				"role":    "assistant",
+				"content": nil,
+				"tool_calls": []any{
+					map[string]any{
+						"index": 0,
+						"id":    "call_c",
+						"type":  "function",
+						"function": map[string]any{
+							"name":      "run_command",
+							"arguments": `{"command":"rm -rf /"}`,
+						},
+					},
+				},
+			}, nil),
+			openaiSSE("chatcmpl-c", map[string]any{}, strPtr("tool_calls")),
+			"data: [DONE]\n\n",
+		}
+		for _, ev := range events {
+			fmt.Fprint(w, ev)
+			flusher.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	srv, port := newTestInterceptor(t, upstream.URL)
+	cancel := startTestInterceptor(t, srv)
+	defer cancel()
+
+	const concurrency = 10
+	var wg sync.WaitGroup
+	errs := make(chan error, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			client := interceptClient(port)
+			resp, err := client.Post(interceptURL(port, "/v1/chat/completions"), "application/json", strings.NewReader("{}"))
+			if err != nil {
+				errs <- fmt.Errorf("request failed: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if !strings.Contains(string(body), "[BLOCKED by chainwatch]") {
+				errs <- fmt.Errorf("expected block message, got:\n%s", string(body))
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+}
+
+// --- Rewrite SSE unit tests ---
+
+func TestRewriteOpenAISSEStructure(t *testing.T) {
+	tc := ToolCall{
+		ID:   "call_abc",
+		Name: "run_command",
+		Arguments: map[string]any{
+			"command": "rm -rf /",
+		},
+		Index: 0,
+	}
+	result := makeResult("deny", "denylist: destructive command", "denylist.block")
+
+	event := RewriteOpenAISSE(tc, result)
+
+	if !strings.HasPrefix(event, "data: ") {
+		t.Fatalf("expected data: prefix, got: %s", event)
+	}
+
+	dataJSON := strings.TrimPrefix(event, "data: ")
+	dataJSON = strings.TrimSuffix(dataJSON, "\n")
+
+	var chunk map[string]any
+	if err := json.Unmarshal([]byte(dataJSON), &chunk); err != nil {
+		t.Fatalf("failed to parse chunk JSON: %v", err)
+	}
+
+	choices, _ := chunk["choices"].([]any)
+	if len(choices) != 1 {
+		t.Fatalf("expected 1 choice, got %d", len(choices))
+	}
+	choice, _ := choices[0].(map[string]any)
+	delta, _ := choice["delta"].(map[string]any)
+	content, _ := delta["content"].(string)
+
+	if !strings.Contains(content, "[BLOCKED by chainwatch]") {
+		t.Errorf("expected block message in content, got: %s", content)
+	}
+	if !strings.Contains(content, "run_command") {
+		t.Errorf("expected tool name in block message, got: %s", content)
+	}
+}
+
+func TestRewriteOpenAISSEFinishStructure(t *testing.T) {
+	event := RewriteOpenAISSEFinish()
+
+	if !strings.HasPrefix(event, "data: ") {
+		t.Fatalf("expected data: prefix, got: %s", event)
+	}
+
+	dataJSON := strings.TrimPrefix(event, "data: ")
+	dataJSON = strings.TrimSuffix(dataJSON, "\n")
+
+	var chunk map[string]any
+	if err := json.Unmarshal([]byte(dataJSON), &chunk); err != nil {
+		t.Fatalf("failed to parse chunk JSON: %v", err)
+	}
+
+	choices, _ := chunk["choices"].([]any)
+	if len(choices) != 1 {
+		t.Fatalf("expected 1 choice, got %d", len(choices))
+	}
+	choice, _ := choices[0].(map[string]any)
+	fr, _ := choice["finish_reason"].(string)
+	if fr != "stop" {
+		t.Errorf("expected finish_reason=stop, got %s", fr)
 	}
 }
 
