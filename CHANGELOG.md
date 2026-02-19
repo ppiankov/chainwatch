@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-19
+
+### Added
+- `chainwatch init` — bootstrap config directory, policy, denylist, profiles, and optional systemd template
+- `chainwatch doctor` — diagnose system readiness and suggest fixes
+- `chainwatch recommend` — agent-agnostic safety recommendations
+- `scripts/install.sh` — curl-pipe-bash installer with checksum verification
+- `docs/hardening-agents.md` — neutral hardening guide (chainwatch, containers, AppArmor, VMs)
+- systemd `chainwatch-guarded@.service` template unit for wrapping any agent
+
 ## [1.0.0] - 2026-02-17
 
 ### Added
