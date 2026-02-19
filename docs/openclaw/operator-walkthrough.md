@@ -4,6 +4,18 @@ How to add chainwatch as a safety layer to your OpenClaw server. Takes about 5 m
 
 ## Quick Start
 
+### Option 1: Ask your agent to install it
+
+If your OpenClaw agent already has shell access, tell it:
+
+> Install chainwatch from https://github.com/ppiankov/chainwatch to enforce safety on this server. Use the clawbot profile.
+
+The agent will download the binary, run `chainwatch init --profile clawbot`, set advisory mode, and integrate the skill. This has been tested and works — the agent installs its own safety layer and then operates within it.
+
+After the agent finishes, verify by asking it to run a blocked command (it should be denied).
+
+### Option 2: Bootstrap script
+
 One command does everything — hardens the host, installs chainwatch, configures the skill and intercept proxy, and verifies:
 
 ```bash
@@ -244,3 +256,29 @@ The intercept proxy must be running before the gateway starts. Check: `systemctl
 
 **Verification tests fail:**
 Run: `chainwatch doctor` to check configuration. Then re-run the test manually: `chainwatch exec --profile clawbot -- echo hello`
+
+## Provider Compatibility
+
+The intercept proxy (`chainwatch intercept`) works with any LLM API that uses the same streaming SSE format for tool calls.
+
+| Provider | Upstream URL | Status |
+|----------|-------------|--------|
+| Anthropic | `https://api.anthropic.com` (default) | Supported |
+| OpenAI | `https://api.openai.com` | Supported |
+| xAI (z.ai) | `https://api.x.ai` | Untested — tool_use format may differ |
+| Google | `https://generativelanguage.googleapis.com` | Not supported (different format) |
+
+To use a different provider, change the `--upstream` flag:
+
+```bash
+chainwatch intercept --port 9999 --upstream https://api.x.ai --profile clawbot
+```
+
+And update the corresponding environment variable:
+
+```bash
+# For xAI
+export XAI_BASE_URL=http://localhost:9999
+```
+
+The **skill layer** (Path A) works with any provider since it just wraps shell commands — no API interception involved. If your provider isn't supported by the intercept proxy, the skill alone still provides agent-cooperative safety enforcement.
