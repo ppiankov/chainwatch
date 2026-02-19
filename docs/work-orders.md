@@ -1801,7 +1801,7 @@ Stored in `/home/nullbot/state/tokens/<job-id>.json`. Deleted after job complete
 
 ## WO-CW50: Work Order schema and generator
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** high
 **Depends on:** WO-CW49
 
@@ -2261,7 +2261,7 @@ Nullbot currently treats each investigation as stateless. Fabrik-Codek (ikchain/
 **Gate:** WO-RES-03 (redaction fidelity) and WO-RES-04 (local LLM capability) must complete first.
 - [x] WO-CW49: Redaction engine (extend existing internal/redact with token maps)
 - [ ] WO-CW51: Observe mode (read-only investigation runbooks)
-- [ ] WO-CW50: Work Order schema and generator
+- [x] WO-CW50: Work Order schema and generator
 - [ ] WO-RES-01: LlamaFirewall comparison (inform future direction)
 
 ## v1.3 — Daemon & Approval
