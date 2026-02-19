@@ -400,7 +400,8 @@ If the chain crosses a hard boundary, the system refuses.
 - **Path-based classification**: False positives/negatives expected (e.g., /finance vs /hr/salary)
 - **Monkey-patching limitations**: Won't catch C extension file I/O or subprocess calls
 
-[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ppiankov/chainwatch/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ppiankov/chainwatch/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ppiankov/chainwatch/compare/v0.1.2...v1.0.0
 [0.1.2]: https://github.com/ppiankov/chainwatch/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ppiankov/chainwatch/compare/v0.1.0...v0.1.1
