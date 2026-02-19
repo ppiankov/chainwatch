@@ -46,26 +46,38 @@ A single Go binary that wraps agent tool invocations, evaluates deterministic po
 
 ## Installation
 
+### Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ppiankov/chainwatch/main/scripts/install.sh | bash
+```
+
+Downloads the binary, runs `chainwatch init`, and verifies with `chainwatch doctor`.
+
 ### From Source
 
 ```bash
 go install github.com/ppiankov/chainwatch/cmd/chainwatch@latest
+chainwatch init
 ```
 
 ### From GitHub Release
 
-Download the binary for your platform from [Releases](https://github.com/ppiankov/chainwatch/releases):
-
 ```bash
 # Linux (amd64)
 curl -sL https://github.com/ppiankov/chainwatch/releases/latest/download/chainwatch-linux-amd64 -o chainwatch
-chmod +x chainwatch
-sudo mv chainwatch /usr/local/bin/
+chmod +x chainwatch && sudo mv chainwatch /usr/local/bin/
 
 # macOS (Apple Silicon)
 curl -sL https://github.com/ppiankov/chainwatch/releases/latest/download/chainwatch-darwin-arm64 -o chainwatch
-chmod +x chainwatch
-sudo mv chainwatch /usr/local/bin/
+chmod +x chainwatch && sudo mv chainwatch /usr/local/bin/
+```
+
+Then bootstrap:
+
+```bash
+chainwatch init
+chainwatch doctor
 ```
 
 ### From Source (Development)
@@ -98,12 +110,17 @@ chainwatch exec --profile coding-agent -- curl https://api.example.com/data
 # Available profiles: coding-agent, research-agent, customer-support, data-analyst, clawbot
 ```
 
-### 3. Initialize Policy
+### 3. Bootstrap Configuration
 
 ```bash
-# Generate default policy and denylist configs
-chainwatch init-policy
-chainwatch init-denylist
+# One command — creates policy.yaml, denylist.yaml, profiles/
+chainwatch init
+
+# With a built-in profile
+chainwatch init --profile clawbot
+
+# Verify setup
+chainwatch doctor
 ```
 
 ## Architecture
@@ -141,7 +158,7 @@ Agent ──► chainwatch ──► Tool
 
 **Policy tools:** `policy diff`, `policy simulate`, `policy gate`, `certify`
 
-**Setup:** `init-denylist`, `init-policy`, `version`
+**Setup:** `init`, `doctor`, `recommend`, `init-denylist`, `init-policy`, `version`
 
 ## Policy Configuration
 
