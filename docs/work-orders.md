@@ -2360,6 +2360,12 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 - [x] WO-CW56: Approval gateway (human-in-the-loop)
 - [x] WO-CW55: Maildrop integration (email → inbox)
 
+## v1.3.1 — Integration Hardening
+**Gate:** v1.3 complete, OpenClaw field integration done.
+- [ ] WO-CW57: Intercept proxy multi-provider support (xAI/z.ai SSE format)
+- [ ] WO-CW58: Intercept proxy streaming test suite (SSE rewrite path, not just exec)
+- [ ] WO-RES-10: OpenClaw exec hook feasibility (upstream feature request — can they add exec.wrapper config?)
+
 ## v1.4 — Two-Tier Pipeline
 **Gate:** v1.3 daemon + WO-RES-05 (WO format decision) complete.
 - [ ] WO-CW52: Runforge WO ingestion
@@ -2372,6 +2378,7 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 - [ ] WO-CW41: eBPF observe mode
 - [ ] WO-CW42: eBPF/seccomp enforcement
 - [ ] WO-CW43: AppArmor/SELinux profile generator
+- [ ] WO-CW59: Constrained user mode (non-root agent, chainwatch as mandatory exec gateway)
 - [ ] WO-RES-06: Mobile agent feasibility (informs nullbot.app direction)
 - [ ] WO-RES-07: Session learning and knowledge flywheel (informs investigation history)
 - [ ] WO-RES-08: Sparring mode — idea purifier with structured hostility
@@ -2384,6 +2391,8 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 4. **Approval before pipeline.** The human-in-the-loop gateway is a safety requirement, not a feature. It must exist before WOs flow to cloud agents.
 5. **Neurorouter extraction is v1.4.** Not urgent — nullbot's inline `askLLM()` and runforge's internal proxy both work. Extract when both consumers are stable.
 6. **Driver-level enforcement (seccomp/eBPF) is v2.0.** Kernel-level enforcement is the endgame but depends on the whole pipeline being proven first.
+7. **Integration hardening (v1.3.1) before pipeline (v1.4).** The OpenClaw field test exposed real gaps: intercept proxy only supports Anthropic/OpenAI SSE format, no automated tests for the SSE rewrite path, and the skill layer is cooperative-only until OpenClaw adds a native exec hook. Fix these before adding more pipeline stages.
+8. **Constrained user mode is v2.0.** Running the agent as non-root with chainwatch as the mandatory execution gateway is the architectural answer to "agent cannot operate without guardrails." Requires seccomp/AppArmor to be meaningful — without OS-level enforcement, the agent can just escalate.
 
 ## Non-Goals
 
