@@ -6,15 +6,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/daemon"
 	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/redact"
 	"github.com/ppiankov/chainwatch/internal/wo"
@@ -677,6 +681,155 @@ Examples:
 	observeCmd.Flags().StringVar(&flagProfile, "profile", defaultProfile, "chainwatch profile (env: NULLBOT_PROFILE)")
 	observeCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show runbook steps without executing")
 
+	var (
+		daemonInbox    string
+		daemonOutbox   string
+		daemonState    string
+		daemonPollMode bool
+	)
+
+	daemonCmd := &cobra.Command{
+		Use:   "daemon",
+		Short: "run as inbox/outbox job processing service",
+		Long: `Watches an inbox directory for job files and processes them through
+chainwatch-enforced investigation runbooks. Results are written to the outbox.
+
+Jobs with observations produce work orders marked pending_approval.
+Use 'nullbot approve' to approve pending work orders.
+
+Examples:
+  nullbot daemon --inbox /home/nullbot/inbox --outbox /home/nullbot/outbox
+  nullbot daemon --poll  # use polling instead of inotify`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := resolveConfig(flagURL, flagModel, flagProfile, flagMaxSteps, flagDryRun)
+
+			chainwatch := os.Getenv("CHAINWATCH_BIN")
+			if chainwatch == "" {
+				chainwatch = "chainwatch"
+			}
+			auditLog := os.Getenv("AUDIT_LOG")
+			if auditLog == "" {
+				auditLog = "/tmp/nullbot-daemon.jsonl"
+			}
+
+			dcfg := daemon.Config{
+				Dirs: daemon.DirConfig{
+					Inbox:  daemonInbox,
+					Outbox: daemonOutbox,
+					State:  daemonState,
+				},
+				Profile:    cfg.profile,
+				Chainwatch: chainwatch,
+				AuditLog:   auditLog,
+				APIURL:     cfg.apiURL,
+				APIKey:     cfg.apiKey,
+				Model:      cfg.model,
+				PollMode:   daemonPollMode,
+			}
+
+			d, err := daemon.New(dcfg)
+			if err != nil {
+				return err
+			}
+
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+
+			fmt.Printf("%s%s=== NULLBOT DAEMON ===%s\n\n", bold, cyan, reset)
+			fmt.Printf("%sInbox:   %s%s\n", dim, daemonInbox, reset)
+			fmt.Printf("%sOutbox:  %s%s\n", dim, daemonOutbox, reset)
+			fmt.Printf("%sState:   %s%s\n", dim, daemonState, reset)
+			fmt.Printf("%sProfile: %s%s\n", dim, cfg.profile, reset)
+			if daemonPollMode {
+				fmt.Printf("%sWatcher: polling%s\n", dim, reset)
+			} else {
+				fmt.Printf("%sWatcher: fsnotify%s\n", dim, reset)
+			}
+			fmt.Printf("\n%sWatching for jobs...%s\n", dim, reset)
+
+			return d.Run(ctx)
+		},
+	}
+
+	daemonCmd.Flags().StringVar(&daemonInbox, "inbox", "/home/nullbot/inbox", "inbox directory for job files")
+	daemonCmd.Flags().StringVar(&daemonOutbox, "outbox", "/home/nullbot/outbox", "outbox directory for results")
+	daemonCmd.Flags().StringVar(&daemonState, "state", "/home/nullbot/state", "state directory for processing")
+	daemonCmd.Flags().BoolVar(&daemonPollMode, "poll", false, "use polling instead of inotify")
+	daemonCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint (env: NULLBOT_API_URL)")
+	daemonCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name (env: NULLBOT_MODEL)")
+	daemonCmd.Flags().StringVar(&flagProfile, "profile", defaultProfile, "chainwatch profile (env: NULLBOT_PROFILE)")
+
+	// Shared flags for approval commands.
+	var approvalOutbox, approvalState string
+
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "list pending work orders awaiting approval",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			g := daemon.NewGateway(approvalOutbox, approvalState, 24*time.Hour)
+			pending, err := g.PendingWOs()
+			if err != nil {
+				return err
+			}
+			if len(pending) == 0 {
+				fmt.Printf("%sNo pending work orders.%s\n", dim, reset)
+				return nil
+			}
+			fmt.Printf("%s%sPending Work Orders%s\n\n", bold, cyan, reset)
+			for _, p := range pending {
+				ttl := time.Until(p.ExpiresAt).Round(time.Minute)
+				host := p.Target.Host
+				if host == "" {
+					host = "localhost"
+				}
+				fmt.Printf("  %s%-16s%s %-12s %s(expires in %s)%s\n",
+					bold, p.ID, reset, host, dim, ttl, reset)
+			}
+			return nil
+		},
+	}
+	listCmd.Flags().StringVar(&approvalOutbox, "outbox", "/home/nullbot/outbox", "outbox directory")
+	listCmd.Flags().StringVar(&approvalState, "state", "/home/nullbot/state", "state directory")
+
+	approveCmd := &cobra.Command{
+		Use:   "approve <wo-id>",
+		Short: "approve a pending work order for execution",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			g := daemon.NewGateway(approvalOutbox, approvalState, 24*time.Hour)
+			woID := args[0]
+			if err := g.Approve(woID); err != nil {
+				return err
+			}
+			fmt.Printf("%sApproved%s %s → moved to state/approved/\n", green, reset, woID)
+			return nil
+		},
+	}
+	approveCmd.Flags().StringVar(&approvalOutbox, "outbox", "/home/nullbot/outbox", "outbox directory")
+	approveCmd.Flags().StringVar(&approvalState, "state", "/home/nullbot/state", "state directory")
+
+	var rejectReason string
+	rejectCmd := &cobra.Command{
+		Use:   "reject <wo-id>",
+		Short: "reject a pending work order",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			g := daemon.NewGateway(approvalOutbox, approvalState, 24*time.Hour)
+			woID := args[0]
+			if rejectReason == "" {
+				rejectReason = "rejected by operator"
+			}
+			if err := g.Reject(woID, rejectReason); err != nil {
+				return err
+			}
+			fmt.Printf("%sRejected%s %s → moved to state/rejected/\n", red, reset, woID)
+			return nil
+		},
+	}
+	rejectCmd.Flags().StringVar(&approvalOutbox, "outbox", "/home/nullbot/outbox", "outbox directory")
+	rejectCmd.Flags().StringVar(&approvalState, "state", "/home/nullbot/state", "state directory")
+	rejectCmd.Flags().StringVar(&rejectReason, "reason", "", "rejection reason")
+
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "print nullbot version",
@@ -685,7 +838,7 @@ Examples:
 		},
 	}
 
-	rootCmd.AddCommand(runCmd, observeCmd, versionCmd)
+	rootCmd.AddCommand(runCmd, observeCmd, daemonCmd, listCmd, approveCmd, rejectCmd, versionCmd)
 
 	// CI compatibility: bare invocation with GROQ_API_KEY or NULLBOT_CI runs default mission.
 	// This keeps the release workflow VHS recording working.

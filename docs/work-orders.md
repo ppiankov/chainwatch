@@ -1683,7 +1683,7 @@ FAQ still says "experimental prototype" and getting-started.md is Python-centric
 
 ## WO-CW48: Nullbot daemon mode (inbox/outbox)
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** high
 
 ### Summary
@@ -2007,7 +2007,7 @@ Runforge's `internal/proxy/` (Responses API ↔ Chat Completions translation, mo
 
 ## WO-CW55: Maildrop → inbox integration
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** low
 **Depends on:** WO-CW48
 
@@ -2046,7 +2046,7 @@ Email triggers job creation, not execution. Maildrop (or Postfix pipe) extracts 
 
 ## WO-CW56: Approval gateway (human-in-the-loop for WO execution)
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** high
 **Depends on:** WO-CW50, WO-CW52
 
@@ -2356,9 +2356,9 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 
 ## v1.3 — Daemon & Approval
 **Gate:** v1.2 observe mode working end-to-end.
-- [ ] WO-CW48: Daemon mode (inbox/outbox, inotify, systemd)
-- [ ] WO-CW56: Approval gateway (human-in-the-loop)
-- [ ] WO-CW55: Maildrop integration (email → inbox)
+- [x] WO-CW48: Daemon mode (inbox/outbox, inotify, systemd)
+- [x] WO-CW56: Approval gateway (human-in-the-loop)
+- [x] WO-CW55: Maildrop integration (email → inbox)
 
 ## v1.4 — Two-Tier Pipeline
 **Gate:** v1.3 daemon + WO-RES-05 (WO format decision) complete.
