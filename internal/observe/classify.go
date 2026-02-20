@@ -1,15 +1,15 @@
 package observe
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/wo"
+	"github.com/ppiankov/neurorouter"
 )
 
 // ClassifierConfig holds parameters for LLM-based observation classification.
@@ -60,56 +60,32 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 600
 	}
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = 60 * time.Second
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 60 * time.Second
 	}
 
-	messages := []map[string]string{
-		{"role": "system", "content": classifySystemPrompt},
-		{"role": "user", "content": evidence},
+	client := &neurorouter.Client{
+		BaseURL:    cfg.APIURL,
+		APIKey:     cfg.APIKey,
+		Model:      cfg.Model,
+		HTTPClient: &http.Client{Timeout: timeout},
 	}
 
-	body, _ := json.Marshal(map[string]interface{}{
-		"model":       cfg.Model,
-		"messages":    messages,
-		"max_tokens":  cfg.MaxTokens,
-		"temperature": 0,
+	temp := float64(0)
+	resp, err := client.Complete(context.Background(), &neurorouter.CompletionRequest{
+		Messages: []neurorouter.ChatMessage{
+			{Role: "system", Content: classifySystemPrompt},
+			{Role: "user", Content: evidence},
+		},
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: &temp,
 	})
-
-	req, err := http.NewRequest("POST", cfg.APIURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	if cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("classify request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("classify HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, fmt.Errorf("classify: %w", err)
 	}
 
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil || len(result.Choices) == 0 {
-		return nil, fmt.Errorf("empty classify response")
-	}
-
-	raw := strings.TrimSpace(result.Choices[0].Message.Content)
-	return parseClassification(raw)
+	return parseClassification(resp.Content)
 }
 
 // parseClassification extracts observations from LLM response JSON.
