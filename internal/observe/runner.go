@@ -1,5 +1,8 @@
 // Package observe runs read-only investigation runbooks through chainwatch
 // and collects structured observations. All reads are policy-gated.
+//
+// INSPECT-ONLY: This package hard-locks to the clawbot profile. The profile
+// cannot be overridden — observe mode is structurally read-only.
 package observe
 
 import (
@@ -11,11 +14,14 @@ import (
 	"github.com/ppiankov/chainwatch/internal/wo"
 )
 
+// inspectProfile is the only profile observe mode will use.
+// This is not configurable — inspect-only is a structural guarantee.
+const inspectProfile = "clawbot"
+
 // RunnerConfig holds parameters for an investigation run.
 type RunnerConfig struct {
 	Scope      string // target directory, e.g. "/var/www/site"
 	Type       string // runbook type: "wordpress", "linux"
-	Profile    string // chainwatch profile
 	Chainwatch string // path to chainwatch binary
 	AuditLog   string // path to audit log
 }
@@ -53,16 +59,14 @@ type Runbook struct {
 }
 
 // Run executes a runbook through chainwatch and returns the results.
-// Every command is routed through `chainwatch exec` for policy enforcement.
+// Every command is routed through `chainwatch exec --profile clawbot`.
+// The profile is hard-locked — observe mode is structurally inspect-only.
 func Run(cfg RunnerConfig, rb *Runbook) (*RunResult, error) {
 	if cfg.Chainwatch == "" {
 		cfg.Chainwatch = "chainwatch"
 	}
 	if cfg.AuditLog == "" {
 		cfg.AuditLog = "/tmp/nullbot-observe.jsonl"
-	}
-	if cfg.Profile == "" {
-		cfg.Profile = "clawbot"
 	}
 
 	result := &RunResult{
@@ -87,7 +91,7 @@ func Run(cfg RunnerConfig, rb *Runbook) (*RunResult, error) {
 func execStep(cfg RunnerConfig, command, purpose string) StepResult {
 	start := time.Now()
 
-	args := []string{"exec", "--profile", cfg.Profile, "--audit-log", cfg.AuditLog, "--"}
+	args := []string{"exec", "--profile", inspectProfile, "--audit-log", cfg.AuditLog, "--"}
 	args = append(args, "sh", "-c", command)
 
 	cmd := exec.Command(cfg.Chainwatch, args...)
