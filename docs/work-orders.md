@@ -1949,7 +1949,7 @@ Two repos, no cross-repo Go imports. The contract is an IngestPayload JSON file.
 
 ## WO-CW53: VM deployment profile (no-local-LLM)
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** medium
 **Depends on:** WO-CW49
 
@@ -2483,7 +2483,7 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 **Gate:** v1.3 daemon + WO-RES-05 (WO format decision) complete.
 - [x] WO-CW52: Runforge WO ingestion
 - [ ] WO-CW54: Neurorouter package extraction
-- [ ] WO-CW53: VM deployment profile
+- [x] WO-CW53: VM deployment profile
 
 ## v2.0 — Full Architecture
 **Gate:** v1.4 working pipeline proven on real infrastructure (personal web server).
