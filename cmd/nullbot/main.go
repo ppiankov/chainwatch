@@ -5,20 +5,16 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
-
-	"path/filepath"
 
 	"github.com/ppiankov/chainwatch/internal/daemon"
 	"github.com/ppiankov/chainwatch/internal/observe"
@@ -26,6 +22,7 @@ import (
 	"github.com/ppiankov/chainwatch/internal/redact"
 	"github.com/ppiankov/chainwatch/internal/systemd"
 	"github.com/ppiankov/chainwatch/internal/wo"
+	"github.com/ppiankov/neurorouter"
 	"github.com/spf13/cobra"
 )
 
@@ -194,64 +191,33 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// askLLM calls an OpenAI-compatible chat completions endpoint.
-func askLLM(cfg config, systemMsg, userMsg string, maxTokens int) (string, error) {
-	messages := []map[string]string{
-		{"role": "system", "content": systemMsg},
-		{"role": "user", "content": userMsg},
+// newLLMClient creates a neurorouter client from nullbot config.
+func newLLMClient(cfg config) *neurorouter.Client {
+	return &neurorouter.Client{
+		BaseURL: cfg.apiURL,
+		APIKey:  cfg.apiKey,
+		Model:   cfg.model,
 	}
-
-	body, _ := json.Marshal(map[string]interface{}{
-		"model":       cfg.model,
-		"messages":    messages,
-		"max_tokens":  maxTokens,
-		"temperature": 0,
-	})
-
-	req, err := http.NewRequest("POST", cfg.apiURL, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	if cfg.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.apiKey)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil || len(result.Choices) == 0 {
-		return "", fmt.Errorf("empty response")
-	}
-	return strings.TrimSpace(result.Choices[0].Message.Content), nil
 }
 
 // planFromLLM asks the LLM to generate a command plan for a mission.
 func planFromLLM(cfg config, mission string) (*plan, error) {
-	systemMsg := "You are a system administration agent. Return only valid JSON, no markdown fences, no commentary."
-
-	raw, err := askLLM(cfg, systemMsg, mission, 500)
+	client := newLLMClient(cfg)
+	temp := float64(0)
+	resp, err := client.Complete(context.Background(), &neurorouter.CompletionRequest{
+		Messages: []neurorouter.ChatMessage{
+			{Role: "system", Content: "You are a system administration agent. Return only valid JSON, no markdown fences, no commentary."},
+			{Role: "user", Content: mission},
+		},
+		MaxTokens:   500,
+		Temperature: &temp,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Strip markdown fences if the model wraps anyway.
+	raw := resp.Content
 	raw = strings.TrimPrefix(raw, "```json")
 	raw = strings.TrimPrefix(raw, "```")
 	raw = strings.TrimSuffix(raw, "```")
