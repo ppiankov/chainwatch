@@ -16,7 +16,6 @@ import (
 // ProcessorConfig holds runtime configuration for job processing.
 type ProcessorConfig struct {
 	Dirs       DirConfig
-	Profile    string
 	Chainwatch string
 	AuditLog   string
 	APIURL     string
@@ -36,9 +35,6 @@ func NewProcessor(cfg ProcessorConfig) *Processor {
 	}
 	if cfg.AuditLog == "" {
 		cfg.AuditLog = "/tmp/nullbot-daemon.jsonl"
-	}
-	if cfg.Profile == "" {
-		cfg.Profile = "clawbot"
 	}
 	return &Processor{cfg: cfg}
 }
@@ -113,7 +109,6 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 	runnerCfg := observe.RunnerConfig{
 		Scope:      job.Target.Scope,
 		Type:       rbType,
-		Profile:    p.cfg.Profile,
 		Chainwatch: p.cfg.Chainwatch,
 		AuditLog:   p.cfg.AuditLog,
 	}
@@ -133,30 +128,37 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 
 	// Classify findings if requested and evidence exists.
 	var observations []wo.Observation
-	if classify && evidence != "" && p.cfg.APIURL != "" {
-		classifyCfg := observe.ClassifierConfig{
-			APIURL: p.cfg.APIURL,
-			APIKey: p.cfg.APIKey,
-			Model:  p.cfg.Model,
-		}
-
-		// Redact for cloud mode.
-		classifyEvidence := evidence
-		mode := redact.ResolveMode(p.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))
-		if mode == redact.ModeCloud {
-			tm := redact.NewTokenMap(fmt.Sprintf("daemon-%s", job.ID))
-			classifyEvidence = redact.Redact(evidence, tm)
-			if tm.Len() > 0 {
-				classifyEvidence = tm.Legend() + "\n" + classifyEvidence
-			}
-		}
-
-		obs, err := observe.Classify(classifyCfg, classifyEvidence)
-		if err != nil {
-			// Classification failure is not fatal — still produce result.
-			result.Error = fmt.Sprintf("classification failed: %v", err)
+	if classify && evidence != "" {
+		if p.cfg.APIURL == "" {
+			// No LLM configured — cache evidence for later retry.
+			p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
+			result.Error = "no LLM available (evidence cached for retry)"
 		} else {
-			observations = obs
+			classifyCfg := observe.ClassifierConfig{
+				APIURL: p.cfg.APIURL,
+				APIKey: p.cfg.APIKey,
+				Model:  p.cfg.Model,
+			}
+
+			// Redact for cloud mode.
+			classifyEvidence := evidence
+			mode := redact.ResolveMode(p.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))
+			if mode == redact.ModeCloud {
+				tm := redact.NewTokenMap(fmt.Sprintf("daemon-%s", job.ID))
+				classifyEvidence = redact.Redact(evidence, tm)
+				if tm.Len() > 0 {
+					classifyEvidence = tm.Legend() + "\n" + classifyEvidence
+				}
+			}
+
+			obs, err := observe.Classify(classifyCfg, classifyEvidence)
+			if err != nil {
+				// Classification failed — cache evidence for retry.
+				p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
+				result.Error = fmt.Sprintf("classification failed: %v (evidence cached for retry)", err)
+			} else {
+				observations = obs
+			}
 		}
 	}
 
@@ -188,6 +190,22 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 	}
 
 	return result, nil
+}
+
+// cacheEvidence writes raw evidence to the cache directory for later retry.
+func (p *Processor) cacheEvidence(jobID, scope, rbType, evidence string) {
+	cacheDir := observe.CacheDir(p.cfg.Dirs.State)
+	entry := &observe.CachedObservation{
+		ID:       jobID,
+		JobID:    jobID,
+		Scope:    scope,
+		Type:     rbType,
+		Evidence: evidence,
+		CachedAt: time.Now().UTC(),
+	}
+	if err := observe.WriteCache(cacheDir, entry); err != nil {
+		fmt.Fprintf(os.Stderr, "daemon: cache evidence %s: %v\n", jobID, err)
+	}
 }
 
 // deriveGoals generates remediation goals from observations.

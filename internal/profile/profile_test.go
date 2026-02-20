@@ -287,7 +287,7 @@ func TestValidateProfileBadRegex(t *testing.T) {
 }
 
 func TestAllBuiltinProfilesLoad(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst"}
+	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -301,7 +301,7 @@ func TestAllBuiltinProfilesLoad(t *testing.T) {
 }
 
 func TestAllBuiltinProfilesValidate(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst"}
+	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -316,7 +316,7 @@ func TestAllBuiltinProfilesValidate(t *testing.T) {
 
 func TestProfileListIncludesAllBuiltins(t *testing.T) {
 	names := List()
-	expected := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst"}
+	expected := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
 	for _, exp := range expected {
 		found := false
 		for _, n := range names {
@@ -368,7 +368,7 @@ func TestInitProfileReturnsValidYAML(t *testing.T) {
 }
 
 func TestAllProfilesHaveNonEmptyBoundaries(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst"}
+	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -381,6 +381,50 @@ func TestAllProfilesHaveNonEmptyBoundaries(t *testing.T) {
 		eb := p.ExecutionBoundaries
 		if len(eb.URLs)+len(eb.Files)+len(eb.Commands) == 0 {
 			t.Errorf("profile %q has no execution boundaries", name)
+		}
+	}
+}
+
+func TestVMCloudBlocksWriteOperations(t *testing.T) {
+	p, err := Load("vm-cloud")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MinTier < 2 {
+		t.Errorf("expected min_tier >= 2, got %d", p.MinTier)
+	}
+
+	matched, _ := MatchesAuthority(p, "write the config file")
+	if !matched {
+		t.Error("expected vm-cloud to block write operations via authority boundaries")
+	}
+
+	matched, _ = MatchesAuthority(p, "delete the old backup")
+	if !matched {
+		t.Error("expected vm-cloud to block delete operations via authority boundaries")
+	}
+}
+
+func TestVMCloudBlocksPackageManagement(t *testing.T) {
+	p, err := Load("vm-cloud")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"sudo apt install nginx",
+		"systemctl restart nginx",
+		"service nginx start",
+		"apt update",
+		"yum install httpd",
+		"pip install requests",
+	} {
+		blocked, _ := dl.IsBlocked(cmd, "command")
+		if !blocked {
+			t.Errorf("expected %q to be blocked by vm-cloud", cmd)
 		}
 	}
 }

@@ -17,6 +17,9 @@ var customerSupportYAML []byte
 //go:embed profiles/data-analyst.yaml
 var dataAnalystYAML []byte
 
+//go:embed profiles/vm-cloud.yaml
+var vmCloudYAML []byte
+
 // builtinProfiles maps profile names to their embedded YAML content.
 var builtinProfiles = map[string][]byte{
 	"clawbot":          clawbotYAML,
@@ -24,4 +27,5 @@ var builtinProfiles = map[string][]byte{
 	"research-agent":   researchAgentYAML,
 	"customer-support": customerSupportYAML,
 	"data-analyst":     dataAnalystYAML,
+	"vm-cloud":         vmCloudYAML,
 }

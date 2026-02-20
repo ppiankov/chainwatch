@@ -81,3 +81,45 @@ func TestDaemonTemplate(t *testing.T) {
 		}
 	}
 }
+
+func TestVMDaemonTemplate(t *testing.T) {
+	tmpl := VMDaemonTemplate()
+
+	// Must be a valid systemd unit.
+	for _, section := range []string{"[Unit]", "[Service]", "[Install]"} {
+		if !strings.Contains(tmpl, section) {
+			t.Errorf("template missing section %s", section)
+		}
+	}
+
+	// Must reference EnvironmentFile.
+	if !strings.Contains(tmpl, "EnvironmentFile=/home/nullbot/config/nullbot.env") {
+		t.Error("template missing EnvironmentFile")
+	}
+
+	// VM-specific resource limits.
+	for _, limit := range []string{"CPUQuota=30%", "MemoryMax=256M", "TasksMax=30"} {
+		if !strings.Contains(tmpl, limit) {
+			t.Errorf("template missing resource limit %s", limit)
+		}
+	}
+
+	// Must NOT have the default daemon's higher limits.
+	if strings.Contains(tmpl, "MemoryMax=512M") {
+		t.Error("VM template should have 256M, not 512M")
+	}
+	if strings.Contains(tmpl, "TasksMax=50") {
+		t.Error("VM template should have 30 tasks, not 50")
+	}
+
+	// Must have security hardening.
+	for _, directive := range []string{
+		"NoNewPrivileges=true",
+		"ProtectSystem=strict",
+		"MemoryDenyWriteExecute=true",
+	} {
+		if !strings.Contains(tmpl, directive) {
+			t.Errorf("template missing security directive %s", directive)
+		}
+	}
+}

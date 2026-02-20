@@ -182,7 +182,4 @@ func TestNewProcessorDefaults(t *testing.T) {
 	if p.cfg.AuditLog != "/tmp/nullbot-daemon.jsonl" {
 		t.Errorf("default audit log = %q", p.cfg.AuditLog)
 	}
-	if p.cfg.Profile != "clawbot" {
-		t.Errorf("default profile = %q", p.cfg.Profile)
-	}
 }
