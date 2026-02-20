@@ -1900,39 +1900,50 @@ Before nullbot can generate WOs, it needs an observe mode that collects evidence
 
 ---
 
-## WO-CW52: Runforge WO ingestion
+## WO-CW52: Runforge WO ingestion ✅
 
-**Status:** `[ ]` planned
+**Status:** `[x]` done
 **Priority:** medium
 **Depends on:** WO-CW50
 
-### Summary
-Runforge gains a new input mode: instead of task files with prompt text, it accepts structured WOs from nullbot. The WO constraints become chainwatch policy for the execution agent. Runforge selects the best cloud agent via its existing cascade/failover system.
+### Why
+
+Nullbot is not a dashboard. It is a pre-processor of responsibility. It observes, gathers evidence, classifies findings, and produces structured work orders — bounded proposals for remediation. But without CW52, approved WOs sit in `state/approved/` with nowhere to go. The pipeline ends at the human's inbox.
+
+CW52 closes the loop. An approved WO flows to a cloud agent that operates under the same constraints the WO specifies. The architecture explicitly separates detection (observe), diagnosis (classify), authority (approve), and enforcement (chainwatch exec). The human stays at the authority gate. The agent stays inside the fence.
+
+This is not AI replacing operators. This is AI sharpening operators.
 
 ### Design
-- New task type: `type: work_order` in runforge task file
-- WO constraints map to chainwatch profile overrides:
-  - `allow_paths` → profile filesystem scope
-  - `deny_paths` → denylist additions
-  - `network: false` → deny all outbound
-  - `sudo: false` → deny privilege escalation
-  - `max_steps` → budget enforcement
-- Cloud agent receives: WO observations + proposed goals + constraints
-- Cloud agent responds with: action plan (commands + reasons)
-- Runforge executes each action through chainwatch exec
 
-### Steps
-1. Add WO task type to runforge task schema
-2. Map WO constraints to chainwatch profile at runtime
-3. Build prompt from WO observations + goals (no raw evidence, only structured data)
-4. Execute action plan through chainwatch with WO-derived profile
-5. Collect results, write to nullbot outbox if source was daemon mode
+Two repos, no cross-repo Go imports. The contract is an IngestPayload JSON file.
+
+**Chainwatch side** — `Gateway.Approve()` emits IngestPayload to `state/ingested/`:
+- `internal/ingest/payload.go` — IngestPayload schema, `Build()` strips raw evidence Data from observations, `Validate()`, `Write()` (atomic tmp+rename)
+- Modified `internal/daemon/gateway.go` — approve writes payload after moving WO to approved
+- Modified `internal/daemon/dirs.go` — added `state/ingested/` subdirectory
+
+**Runforge side** — `runforge ingest --payload <path>`:
+- `internal/ingest/payload.go` — mirror schema + `Load()`, `Validate()`
+- `internal/ingest/profile.go` — maps WO constraints to ephemeral chainwatch profile YAML
+- `internal/ingest/prompt.go` — builds severity-sorted remediation prompt from observations + goals
+- `internal/cli/ingest.go` — one-shot CLI command, cascade execution, dry-run support
+
+**Constraint → profile mapping:**
+- `deny_paths` → `execution_boundaries.files`
+- `network: false` → deny curl, wget, nc, ssh, scp, rsync
+- `sudo: false` → deny sudo, su, doas, pkexec
+- `allow_paths` → policy rules (first-match-wins)
+- `max_steps` → enforced via prompt constraint (soft)
 
 ### Acceptance
-- Runforge processes WO task files
-- WO constraints enforced as chainwatch policy during execution
-- Cloud agent never receives raw credentials or unredacted paths
-- Cascade/failover works for WO tasks (e.g., Claude fails → Codex)
+- [x] `nullbot approve` writes IngestPayload to `state/ingested/`
+- [x] `runforge ingest` loads payload, builds profile, builds prompt, executes via cascade
+- [x] WO constraints enforced as chainwatch profile during execution
+- [x] Cloud agent receives only typed observations, not raw evidence
+- [x] Cascade/failover works (Claude fails → Codex)
+- [x] `--dry-run` shows prompt and profile without execution
+- [x] All new code has tests, passes with -race
 
 ---
 
@@ -2470,7 +2481,7 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 
 ## v1.4 — Two-Tier Pipeline
 **Gate:** v1.3 daemon + WO-RES-05 (WO format decision) complete.
-- [ ] WO-CW52: Runforge WO ingestion
+- [x] WO-CW52: Runforge WO ingestion
 - [ ] WO-CW54: Neurorouter package extraction
 - [ ] WO-CW53: VM deployment profile
 
