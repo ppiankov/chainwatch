@@ -13,7 +13,7 @@ const dirPerm = 0750
 type DirConfig struct {
 	Inbox  string // incoming job files
 	Outbox string // completed results
-	State  string // state/{processing,approved,rejected}
+	State  string // state/{processing,approved,rejected,ingested}
 }
 
 // DefaultDirConfig returns reasonable defaults for local development.
@@ -40,6 +40,11 @@ func (d DirConfig) RejectedDir() string {
 	return filepath.Join(d.State, "rejected")
 }
 
+// IngestedDir returns the path to the ingested subdirectory.
+func (d DirConfig) IngestedDir() string {
+	return filepath.Join(d.State, "ingested")
+}
+
 // EnsureDirs creates all required directories. Idempotent.
 func EnsureDirs(cfg DirConfig) error {
 	dirs := []string{
@@ -48,6 +53,7 @@ func EnsureDirs(cfg DirConfig) error {
 		cfg.ProcessingDir(),
 		cfg.ApprovedDir(),
 		cfg.RejectedDir(),
+		cfg.IngestedDir(),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, dirPerm); err != nil {

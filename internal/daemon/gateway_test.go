@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ppiankov/chainwatch/internal/ingest"
+	"github.com/ppiankov/chainwatch/internal/wo"
 )
 
 func setupGateway(t *testing.T) (*Gateway, DirConfig) {
@@ -194,6 +197,104 @@ func TestGatewayDoubleApprove(t *testing.T) {
 	// Second approve should fail (file no longer in outbox).
 	if err := g.Approve("wo-double"); err == nil {
 		t.Error("expected error for double approve")
+	}
+}
+
+func writePendingResultWithWO(t *testing.T, outbox string, id string) {
+	t.Helper()
+	r := &Result{
+		ID:     id,
+		Status: ResultPendingApproval,
+		Observations: []wo.Observation{
+			{
+				Type:     wo.SuspiciousCode,
+				Severity: wo.SeverityHigh,
+				Detail:   "eval/base64_decode found",
+				Data:     map[string]interface{}{"file": "/var/www/site/loader.php"},
+			},
+		},
+		ProposedWO: &wo.WorkOrder{
+			WOVersion:  wo.Version,
+			ID:         id,
+			CreatedAt:  time.Now().UTC(),
+			IncidentID: "job-001",
+			Target:     wo.Target{Host: "web-01", Scope: "/var/www/site"},
+			Observations: []wo.Observation{
+				{
+					Type:     wo.SuspiciousCode,
+					Severity: wo.SeverityHigh,
+					Detail:   "eval/base64_decode found",
+					Data:     map[string]interface{}{"file": "/var/www/site/loader.php"},
+				},
+			},
+			Constraints: wo.Constraints{
+				AllowPaths: []string{"/var/www/site"},
+				DenyPaths:  []string{"/etc"},
+				Network:    false,
+				Sudo:       false,
+				MaxSteps:   10,
+			},
+			ProposedGoals: []string{"Investigate and remediate: eval/base64_decode found"},
+		},
+		CompletedAt: time.Now().UTC(),
+	}
+	data, _ := json.MarshalIndent(r, "", "  ")
+	if err := os.WriteFile(filepath.Join(outbox, id+".json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGatewayApproveWritesIngestPayload(t *testing.T) {
+	g, cfg := setupGateway(t)
+	writePendingResultWithWO(t, cfg.Outbox, "wo-ingest")
+
+	if err := g.Approve("wo-ingest"); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+
+	// Verify ingest payload exists.
+	payloadPath := filepath.Join(cfg.IngestedDir(), "wo-ingest.json")
+	data, err := os.ReadFile(payloadPath)
+	if err != nil {
+		t.Fatalf("expected ingest payload at %s: %v", payloadPath, err)
+	}
+
+	var payload ingest.IngestPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+
+	if payload.WOID != "wo-ingest" {
+		t.Errorf("WOID = %q, want %q", payload.WOID, "wo-ingest")
+	}
+	if payload.Target.Host != "web-01" {
+		t.Errorf("Target.Host = %q, want %q", payload.Target.Host, "web-01")
+	}
+	if len(payload.Observations) != 1 {
+		t.Fatalf("Observations count = %d, want 1", len(payload.Observations))
+	}
+
+	// Verify raw Data is stripped: re-marshal observation and check no "data" key.
+	obsData, _ := json.Marshal(payload.Observations[0])
+	var m map[string]interface{}
+	_ = json.Unmarshal(obsData, &m)
+	if _, hasData := m["data"]; hasData {
+		t.Error("ingest observation should not have 'data' field")
+	}
+}
+
+func TestGatewayApproveNoPayloadWithoutWO(t *testing.T) {
+	g, cfg := setupGateway(t)
+	writePendingResult(t, cfg.Outbox, "wo-nowopayload")
+
+	if err := g.Approve("wo-nowopayload"); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+
+	// No ingest payload should be written when ProposedWO is nil.
+	payloadPath := filepath.Join(cfg.IngestedDir(), "wo-nowopayload.json")
+	if _, err := os.Stat(payloadPath); !os.IsNotExist(err) {
+		t.Error("should not write ingest payload when ProposedWO is nil")
 	}
 }
 

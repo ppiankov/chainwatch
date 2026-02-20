@@ -24,6 +24,7 @@ func TestEnsureDirs(t *testing.T) {
 		cfg.ProcessingDir(),
 		cfg.ApprovedDir(),
 		cfg.RejectedDir(),
+		cfg.IngestedDir(),
 	}
 	for _, dir := range expected {
 		info, err := os.Stat(dir)
@@ -64,6 +65,9 @@ func TestDirConfigSubdirectories(t *testing.T) {
 	}
 	if got := cfg.RejectedDir(); got != "/home/nullbot/state/rejected" {
 		t.Errorf("RejectedDir = %q", got)
+	}
+	if got := cfg.IngestedDir(); got != "/home/nullbot/state/ingested" {
+		t.Errorf("IngestedDir = %q", got)
 	}
 }
 
