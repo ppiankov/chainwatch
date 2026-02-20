@@ -50,6 +50,7 @@ test-*.sh
 !FIELD_NOTES.md
 !SECURITY.md
 !CLAUDE.md
+!SKILL.md
 
 # OS
 .DS_Store

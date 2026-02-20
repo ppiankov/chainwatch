@@ -88,6 +88,14 @@ cd chainwatch
 go build -o chainwatch ./cmd/chainwatch
 ```
 
+### Agent Integration
+
+chainwatch is designed to be used by autonomous agents without plugins or SDKs. Single binary, deterministic policy enforcement, structured JSON output, bounded jobs.
+
+Agents: read [`SKILL.md`](SKILL.md) for commands, flags, JSON output patterns, and approval workflow.
+
+Key pattern for agents: `chainwatch exec --dry-run --profile <p> -- <cmd>` to check policy before executing.
+
 ## Quick Start
 
 ### 1. Wrap a Command
