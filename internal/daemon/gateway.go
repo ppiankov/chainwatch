@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ppiankov/chainwatch/internal/ingest"
 )
 
 // defaultTTL is the default time-to-live for pending work orders.
@@ -123,7 +125,20 @@ func (g *Gateway) Approve(woID string) error {
 
 	// Move to approved.
 	dst := filepath.Join(g.stateDir, "approved", woID+".json")
-	return os.Rename(src, dst)
+	if err := os.Rename(src, dst); err != nil {
+		return err
+	}
+
+	// Emit IngestPayload for runforge consumption.
+	if r.ProposedWO != nil {
+		payload := ingest.Build(r.ProposedWO)
+		ingestDir := filepath.Join(g.stateDir, "ingested")
+		if err := ingest.Write(payload, ingestDir); err != nil {
+			return fmt.Errorf("write ingest payload: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Reject moves a pending WO from outbox to state/rejected/ with a reason.

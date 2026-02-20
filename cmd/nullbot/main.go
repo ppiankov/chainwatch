@@ -802,6 +802,7 @@ Examples:
 				return err
 			}
 			fmt.Printf("%sApproved%s %s → moved to state/approved/\n", green, reset, woID)
+			fmt.Printf("  payload → state/ingested/%s.json\n", woID)
 			return nil
 		},
 	}
