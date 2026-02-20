@@ -8,12 +8,15 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/ppiankov/chainwatch/internal/observe"
+	"github.com/ppiankov/chainwatch/internal/redact"
+	"github.com/ppiankov/chainwatch/internal/wo"
 )
 
 // Config holds full daemon configuration.
 type Config struct {
 	Dirs         DirConfig
-	Profile      string
 	Chainwatch   string
 	AuditLog     string
 	APIURL       string
@@ -40,7 +43,6 @@ func New(cfg Config) (*Daemon, error) {
 
 	processor := NewProcessor(ProcessorConfig{
 		Dirs:       cfg.Dirs,
-		Profile:    cfg.Profile,
 		Chainwatch: cfg.Chainwatch,
 		AuditLog:   cfg.AuditLog,
 		APIURL:     cfg.APIURL,
@@ -87,6 +89,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	gateway := NewGateway(d.cfg.Dirs.Outbox, d.cfg.Dirs.State, defaultTTL)
 	go d.runExpirationSweeper(ctx, gateway)
 
+	// Start cache retry sweeper — retries cached observations when LLM becomes available.
+	go d.runCacheRetrySweeper(ctx)
+
 	// Start watching for new files.
 	handler := func(path string) {
 		if err := d.processor.Process(ctx, path); err != nil {
@@ -123,6 +128,104 @@ func (d *Daemon) runExpirationSweeper(ctx context.Context, gateway *Gateway) {
 				fmt.Fprintf(os.Stderr, "daemon: expired %d pending WOs\n", n)
 			}
 		}
+	}
+}
+
+// cacheRetryInterval is how often the sweeper retries cached observations.
+const cacheRetryInterval = 10 * time.Minute
+
+// runCacheRetrySweeper periodically retries cached observations when
+// the LLM becomes available. Cached observations are produced by the
+// processor when classification fails (offline mode).
+func (d *Daemon) runCacheRetrySweeper(ctx context.Context) {
+	ticker := time.NewTicker(cacheRetryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if d.cfg.APIURL == "" {
+				continue
+			}
+			d.retryCachedObservations(ctx)
+		}
+	}
+}
+
+func (d *Daemon) retryCachedObservations(ctx context.Context) {
+	cacheDir := observe.CacheDir(d.cfg.Dirs.State)
+	entries, err := observe.ReadCache(cacheDir)
+	if err != nil || len(entries) == 0 {
+		return
+	}
+
+	classifyCfg := observe.ClassifierConfig{
+		APIURL: d.cfg.APIURL,
+		APIKey: d.cfg.APIKey,
+		Model:  d.cfg.Model,
+	}
+
+	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Redact evidence before sending to LLM.
+		classifyEvidence := entry.Evidence
+		mode := redact.ResolveMode(d.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))
+		if mode == redact.ModeCloud {
+			tm := redact.NewTokenMap(fmt.Sprintf("retry-%s", entry.ID))
+			classifyEvidence = redact.Redact(entry.Evidence, tm)
+			if tm.Len() > 0 {
+				classifyEvidence = tm.Legend() + "\n" + classifyEvidence
+			}
+		}
+
+		obs, err := observe.Classify(classifyCfg, classifyEvidence)
+		if err != nil {
+			entry.RetryCount++
+			_ = observe.WriteCache(cacheDir, entry)
+			continue
+		}
+
+		result := &Result{
+			ID:           entry.ID,
+			Observations: obs,
+			CompletedAt:  time.Now().UTC(),
+		}
+
+		if len(obs) > 0 {
+			host := "localhost"
+			genCfg := wo.GeneratorConfig{
+				IncidentID:    entry.JobID,
+				Host:          host,
+				Scope:         entry.Scope,
+				RedactionMode: string(mode),
+			}
+			goals := deriveGoals(obs)
+			woResult, woErr := wo.Generate(genCfg, obs, goals)
+			if woErr != nil {
+				result.Error = fmt.Sprintf("WO generation failed: %v", woErr)
+				result.Status = ResultFailed
+			} else {
+				result.ProposedWO = woResult
+				result.Status = ResultPendingApproval
+			}
+		} else {
+			result.Status = ResultDone
+		}
+
+		if writeErr := d.processor.writeResult(result); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "daemon: cache retry write %s: %v\n", entry.ID, writeErr)
+			continue
+		}
+
+		_ = observe.RemoveCached(cacheDir, entry.ID)
+		fmt.Fprintf(os.Stderr, "daemon: retried cached observation %s → %s\n", entry.ID, result.Status)
 	}
 }
 

@@ -45,6 +45,11 @@ func (d DirConfig) IngestedDir() string {
 	return filepath.Join(d.State, "ingested")
 }
 
+// CacheDir returns the path to the observation cache subdirectory.
+func (d DirConfig) CacheDir() string {
+	return filepath.Join(d.State, "cache")
+}
+
 // EnsureDirs creates all required directories. Idempotent.
 func EnsureDirs(cfg DirConfig) error {
 	dirs := []string{
@@ -54,6 +59,7 @@ func EnsureDirs(cfg DirConfig) error {
 		cfg.ApprovedDir(),
 		cfg.RejectedDir(),
 		cfg.IngestedDir(),
+		cfg.CacheDir(),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, dirPerm); err != nil {

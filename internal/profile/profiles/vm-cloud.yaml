@@ -1,0 +1,57 @@
+name: vm-cloud
+description: VM/container deployment — no local LLM, mandatory redaction, observe-only
+min_tier: 2
+
+# Authority boundaries — instruction-level patterns.
+authority_boundaries:
+  - pattern: "execute.*from.*webpage"
+    reason: "Cross-context instruction injection"
+  - pattern: "admin.*override"
+    reason: "Authority escalation attempt"
+  - pattern: "ignore.*previous.*instructions"
+    reason: "Prompt injection attempt"
+  - pattern: "disregard.*safety"
+    reason: "Safety bypass attempt"
+  - pattern: "write|modify|delete|create|update"
+    reason: "Write operations blocked — vm-cloud is observe-only"
+
+# Execution boundaries — stricter than clawbot for VM deployment.
+execution_boundaries:
+  urls:
+    - "*/checkout*"
+    - "*/payment*"
+    - "stripe.com/*"
+    - "paypal.com/*"
+    - "*/oauth/token*"
+    - "*/api/keys*"
+    - "*/account/delete*"
+    - "*/settings/security*"
+  files:
+    - "~/.ssh/*"
+    - "~/.aws/*"
+    - "**/.env"
+    - "**/credentials*"
+  commands:
+    - "rm -rf"
+    - "curl|sh"
+    - "curl | sh"
+    - "wget|sh"
+    - "wget | sh"
+    - "sudo"
+    - "systemctl"
+    - "service"
+    - "apt"
+    - "yum"
+    - "pip install"
+
+# Policy rules — deny access to secrets and credentials.
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*password*"
+      decision: deny
+      reason: "credential access blocked by vm-cloud profile"
+    - purpose: "*"
+      resource_pattern: "*secret*"
+      decision: deny
+      reason: "secrets access blocked by vm-cloud profile"
