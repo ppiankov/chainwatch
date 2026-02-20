@@ -18,9 +18,13 @@ import (
 	"syscall"
 	"time"
 
+	"path/filepath"
+
 	"github.com/ppiankov/chainwatch/internal/daemon"
 	"github.com/ppiankov/chainwatch/internal/observe"
+	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/redact"
+	"github.com/ppiankov/chainwatch/internal/systemd"
 	"github.com/ppiankov/chainwatch/internal/wo"
 	"github.com/spf13/cobra"
 )
@@ -101,6 +105,22 @@ var fallbackPlan = plan{
 		{Cmd: "curl http://example.com", Why: "verify network connectivity"},
 		{Cmd: "sudo cat /etc/shadow", Why: "check system credentials"},
 	},
+}
+
+// generateEnvFile returns the content of the nullbot environment file.
+func generateEnvFile(profileName string) string {
+	var b strings.Builder
+	b.WriteString("# Nullbot deployment configuration\n")
+	b.WriteString(fmt.Sprintf("# Profile: %s\n\n", profileName))
+	b.WriteString(fmt.Sprintf("NULLBOT_PROFILE=%s\n", profileName))
+	if profileName == "vm-cloud" {
+		b.WriteString("NULLBOT_REDACT=always\n")
+	}
+	b.WriteString("\n# LLM configuration (required for classification)\n")
+	b.WriteString("# NULLBOT_API_URL=https://api.groq.com/openai/v1/chat/completions\n")
+	b.WriteString("# NULLBOT_API_KEY=\n")
+	b.WriteString("# NULLBOT_MODEL=llama-3.1-8b-instant\n")
+	return b.String()
 }
 
 // resolveConfig builds config from flags, env vars, and defaults.
@@ -538,7 +558,6 @@ Examples:
 			runnerCfg := observe.RunnerConfig{
 				Scope:      observeScope,
 				Type:       observeType,
-				Profile:    cfg.profile,
 				Chainwatch: chainwatch,
 				AuditLog:   auditLog,
 			}
@@ -548,7 +567,7 @@ Examples:
 			fmt.Printf("%s%s=== OBSERVE MODE ===%s\n\n", bold, cyan, reset)
 			fmt.Printf("%sScope:   %s%s\n", dim, observeScope, reset)
 			fmt.Printf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
-			fmt.Printf("%sProfile: %s%s\n", dim, cfg.profile, reset)
+			fmt.Printf("%sProfile: clawbot (inspect-only, hard-locked)%s\n", dim, reset)
 			fmt.Println()
 
 			if cfg.dryRun {
@@ -678,7 +697,6 @@ Examples:
 	observeCmd.Flags().BoolVar(&observeClassify, "classify", false, "classify findings with local LLM")
 	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")
 	observeCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name for classification (env: NULLBOT_MODEL)")
-	observeCmd.Flags().StringVar(&flagProfile, "profile", defaultProfile, "chainwatch profile (env: NULLBOT_PROFILE)")
 	observeCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show runbook steps without executing")
 
 	var (
@@ -718,7 +736,6 @@ Examples:
 					Outbox: daemonOutbox,
 					State:  daemonState,
 				},
-				Profile:    cfg.profile,
 				Chainwatch: chainwatch,
 				AuditLog:   auditLog,
 				APIURL:     cfg.apiURL,
@@ -739,7 +756,7 @@ Examples:
 			fmt.Printf("%sInbox:   %s%s\n", dim, daemonInbox, reset)
 			fmt.Printf("%sOutbox:  %s%s\n", dim, daemonOutbox, reset)
 			fmt.Printf("%sState:   %s%s\n", dim, daemonState, reset)
-			fmt.Printf("%sProfile: %s%s\n", dim, cfg.profile, reset)
+			fmt.Printf("%sProfile: clawbot (inspect-only, hard-locked)%s\n", dim, reset)
 			if daemonPollMode {
 				fmt.Printf("%sWatcher: polling%s\n", dim, reset)
 			} else {
@@ -757,7 +774,6 @@ Examples:
 	daemonCmd.Flags().BoolVar(&daemonPollMode, "poll", false, "use polling instead of inotify")
 	daemonCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint (env: NULLBOT_API_URL)")
 	daemonCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name (env: NULLBOT_MODEL)")
-	daemonCmd.Flags().StringVar(&flagProfile, "profile", defaultProfile, "chainwatch profile (env: NULLBOT_PROFILE)")
 
 	// Shared flags for approval commands.
 	var approvalOutbox, approvalState string
@@ -839,7 +855,67 @@ Examples:
 		},
 	}
 
-	rootCmd.AddCommand(runCmd, observeCmd, daemonCmd, listCmd, approveCmd, rejectCmd, versionCmd)
+	var (
+		initProfile string
+		initOutput  string
+		initHome    string
+	)
+
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "initialize nullbot deployment configuration",
+		Long: `Generates environment file and systemd unit for nullbot deployment.
+
+Examples:
+  nullbot init --profile vm-cloud
+  nullbot init --profile vm-cloud --output /tmp/nullbot-vm.service`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := profile.Load(initProfile); err != nil {
+				return fmt.Errorf("unknown profile %q: %w", initProfile, err)
+			}
+
+			configDir := filepath.Join(initHome, "config")
+			if err := os.MkdirAll(configDir, 0750); err != nil {
+				return fmt.Errorf("create config dir: %w", err)
+			}
+
+			envContent := generateEnvFile(initProfile)
+			envPath := filepath.Join(configDir, "nullbot.env")
+
+			if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
+				return fmt.Errorf("write env file: %w", err)
+			}
+			fmt.Printf("Environment file: %s\n", envPath)
+
+			var unitContent string
+			if initProfile == "vm-cloud" {
+				unitContent = systemd.VMDaemonTemplate()
+			} else {
+				unitContent = systemd.DaemonTemplate()
+			}
+
+			if initOutput != "" {
+				if err := os.WriteFile(initOutput, []byte(unitContent), 0644); err != nil {
+					return fmt.Errorf("write systemd unit: %w", err)
+				}
+				fmt.Printf("Systemd unit:     %s\n", initOutput)
+			} else {
+				fmt.Printf("\n--- systemd unit ---\n%s", unitContent)
+			}
+
+			fmt.Printf("\nNext steps:\n")
+			fmt.Printf("  1. Set NULLBOT_API_URL and NULLBOT_API_KEY in %s\n", envPath)
+			fmt.Printf("  2. Install the systemd unit: sudo cp <unit> /etc/systemd/system/nullbot.service\n")
+			fmt.Printf("  3. sudo systemctl enable --now nullbot\n")
+
+			return nil
+		},
+	}
+	initCmd.Flags().StringVar(&initProfile, "profile", "vm-cloud", "deployment profile")
+	initCmd.Flags().StringVar(&initOutput, "output", "", "write systemd unit to file (default: stdout)")
+	initCmd.Flags().StringVar(&initHome, "home", "/home/nullbot", "nullbot home directory")
+
+	rootCmd.AddCommand(runCmd, observeCmd, daemonCmd, listCmd, approveCmd, rejectCmd, versionCmd, initCmd)
 
 	// CI compatibility: bare invocation with GROQ_API_KEY or NULLBOT_CI runs default mission.
 	// This keeps the release workflow VHS recording working.
