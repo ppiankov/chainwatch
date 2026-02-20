@@ -1979,7 +1979,7 @@ Deployment profile for VMs and containers with no local LLM. Redaction is mandat
 
 ## WO-CW54: Neurorouter — extract LLM proxy/router as standalone package
 
-**Status:** `[ ]` planned
+**Status:** `[x]` complete
 **Priority:** medium
 
 ### Summary
@@ -2482,7 +2482,7 @@ Alert must answer three questions to survive: What is wrong? What should I do? W
 ## v1.4 — Two-Tier Pipeline
 **Gate:** v1.3 daemon + WO-RES-05 (WO format decision) complete.
 - [x] WO-CW52: Runforge WO ingestion
-- [ ] WO-CW54: Neurorouter package extraction
+- [x] WO-CW54: Neurorouter package extraction
 - [x] WO-CW53: VM deployment profile
 
 ## v2.0 — Full Architecture
