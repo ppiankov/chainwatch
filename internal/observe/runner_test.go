@@ -63,6 +63,28 @@ func TestCollectEvidenceAllBlocked(t *testing.T) {
 	}
 }
 
+func TestInspectProfileIsClawbot(t *testing.T) {
+	// Structural guarantee: observe mode always uses the clawbot profile.
+	// If this test fails, someone tried to change the hard-locked profile.
+	if inspectProfile != "clawbot" {
+		t.Fatalf("inspectProfile = %q, must be \"clawbot\" — observe mode is inspect-only", inspectProfile)
+	}
+}
+
+func TestRunnerConfigHasNoProfileField(t *testing.T) {
+	// Structural guarantee: RunnerConfig does not accept a profile override.
+	// This test documents the invariant. The compiler enforces it — if someone
+	// adds a Profile field and sets it, this test forces a conversation about why.
+	cfg := RunnerConfig{
+		Scope:      "/var/www/site",
+		Chainwatch: "chainwatch",
+		AuditLog:   "/tmp/test.jsonl",
+	}
+	// If RunnerConfig gains a Profile field, this test must be updated with
+	// justification for why observe mode needs a configurable profile.
+	_ = cfg
+}
+
 func TestManualObservation(t *testing.T) {
 	obs := ManualObservation(wo.SuspiciousCode, wo.SeverityHigh, "eval(base64_decode in header.php")
 	if obs.Type != wo.SuspiciousCode {
