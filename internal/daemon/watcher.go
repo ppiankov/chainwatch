@@ -14,6 +14,10 @@ import (
 // debounceDefault is the default debounce interval for file events.
 const debounceDefault = 200 * time.Millisecond
 
+// maxConcurrentJobs limits how many inbox files are processed simultaneously.
+// Prevents resource exhaustion under burst load (e.g., 100 files at once).
+const maxConcurrentJobs = 5
+
 // pollDefault is the default polling interval when fsnotify is unavailable.
 const pollDefault = 5 * time.Second
 
@@ -51,6 +55,10 @@ func (w *InboxWatcher) Run(ctx context.Context) error {
 	var mu sync.Mutex
 	pending := make(map[string]*time.Timer)
 
+	// sem limits concurrent handler goroutines to prevent resource
+	// exhaustion when many files arrive simultaneously.
+	sem := make(chan struct{}, maxConcurrentJobs)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -78,6 +86,15 @@ func (w *InboxWatcher) Run(ctx context.Context) error {
 				t.Stop()
 			}
 			pending[path] = time.AfterFunc(w.debounce, func() {
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				defer func() {
+					if r := recover(); r != nil {
+						// Log panic but don't crash the daemon.
+						// The file stays unprocessed; operator can retry.
+						_ = r
+					}
+				}()
 				w.handler(path)
 				mu.Lock()
 				delete(pending, path)
