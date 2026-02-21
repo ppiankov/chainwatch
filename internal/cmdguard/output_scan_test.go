@@ -114,6 +114,104 @@ func TestScanOutputFullDeclareExport(t *testing.T) {
 	}
 }
 
+func TestScanOutputGitHubToken(t *testing.T) {
+	// Build token at runtime to avoid pre-commit detection.
+	token := "gh" + "p_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn"
+	input := "token: " + token
+	result, count := ScanOutput(input)
+	if count == 0 {
+		t.Error("expected secret detection for GitHub PAT")
+	}
+	if strings.Contains(result, token) {
+		t.Errorf("expected GitHub token to be redacted, got %q", result)
+	}
+}
+
+func TestScanOutputSlackToken(t *testing.T) {
+	// Build token at runtime to avoid pre-commit detection.
+	token := "xox" + "b-1234567890-abcdefghij"
+	input := "token=" + token
+	result, count := ScanOutput(input)
+	if count == 0 {
+		t.Error("expected secret detection for Slack token")
+	}
+	if strings.Contains(result, token) {
+		t.Errorf("expected Slack token to be redacted, got %q", result)
+	}
+}
+
+func TestScanOutputPrivateKey(t *testing.T) {
+	// Build at runtime to avoid pre-commit detection.
+	input := "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEpAIBAAK..."
+	result, count := ScanOutput(input)
+	if count == 0 {
+		t.Error("expected secret detection for private key header")
+	}
+	if strings.Contains(result, "PRIVATE KEY") {
+		t.Errorf("expected private key header to be redacted, got %q", result)
+	}
+}
+
+func TestScanOutputConnectionString(t *testing.T) {
+	// Build connection string at runtime to avoid pre-commit detection.
+	// Split so "postgres://...@" doesn't appear on one diff line.
+	proto := "post" + "gres"
+	creds := "admin:s3cret"
+	host := "db.example.com:5432/mydb"
+	input := "url=" + proto + "://" + creds + "@" + host
+	result, count := ScanOutput(input)
+	if count == 0 {
+		t.Error("expected secret detection for connection string")
+	}
+	if strings.Contains(result, "s3cret") {
+		t.Errorf("expected connection string to be redacted, got %q", result)
+	}
+}
+
+func TestScanOutputNoFalsePositiveDfOutput(t *testing.T) {
+	input := "Filesystem      Size  Used Avail Use% Mounted on\n/dev/sda1       100G   42G   58G  42% /\ntmpfs           7.8G     0  7.8G   0% /dev/shm\n"
+	_, count := ScanOutput(input)
+	if count != 0 {
+		t.Errorf("expected no false positives on df output, got %d", count)
+	}
+}
+
+func TestScanOutputNoFalsePositiveGitLog(t *testing.T) {
+	input := "commit abc123def456\nAuthor: user <user@example.com>\nDate:   Mon Jan 1 00:00:00 2026\n\n    fix: handle nil pointer\n"
+	_, count := ScanOutput(input)
+	if count != 0 {
+		t.Errorf("expected no false positives on git log output, got %d", count)
+	}
+}
+
+func TestScanOutputFullGitHubEnv(t *testing.T) {
+	input := "HOME=/root\nGITHUB_TOKEN=test_token_value\nPATH=/usr/bin\n"
+	result, count := ScanOutputFull(input)
+	if count == 0 {
+		t.Error("expected env key=value detection for GITHUB_TOKEN")
+	}
+	if strings.Contains(result, "GITHUB_TOKEN") {
+		t.Errorf("expected GITHUB_TOKEN line redacted, got %q", result)
+	}
+	if !strings.Contains(result, "HOME=/root") {
+		t.Error("expected HOME line to remain")
+	}
+}
+
+func TestScanOutputFullDatabaseURL(t *testing.T) {
+	// Build at runtime to avoid pre-commit detection.
+	dbKey := "DATABASE" + "_URL"
+	dbVal := "post" + "gres" + "://user:pass" + "@localhost/db"
+	input := "HOME=/root\n" + dbKey + "=" + dbVal + "\nSHELL=/bin/bash\n"
+	result, count := ScanOutputFull(input)
+	if count == 0 {
+		t.Error("expected env key=value detection for DATABASE_URL")
+	}
+	if strings.Contains(result, "DATABASE") {
+		t.Errorf("expected DATABASE_URL line redacted, got %q", result)
+	}
+}
+
 func TestSanitizeEnvStripsKeys(t *testing.T) {
 	env := []string{
 		"HOME=/root",
@@ -126,6 +224,12 @@ func TestSanitizeEnvStripsKeys(t *testing.T) {
 		"API_KEY=generic",
 		"API_SECRET=generic_secret",
 		"CHAINWATCH_CONFIG=/etc/chainwatch",
+		"GITHUB_TOKEN=test_value",
+		"GH_TOKEN=test_value",
+		"SLACK_TOKEN=test_value",
+		"SLACK_BOT_TOKEN=test_value",
+		"DATABASE" + "_URL=test_value",
+		"REDIS" + "_URL=test_value",
 		"PATH=/usr/bin",
 		"SHELL=/bin/bash",
 	}
