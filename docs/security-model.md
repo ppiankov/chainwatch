@@ -104,6 +104,22 @@ This ensures that even if the nullbot process is compromised, it cannot phone ho
 
 ---
 
+## Trust Boundaries
+
+These components are trusted by design. Compromise of any trusted component breaks the security model.
+
+| Trusted component | Why | Mitigation if compromised |
+|---|---|---|
+| Host OS / kernel | All userspace security depends on kernel integrity | IMA/EVM, Secure Boot, attestation (out of scope) |
+| Root user | Root can modify unit files, policy, binary, audit logs | Restrict root access, monitor sudo logs |
+| systemd unit file | Defines how nullbot starts, what user it runs as, hardening flags | Unit file hash check at startup warns on modification |
+| Build pipeline | Produces the chainwatch binary | Binary integrity verification, checksums in release artifacts |
+| LLM API endpoint | DNS-resolved, HTTPS-only | Certificate pinning not implemented; TLS provides transport security |
+
+**Root compromise is game over.** If an attacker has root, they can replace the binary, modify policy, edit the unit file, or disable enforcement entirely. Chainwatch does not attempt to prevent root-level attacks. It detects them where possible (binary integrity, audit hash chain, unit file hash) and logs evidence for forensic review.
+
+---
+
 ## What Is Out of Scope
 
 Chainwatch is a deterministic policy engine, not a general-purpose security system. These threats are explicitly not addressed:
