@@ -187,13 +187,20 @@ fi
 section "DNS Exfiltration Defense"
 # ─────────────────────────────────────────────────
 
-if nft list table inet nullbot_egress >/dev/null 2>&1; then
+if ! nft list table inet nullbot_egress >/dev/null 2>&1; then
+    skip "nftables egress table not configured"
+elif ! command -v dig >/dev/null 2>&1; then
+    skip "dig not installed — install dnsutils for DNS rate limit test"
+else
     # Test: bulk DNS queries are rate-limited.
     # Send 50 rapid queries — most should be dropped by the rate limit.
     QUERY_COUNT=0
     for i in $(seq 1 50); do
         RESULT=$(su -s /bin/bash nullbot -c "dig +short +time=1 +tries=1 test${i}.example.com 2>&1" || true)
-        if echo "$RESULT" | grep -qvE "timed out|connection refused|no servers"; then
+        # Count queries that got a DNS response (not rate-limited/dropped).
+        # Failed queries show: timed out, connection refused, no servers,
+        # or empty output when nftables drops the packet.
+        if [ -n "$RESULT" ] && ! echo "$RESULT" | grep -qiE "timed out|refused|no servers|network unreachable"; then
             QUERY_COUNT=$((QUERY_COUNT + 1))
         fi
     done
@@ -205,8 +212,6 @@ if nft list table inet nullbot_egress >/dev/null 2>&1; then
     else
         fail "DNS rate limiting not working (${QUERY_COUNT}/50 queries succeeded)"
     fi
-else
-    skip "nftables egress table not configured"
 fi
 
 # ─────────────────────────────────────────────────
