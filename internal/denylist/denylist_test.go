@@ -129,6 +129,27 @@ func TestAPIKeyEnvVarBlocked(t *testing.T) {
 	}
 }
 
+func TestShellBuiltinsBlocked(t *testing.T) {
+	dl := NewDefault()
+
+	tests := []struct {
+		cmd  string
+		want bool
+	}{
+		{"bash -c 'declare -p'", true},
+		{"sh -c 'export -p'", true},
+		{"compgen -v", true},
+		{"echo hello", false},
+		{"ls -la", false},
+	}
+	for _, tt := range tests {
+		blocked, _ := dl.IsBlocked(tt.cmd, "shell_exec")
+		if blocked != tt.want {
+			t.Errorf("IsBlocked(%q) = %v, want %v", tt.cmd, blocked, tt.want)
+		}
+	}
+}
+
 func TestSafeCommandAllowed(t *testing.T) {
 	dl := NewDefault()
 
