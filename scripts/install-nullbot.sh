@@ -434,6 +434,66 @@ UNIT
 }
 
 # -------------------------------------------------------------------
+# Step 7.5: Network egress control (nftables)
+# -------------------------------------------------------------------
+
+setup_egress() {
+    step "7.5" "Network egress control"
+
+    if ! command -v nft >/dev/null 2>&1; then
+        warn "nft not found — skipping egress control (install nftables)"
+        return 0
+    fi
+
+    # Check if egress table already exists
+    if nft list table inet nullbot_egress >/dev/null 2>&1; then
+        skip "nullbot_egress nftables table exists"
+        return 0
+    fi
+
+    # Resolve LLM API endpoints
+    local llm_host="${LLM_API_HOST:-api.groq.com}"
+    local llm_ips
+    llm_ips=$(dig +short "$llm_host" 2>/dev/null | grep -E '^[0-9]+\.' || true)
+
+    if [ -z "$llm_ips" ]; then
+        warn "cannot resolve ${llm_host} — skipping egress rules"
+        return 0
+    fi
+
+    # Create nftables ruleset
+    nft add table inet nullbot_egress
+    nft add chain inet nullbot_egress output '{ type filter hook output priority 0; policy accept; }'
+
+    # Allow loopback (always)
+    nft add rule inet nullbot_egress output oif lo accept
+
+    # Allow established/related connections
+    nft add rule inet nullbot_egress output ct state established,related accept
+
+    # Allow DNS resolution (UDP 53) for nullbot user
+    nft add rule inet nullbot_egress output meta skuid nullbot udp dport 53 accept
+
+    # Allow HTTPS to LLM API endpoints only
+    for ip in $llm_ips; do
+        nft add rule inet nullbot_egress output meta skuid nullbot ip daddr "$ip" tcp dport 443 accept
+        ok "allow egress to ${llm_host} (${ip}:443)"
+    done
+
+    # Drop all other outbound from nullbot user
+    nft add rule inet nullbot_egress output meta skuid nullbot counter drop
+
+    ok "egress locked — nullbot can only reach ${llm_host}"
+
+    # Persist rules across reboot
+    if command -v nft >/dev/null 2>&1; then
+        mkdir -p /etc/nftables.d
+        nft list table inet nullbot_egress > /etc/nftables.d/nullbot-egress.conf
+        ok "egress rules saved to /etc/nftables.d/nullbot-egress.conf"
+    fi
+}
+
+# -------------------------------------------------------------------
 # Step 8: Verify (self-protection test matrix)
 # -------------------------------------------------------------------
 
@@ -577,6 +637,13 @@ summary() {
         echo "│ runforge-sentinel  │ WO auto-executor                     │ · n/a    │"
     fi
 
+    # egress control
+    if nft list table inet nullbot_egress >/dev/null 2>&1; then
+        echo "│ Egress control     │ nftables (LLM API only)              │ ✓ active │"
+    else
+        echo "│ Egress control     │ nftables firewall                    │ · off    │"
+    fi
+
     # test results
     if [ "$FAIL" -eq 0 ] && [ "$PASS" -gt 0 ]; then
         echo "│ Self-protection    │ 10-point test matrix                 │ ✓ ${PASS}/${PASS}   │"
@@ -656,6 +723,7 @@ main() {
     init_chainwatch
     configure_env
     install_service
+    setup_egress
     verify
     summary
 }
