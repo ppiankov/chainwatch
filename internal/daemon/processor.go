@@ -15,12 +15,14 @@ import (
 
 // ProcessorConfig holds runtime configuration for job processing.
 type ProcessorConfig struct {
-	Dirs       DirConfig
-	Chainwatch string
-	AuditLog   string
-	APIURL     string
-	APIKey     string
-	Model      string
+	Dirs          DirConfig
+	Chainwatch    string
+	AuditLog      string
+	APIURL        string
+	APIKey        string
+	Model         string
+	RedactConfig  *redact.RedactConfig
+	ExtraPatterns []redact.ExtraPattern
 }
 
 // Processor handles job lifecycle transitions.
@@ -144,12 +146,13 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 
 			// Redact for cloud mode.
 			classifyEvidence := evidence
+			var tm *redact.TokenMap
 			if mode == redact.ModeCloud {
-				tm := redact.NewTokenMap(fmt.Sprintf("daemon-%s", job.ID))
-				classifyEvidence = redact.Redact(evidence, tm)
+				tm = redact.NewTokenMap(fmt.Sprintf("daemon-%s", job.ID))
+				classifyEvidence = redact.RedactWithConfig(evidence, tm, p.cfg.RedactConfig, p.cfg.ExtraPatterns)
 				if tm.Len() > 0 {
 					classifyEvidence = tm.Legend() + "\n" + classifyEvidence
-					// Persist the token map for de-redaction.
+					// Persist the token map for audit trail.
 					tmPath := filepath.Join(p.cfg.Dirs.CacheDir(), fmt.Sprintf("tokens-%s.json", job.ID))
 					tmData, _ := json.MarshalIndent(tm, "", "  ")
 					if err := os.WriteFile(tmPath, tmData, 0600); err == nil {
@@ -164,6 +167,22 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 				p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
 				result.Error = fmt.Sprintf("classification failed: %v (evidence cached for retry)", err)
 			} else {
+				// Post-validation and de-redaction.
+				if tm != nil && tm.Len() > 0 {
+					var allDetails string
+					for _, o := range obs {
+						allDetails += " " + o.Detail
+					}
+					if leaks := redact.CheckLeaks(allDetails, tm); len(leaks) > 0 {
+						p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
+						result.Error = fmt.Sprintf("classification leak: LLM exposed %d sensitive values (evidence cached)", len(leaks))
+						result.Status = ResultFailed
+						return result, nil
+					}
+					for i := range obs {
+						obs[i].Detail = redact.Detoken(obs[i].Detail, tm)
+					}
+				}
 				observations = obs
 			}
 		}

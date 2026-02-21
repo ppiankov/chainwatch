@@ -68,13 +68,15 @@ Rules:
 
 // config holds resolved runtime configuration.
 type config struct {
-	apiURL     string
-	apiKey     string
-	model      string
-	profile    string
-	maxSteps   int
-	dryRun     bool
-	redactMode redact.Mode
+	apiURL        string
+	apiKey        string
+	model         string
+	profile       string
+	maxSteps      int
+	dryRun        bool
+	redactMode    redact.Mode
+	redactCfg     *redact.RedactConfig
+	extraPatterns []redact.ExtraPattern
 }
 
 // step is a single command proposed by the LLM.
@@ -170,6 +172,21 @@ func resolveConfig(flagURL, flagModel, flagProfile string, flagMaxSteps int, fla
 
 	// Resolve redaction mode: localhost → local (no redaction), else → cloud (mandatory).
 	cfg.redactMode = redact.ResolveMode(cfg.apiURL, os.Getenv("NULLBOT_REDACT"))
+
+	// Load operator redaction config (optional).
+	rcfg, err := redact.LoadConfig("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: redact config: %v\n", err)
+	}
+	if rcfg != nil {
+		extra, err := redact.CompilePatterns(rcfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: redact patterns: %v\n", err)
+		} else {
+			cfg.redactCfg = rcfg
+			cfg.extraPatterns = extra
+		}
+	}
 
 	return cfg
 }
@@ -274,7 +291,7 @@ func runMission(cfg config, mission string) error {
 	llmMission := mission
 	if cfg.redactMode == redact.ModeCloud {
 		tokenMap = redact.NewTokenMap(fmt.Sprintf("nullbot-%d", time.Now().UnixNano()))
-		llmMission = redact.Redact(mission, tokenMap)
+		llmMission = redact.RedactWithConfig(mission, tokenMap, cfg.redactCfg, cfg.extraPatterns)
 		if tokenMap.Len() > 0 {
 			llmMission = tokenMap.Legend() + "\n" + llmMission
 			fmt.Printf("%sRedaction: %d tokens (%d sensitive values masked)%s\n", dim, tokenMap.Len(), tokenMap.Len(), reset)
@@ -595,7 +612,7 @@ Examples:
 				var tokenMap *redact.TokenMap
 				if cfg.redactMode == redact.ModeCloud {
 					tokenMap = redact.NewTokenMap(fmt.Sprintf("observe-%d", time.Now().UnixNano()))
-					classifyEvidence = redact.Redact(evidence, tokenMap)
+					classifyEvidence = redact.RedactWithConfig(evidence, tokenMap, cfg.redactCfg, cfg.extraPatterns)
 					if tokenMap.Len() > 0 {
 						classifyEvidence = tokenMap.Legend() + "\n" + classifyEvidence
 					}
@@ -606,6 +623,20 @@ Examples:
 					fmt.Printf("%sFAILED%s (%v)\n", red, reset, err)
 					fmt.Printf("%sEvidence collected but classification failed. Use --output to save raw results.%s\n", yellow, reset)
 				} else {
+					// Post-validation: check for leaks and de-redact.
+					if tokenMap != nil && tokenMap.Len() > 0 {
+						var allDetails string
+						for _, o := range obs {
+							allDetails += " " + o.Detail
+						}
+						if leaks := redact.CheckLeaks(allDetails, tokenMap); len(leaks) > 0 {
+							fmt.Printf("%sFAILED%s (LLM leaked %d sensitive values)\n", red, reset, len(leaks))
+							return fmt.Errorf("classification leak: LLM exposed %d sensitive values", len(leaks))
+						}
+						for i := range obs {
+							obs[i].Detail = redact.Detoken(obs[i].Detail, tokenMap)
+						}
+					}
 					observations = obs
 					fmt.Printf("%sOK%s (%d observations)\n", green, reset, len(obs))
 				}
@@ -702,12 +733,14 @@ Examples:
 					Outbox: daemonOutbox,
 					State:  daemonState,
 				},
-				Chainwatch: chainwatch,
-				AuditLog:   auditLog,
-				APIURL:     cfg.apiURL,
-				APIKey:     cfg.apiKey,
-				Model:      cfg.model,
-				PollMode:   daemonPollMode,
+				Chainwatch:    chainwatch,
+				AuditLog:      auditLog,
+				APIURL:        cfg.apiURL,
+				APIKey:        cfg.apiKey,
+				Model:         cfg.model,
+				PollMode:      daemonPollMode,
+				RedactConfig:  cfg.redactCfg,
+				ExtraPatterns: cfg.extraPatterns,
 			}
 
 			d, err := daemon.New(dcfg)

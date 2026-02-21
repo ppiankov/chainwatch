@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,14 +17,16 @@ import (
 
 // Config holds full daemon configuration.
 type Config struct {
-	Dirs         DirConfig
-	Chainwatch   string
-	AuditLog     string
-	APIURL       string
-	APIKey       string
-	Model        string
-	PollMode     bool
-	PollInterval time.Duration
+	Dirs          DirConfig
+	Chainwatch    string
+	AuditLog      string
+	APIURL        string
+	APIKey        string
+	Model         string
+	PollMode      bool
+	PollInterval  time.Duration
+	RedactConfig  *redact.RedactConfig
+	ExtraPatterns []redact.ExtraPattern
 }
 
 // Daemon watches the inbox directory and processes jobs.
@@ -42,12 +45,14 @@ func New(cfg Config) (*Daemon, error) {
 	}
 
 	processor := NewProcessor(ProcessorConfig{
-		Dirs:       cfg.Dirs,
-		Chainwatch: cfg.Chainwatch,
-		AuditLog:   cfg.AuditLog,
-		APIURL:     cfg.APIURL,
-		APIKey:     cfg.APIKey,
-		Model:      cfg.Model,
+		Dirs:          cfg.Dirs,
+		Chainwatch:    cfg.Chainwatch,
+		AuditLog:      cfg.AuditLog,
+		APIURL:        cfg.APIURL,
+		APIKey:        cfg.APIKey,
+		Model:         cfg.Model,
+		RedactConfig:  cfg.RedactConfig,
+		ExtraPatterns: cfg.ExtraPatterns,
 	})
 
 	return &Daemon{
@@ -177,11 +182,19 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 		// Redact evidence before sending to LLM.
 		classifyEvidence := entry.Evidence
 		mode := redact.ResolveMode(d.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))
+		var tm *redact.TokenMap
+		var tokenMapRef string
 		if mode == redact.ModeCloud {
-			tm := redact.NewTokenMap(fmt.Sprintf("retry-%s", entry.ID))
-			classifyEvidence = redact.Redact(entry.Evidence, tm)
+			tm = redact.NewTokenMap(fmt.Sprintf("retry-%s", entry.ID))
+			classifyEvidence = redact.RedactWithConfig(entry.Evidence, tm, d.cfg.RedactConfig, d.cfg.ExtraPatterns)
 			if tm.Len() > 0 {
 				classifyEvidence = tm.Legend() + "\n" + classifyEvidence
+				// Persist token map for audit trail.
+				tmPath := filepath.Join(cacheDir, fmt.Sprintf("tokens-retry-%s.json", entry.ID))
+				tmData, _ := json.MarshalIndent(tm, "", "  ")
+				if err := os.WriteFile(tmPath, tmData, 0600); err == nil {
+					tokenMapRef = tmPath
+				}
 			}
 		}
 
@@ -190,6 +203,23 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 			entry.RetryCount++
 			_ = observe.WriteCache(cacheDir, entry)
 			continue
+		}
+
+		// Post-validation and de-redaction.
+		if tm != nil && tm.Len() > 0 {
+			var allDetails string
+			for _, o := range obs {
+				allDetails += " " + o.Detail
+			}
+			if leaks := redact.CheckLeaks(allDetails, tm); len(leaks) > 0 {
+				entry.RetryCount++
+				_ = observe.WriteCache(cacheDir, entry)
+				fmt.Fprintf(os.Stderr, "daemon: cache retry %s: leak detected (%d values)\n", entry.ID, len(leaks))
+				continue
+			}
+			for i := range obs {
+				obs[i].Detail = redact.Detoken(obs[i].Detail, tm)
+			}
 		}
 
 		result := &Result{
@@ -205,6 +235,7 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 				Host:          host,
 				Scope:         entry.Scope,
 				RedactionMode: string(mode),
+				TokenMapRef:   tokenMapRef,
 			}
 			goals := deriveGoals(obs)
 			woResult, woErr := wo.Generate(genCfg, obs, goals)
