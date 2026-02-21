@@ -473,8 +473,23 @@ setup_egress() {
     # Allow established/related connections
     nft add rule inet nullbot_egress output ct state established,related accept
 
-    # Allow DNS resolution (UDP 53) for nullbot user
-    nft add rule inet nullbot_egress output meta skuid nullbot udp dport 53 accept
+    # Allow DNS resolution (UDP 53) — rate-limited and destination-locked.
+    # Rate limit: 10 queries/sec burst 20. Normal operation needs ~1-2/min.
+    # DNS tunneling tools (iodine, dnscat2) need 100s/sec — this makes
+    # exfiltration impractically slow (~10 bytes/sec theoretical max).
+    local dns_servers
+    dns_servers=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | head -3)
+
+    if [ -n "$dns_servers" ]; then
+        for dns in $dns_servers; do
+            nft add rule inet nullbot_egress output meta skuid nullbot ip daddr "$dns" udp dport 53 limit rate 10/second burst 20 packets accept
+            ok "DNS allowed to resolver ${dns} (rate-limited)"
+        done
+    else
+        # Fallback: rate-limit DNS to any destination
+        nft add rule inet nullbot_egress output meta skuid nullbot udp dport 53 limit rate 10/second burst 20 packets accept
+        warn "no resolvers in /etc/resolv.conf — DNS rate-limited but not destination-locked"
+    fi
 
     # Allow HTTPS to LLM API endpoints only
     for ip in $llm_ips; do
