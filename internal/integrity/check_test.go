@@ -15,8 +15,13 @@ import (
 
 func TestVerifySkipsWhenNoExpectedHash(t *testing.T) {
 	old := ExpectedHash
+	oldPaths := ChecksumPaths
 	ExpectedHash = ""
-	defer func() { ExpectedHash = old }()
+	ChecksumPaths = []string{"/nonexistent/path"}
+	defer func() {
+		ExpectedHash = old
+		ChecksumPaths = oldPaths
+	}()
 
 	if err := Verify(); err != nil {
 		t.Fatalf("expected nil error for empty ExpectedHash, got %v", err)
@@ -238,5 +243,98 @@ func TestHashFileNonExistent(t *testing.T) {
 	_, err := hashFile("/nonexistent/path/to/binary")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestVerifyUsesChecksumFile(t *testing.T) {
+	old := ExpectedHash
+	oldPaths := ChecksumPaths
+	oldDir := TamperLogDir
+	ExpectedHash = ""
+	TamperLogDir = t.TempDir()
+	defer func() {
+		ExpectedHash = old
+		ChecksumPaths = oldPaths
+		TamperLogDir = oldDir
+	}()
+
+	// Write a checksum file with a wrong hash — should trigger tamper event.
+	tmpDir := t.TempDir()
+	checksumFile := filepath.Join(tmpDir, "binary.sha256")
+	os.WriteFile(checksumFile, []byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"), 0600)
+	ChecksumPaths = []string{checksumFile}
+
+	err := Verify()
+	if err == nil {
+		t.Fatal("expected error for checksum file mismatch, got nil")
+	}
+	if !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Errorf("expected checksum mismatch error, got %v", err)
+	}
+}
+
+func TestLoadChecksumFileValid(t *testing.T) {
+	oldPaths := ChecksumPaths
+	defer func() { ChecksumPaths = oldPaths }()
+
+	tmpDir := t.TempDir()
+	checksumFile := filepath.Join(tmpDir, "binary.sha256")
+	hash := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	os.WriteFile(checksumFile, []byte(hash+"\n"), 0600)
+	ChecksumPaths = []string{checksumFile}
+
+	got := loadChecksumFile()
+	if got != hash {
+		t.Errorf("expected %s, got %s", hash, got)
+	}
+}
+
+func TestLoadChecksumFileInvalidContent(t *testing.T) {
+	oldPaths := ChecksumPaths
+	defer func() { ChecksumPaths = oldPaths }()
+
+	tmpDir := t.TempDir()
+	checksumFile := filepath.Join(tmpDir, "binary.sha256")
+	os.WriteFile(checksumFile, []byte("not-a-valid-hash\n"), 0600)
+	ChecksumPaths = []string{checksumFile}
+
+	got := loadChecksumFile()
+	if got != "" {
+		t.Errorf("expected empty string for invalid hash, got %s", got)
+	}
+}
+
+func TestLoadChecksumFileFallsThrough(t *testing.T) {
+	oldPaths := ChecksumPaths
+	defer func() { ChecksumPaths = oldPaths }()
+
+	tmpDir := t.TempDir()
+	// First path doesn't exist, second has valid hash.
+	checksumFile := filepath.Join(tmpDir, "binary.sha256")
+	hash := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	os.WriteFile(checksumFile, []byte(hash), 0600)
+	ChecksumPaths = []string{"/nonexistent/path", checksumFile}
+
+	got := loadChecksumFile()
+	if got != hash {
+		t.Errorf("expected %s, got %s", hash, got)
+	}
+}
+
+func TestIsHex(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"abcdef0123456789", true},
+		{"ABCDEF0123456789", true},
+		{"abcdefg", false},
+		{"", true},
+		{"xyz", false},
+	}
+	for _, tt := range tests {
+		if got := isHex(tt.in); got != tt.want {
+			t.Errorf("isHex(%q) = %v, want %v", tt.in, got, tt.want)
+		}
 	}
 }

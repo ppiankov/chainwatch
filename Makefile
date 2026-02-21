@@ -59,6 +59,11 @@ check-fmt: ## Check if code is formatted (CI mode)
 go-build: ## Build Go binary
 	go build -o bin/chainwatch ./cmd/chainwatch
 
+.PHONY: go-build-hash
+go-build-hash: go-build ## Build Go binary and write checksum file
+	sha256sum bin/chainwatch | awk '{print $$1}' > bin/chainwatch.sha256
+	@echo "integrity: checksum written to bin/chainwatch.sha256"
+
 .PHONY: go-test
 go-test: ## Run Go tests with race detection
 	go test -race -v ./internal/...
