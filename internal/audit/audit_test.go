@@ -249,6 +249,36 @@ func TestVerify10KEntriesUnder1Second(t *testing.T) {
 	}
 }
 
+func TestAuditLogFilePermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "perms", "audit.jsonl")
+	l, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Record(testEntry("allow"))
+	l.Close()
+
+	// Check file permissions are 0600
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("expected file perm 0600, got %04o", perm)
+	}
+
+	// Check directory permissions are 0700
+	dirInfo, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirPerm := dirInfo.Mode().Perm()
+	if dirPerm != 0700 {
+		t.Errorf("expected dir perm 0700, got %04o", dirPerm)
+	}
+}
+
 func TestPolicyHashChangesWhenConfigChanges(t *testing.T) {
 	// Two different inputs produce different hashes
 	h1 := HashLine([]byte("policy_v1"))
