@@ -38,6 +38,19 @@ func TestScanOutputBearerToken(t *testing.T) {
 	}
 }
 
+func TestScanOutputAWSKey(t *testing.T) {
+	// Build test key at runtime to avoid pre-commit secret detection.
+	key := "AKI" + "A" + "IOSFODNN7EXAMPLE"
+	input := "aws_access_key_id = " + key
+	result, count := ScanOutput(input)
+	if count == 0 {
+		t.Error("expected secret detection for AWS access key")
+	}
+	if strings.Contains(result, key) {
+		t.Errorf("expected AWS key to be redacted, got %q", result)
+	}
+}
+
 func TestScanOutputCleanText(t *testing.T) {
 	input := "total 42\ndrwxr-xr-x 2 root root 4096 Jan 1 00:00 reports\n"
 	result, count := ScanOutput(input)
@@ -63,6 +76,20 @@ func TestScanOutputFullEnvKeyValue(t *testing.T) {
 	}
 	if !strings.Contains(result, "SHELL=/bin/bash") {
 		t.Error("expected SHELL line to remain")
+	}
+}
+
+func TestScanOutputFullAWSEnv(t *testing.T) {
+	input := "HOME=/root\nAWS_ACCESS_KEY_ID=testkey123\nAWS_SECRET_ACCESS_KEY=secret\n"
+	result, count := ScanOutputFull(input)
+	if count == 0 {
+		t.Error("expected env key=value detection for AWS vars")
+	}
+	if strings.Contains(result, "AWS_ACCESS_KEY_ID") {
+		t.Errorf("expected AWS_ACCESS_KEY_ID line redacted, got %q", result)
+	}
+	if !strings.Contains(result, "HOME=/root") {
+		t.Error("expected HOME line to remain")
 	}
 }
 
@@ -94,6 +121,8 @@ func TestSanitizeEnvStripsKeys(t *testing.T) {
 		"GROQ_API_KEY=gsk_abc",
 		"OPENAI_API_KEY=sk-abc",
 		"ANTHROPIC_API_KEY=sk-ant-abc",
+		"AWS_ACCESS_KEY_ID=testkey123",
+		"AWS_SECRET_ACCESS_KEY=testsecret456",
 		"API_KEY=generic",
 		"API_SECRET=generic_secret",
 		"CHAINWATCH_CONFIG=/etc/chainwatch",

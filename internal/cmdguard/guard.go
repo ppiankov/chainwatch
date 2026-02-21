@@ -303,6 +303,7 @@ var sensitiveEnvPrefixes = []string{
 	"GROQ_API",
 	"OPENAI_API",
 	"ANTHROPIC_API",
+	"AWS_",
 	"CHAINWATCH_",
 }
 
