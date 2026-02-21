@@ -9,6 +9,8 @@ var selfTargetPatterns = []string{
 	"chainwatch",
 	".chainwatch/",
 	"chainwatch.yaml",
+	"nullbot",
+	".groq-key",
 }
 
 // IsSelfTargeting returns true if the action targets chainwatch itself.
@@ -20,7 +22,8 @@ func IsSelfTargeting(action *Action) bool {
 			return true
 		}
 	}
-	if strings.Contains(strings.ToLower(action.Tool), "chainwatch") {
+	toolLower := strings.ToLower(action.Tool)
+	if strings.Contains(toolLower, "chainwatch") || strings.Contains(toolLower, "nullbot") {
 		return true
 	}
 	return false

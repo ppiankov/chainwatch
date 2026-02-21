@@ -33,8 +33,13 @@ func TestSelfTargetingAlwaysTier3(t *testing.T) {
 		{"rm /usr/local/bin/chainwatch", true},
 		{"cat ~/.chainwatch/policy.yaml", true},
 		{"cat chainwatch.yaml", true},
+		{"cat ~/config/nullbot.env", true},
+		{"cat /tmp/.groq-key", true},
+		{"systemctl status nullbot", true},
+		{"rm /usr/local/bin/nullbot", true},
 		{"ls /tmp/reports", false},
 		{"echo hello", false},
+		{"cat /var/log/app.log", false},
 	}
 
 	for _, tt := range tests {

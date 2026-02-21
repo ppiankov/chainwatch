@@ -31,6 +31,8 @@ execution_boundaries:
     - "~/.aws/*"
     - "**/.env"
     - "**/credentials*"
+    - "**/nullbot.env"
+    - "**/.groq-key"
   commands:
     - "rm -rf"
     - "curl|sh"
@@ -55,3 +57,7 @@ policy:
       resource_pattern: "*secret*"
       decision: deny
       reason: "secrets access blocked by vm-cloud profile"
+    - purpose: "*"
+      resource_pattern: "*nullbot*config*"
+      decision: deny
+      reason: "nullbot config access blocked by vm-cloud profile"
