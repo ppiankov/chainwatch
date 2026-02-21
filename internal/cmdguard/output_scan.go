@@ -16,6 +16,8 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`sk-ant-[a-zA-Z0-9\-]{20,}`),
 	// Generic long hex tokens (64+ chars) that look like API keys
 	regexp.MustCompile(`\b[a-f0-9]{64,}\b`),
+	// AWS access key IDs: AKIA...
+	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 	// Bearer tokens
 	regexp.MustCompile(`(?i)bearer\s+[a-zA-Z0-9\-_.]{20,}`),
 }
@@ -43,7 +45,7 @@ func ScanOutput(output string) (string, int) {
 // `declare -p`, and similar shell builtins.
 var envKeyValuePattern = regexp.MustCompile(
 	`(?im)^(?:declare -x |export )?` +
-		`(NULLBOT_\w*|GROQ_\w*|OPENAI_\w*|ANTHROPIC_\w*|API_KEY|API_SECRET|CHAINWATCH_\w*)` +
+		`(NULLBOT_\w*|GROQ_\w*|OPENAI_\w*|ANTHROPIC_\w*|AWS_\w*|API_KEY|API_SECRET|CHAINWATCH_\w*)` +
 		`[= ].*$`,
 )
 
