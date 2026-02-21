@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -78,6 +79,7 @@ type config struct {
 	redactMode    redact.Mode
 	redactCfg     *redact.RedactConfig
 	extraPatterns []redact.ExtraPattern
+	llmRateLimit  int // requests per minute; 0 = unlimited
 }
 
 // step is a single command proposed by the LLM.
@@ -120,6 +122,7 @@ func generateEnvFile(profileName string) string {
 	b.WriteString("# NULLBOT_API_URL=https://api.groq.com/openai/v1/chat/completions\n")
 	b.WriteString("# NULLBOT_API_KEY=\n")
 	b.WriteString("# NULLBOT_MODEL=llama-3.1-8b-instant\n")
+	b.WriteString("# NULLBOT_LLM_RPM=30  # LLM requests per minute limit (0 = unlimited)\n")
 	return b.String()
 }
 
@@ -173,6 +176,13 @@ func resolveConfig(flagURL, flagModel, flagProfile string, flagMaxSteps int, fla
 
 	// Resolve redaction mode: localhost → local (no redaction), else → cloud (mandatory).
 	cfg.redactMode = redact.ResolveMode(cfg.apiURL, os.Getenv("NULLBOT_REDACT"))
+
+	// Resolve LLM rate limit: NULLBOT_LLM_RPM env var (requests per minute).
+	if rpm := os.Getenv("NULLBOT_LLM_RPM"); rpm != "" {
+		if n, err := strconv.Atoi(rpm); err == nil && n > 0 {
+			cfg.llmRateLimit = n
+		}
+	}
 
 	// Load operator redaction config (optional).
 	rcfg, err := redact.LoadConfig("")
@@ -749,6 +759,7 @@ Examples:
 				PollMode:      daemonPollMode,
 				RedactConfig:  cfg.redactCfg,
 				ExtraPatterns: cfg.extraPatterns,
+				LLMRateLimit:  cfg.llmRateLimit,
 			}
 
 			d, err := daemon.New(dcfg)

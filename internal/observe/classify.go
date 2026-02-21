@@ -14,11 +14,12 @@ import (
 
 // ClassifierConfig holds parameters for LLM-based observation classification.
 type ClassifierConfig struct {
-	APIURL    string
-	APIKey    string
-	Model     string
-	MaxTokens int
-	Timeout   time.Duration
+	APIURL       string
+	APIKey       string
+	Model        string
+	MaxTokens    int
+	Timeout      time.Duration
+	LLMRateLimit int // requests per minute; 0 = unlimited
 }
 
 // classificationResponse is the expected JSON from the LLM.
@@ -70,6 +71,9 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 		APIKey:     cfg.APIKey,
 		Model:      cfg.Model,
 		HTTPClient: &http.Client{Timeout: timeout},
+	}
+	if cfg.LLMRateLimit > 0 {
+		client.RateLimit = &neurorouter.RateLimit{RequestsPerMinute: cfg.LLMRateLimit}
 	}
 
 	temp := float64(0)
