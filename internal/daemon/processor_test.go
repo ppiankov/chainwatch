@@ -210,6 +210,56 @@ func TestProcessorRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestProcessorReplayProtection(t *testing.T) {
+	dirs := setupProcessorDirs(t)
+	p := NewProcessor(ProcessorConfig{
+		Dirs:       dirs,
+		Chainwatch: "/nonexistent/chainwatch",
+	})
+
+	job := &Job{
+		ID:        "replay-001",
+		Type:      JobTypeObserve,
+		Target:    JobTarget{Scope: "/tmp"},
+		Brief:     "test replay",
+		Source:    "manual",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	// First submission should succeed.
+	path1 := writeJobFile(t, dirs.Inbox, job)
+	if err := p.Process(context.Background(), path1); err != nil {
+		t.Fatalf("first process: %v", err)
+	}
+
+	// Second submission with same ID should be rejected.
+	path2 := writeJobFile(t, dirs.Inbox, job)
+	if err := p.Process(context.Background(), path2); err != nil {
+		t.Fatalf("second process returned error: %v", err)
+	}
+
+	// Should have two results in outbox: one from first run, one failed dedup.
+	entries, _ := os.ReadDir(dirs.Outbox)
+	found := false
+	for _, e := range entries {
+		data, _ := os.ReadFile(filepath.Join(dirs.Outbox, e.Name()))
+		var result Result
+		if json.Unmarshal(data, &result) == nil && result.ID == "replay-001" {
+			if strings.Contains(result.Error, "duplicate job ID") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("expected a failed result with 'duplicate job ID' error")
+	}
+
+	// Executed marker should exist.
+	if !p.wasExecuted("replay-001") {
+		t.Error("expected executed marker for replay-001")
+	}
+}
+
 func TestNewProcessorDefaults(t *testing.T) {
 	p := NewProcessor(ProcessorConfig{})
 	if p.cfg.Chainwatch != "chainwatch" {
