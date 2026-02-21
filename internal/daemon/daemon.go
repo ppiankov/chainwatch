@@ -13,6 +13,7 @@ import (
 
 	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/redact"
+	"github.com/ppiankov/chainwatch/internal/systemd"
 	"github.com/ppiankov/chainwatch/internal/wo"
 	"github.com/ppiankov/neurorouter"
 )
@@ -77,6 +78,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return fmt.Errorf("acquire PID lock: %w", err)
 	}
 	defer func() { _ = os.Remove(pidPath) }()
+
+	// Check systemd unit file integrity (best-effort, warning only).
+	if msg := systemd.CheckUnitFileIntegrity(); msg != "" {
+		fmt.Fprintf(os.Stderr, "daemon: WARNING %s\n", msg)
+	}
 
 	// Recovery: move orphaned processing files to failed.
 	if err := d.recoverOrphans(); err != nil {
