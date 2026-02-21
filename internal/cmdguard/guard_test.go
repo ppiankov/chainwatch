@@ -209,6 +209,86 @@ func TestStdinPassthrough(t *testing.T) {
 	}
 }
 
+func TestLimitedWriterUnderLimit(t *testing.T) {
+	w := newLimitedWriter(1024)
+	data := []byte("hello world")
+	n, err := w.Write(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != len(data) {
+		t.Errorf("expected %d bytes written, got %d", len(data), n)
+	}
+	if w.truncated {
+		t.Error("expected no truncation")
+	}
+	if w.String() != "hello world" {
+		t.Errorf("expected 'hello world', got %q", w.String())
+	}
+}
+
+func TestLimitedWriterAtLimit(t *testing.T) {
+	w := newLimitedWriter(5)
+	n, err := w.Write([]byte("helloworld"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 10 {
+		t.Errorf("expected 10 reported (full consumption), got %d", n)
+	}
+	if !w.truncated {
+		t.Error("expected truncation")
+	}
+	if w.String() != "hello" {
+		t.Errorf("expected 'hello', got %q", w.String())
+	}
+}
+
+func TestLimitedWriterMultipleWrites(t *testing.T) {
+	w := newLimitedWriter(10)
+	w.Write([]byte("12345"))
+	w.Write([]byte("67890"))
+	w.Write([]byte("overflow"))
+
+	if !w.truncated {
+		t.Error("expected truncation on third write")
+	}
+	if w.String() != "1234567890" {
+		t.Errorf("expected '1234567890', got %q", w.String())
+	}
+}
+
+func TestLimitedWriterZeroLimit(t *testing.T) {
+	w := newLimitedWriter(0)
+	n, err := w.Write([]byte("anything"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 8 {
+		t.Errorf("expected 8 reported, got %d", n)
+	}
+	if !w.truncated {
+		t.Error("expected truncation with zero limit")
+	}
+	if w.String() != "" {
+		t.Errorf("expected empty, got %q", w.String())
+	}
+}
+
+func TestOutputTruncationSmallCommand(t *testing.T) {
+	g := newTestGuard(t)
+	result, err := g.Run(context.Background(), "echo", []string{"small output"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.StdoutTruncated {
+		t.Error("small output should not be truncated")
+	}
+	if result.StderrTruncated {
+		t.Error("stderr should not be truncated for echo")
+	}
+}
+
 func TestCommandSensitivity(t *testing.T) {
 	tests := []struct {
 		cmd      string
