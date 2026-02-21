@@ -29,6 +29,8 @@ execution_boundaries:
     - "~/.aws/*"
     - "**/.env"
     - "**/credentials*"
+    - "**/nullbot.env"
+    - "**/.groq-key"
   commands:
     - "rm -rf"
     - "curl|sh"
@@ -44,3 +46,7 @@ policy:
       resource_pattern: "*password*"
       decision: deny
       reason: "password file access blocked by clawbot profile"
+    - purpose: "*"
+      resource_pattern: "*nullbot*config*"
+      decision: deny
+      reason: "nullbot config access blocked by clawbot profile"
