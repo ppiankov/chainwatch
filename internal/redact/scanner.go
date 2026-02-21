@@ -147,6 +147,96 @@ func Scan(text string) []Match {
 	return matches
 }
 
+// ScanWithConfig extends Scan with operator-defined custom patterns
+// and safe list overrides. If cfg is nil and extra is nil, behaves
+// identically to Scan.
+func ScanWithConfig(text string, cfg *RedactConfig, extra []ExtraPattern) []Match {
+	matches := Scan(text)
+	if cfg == nil && len(extra) == 0 {
+		return matches
+	}
+
+	seen := make(map[string]bool)
+	for _, m := range matches {
+		seen[m.Value] = true
+	}
+
+	add := func(typ PatternType, value string, start int) {
+		value = strings.TrimRight(value, ".,;:\"'`)}]")
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		matches = append(matches, Match{Type: typ, Value: value, Start: start, End: start + len(value)})
+	}
+
+	// Custom regex patterns.
+	for _, ep := range extra {
+		for _, loc := range ep.Regex.FindAllStringIndex(text, -1) {
+			add(ep.TokenPrefix, text[loc[0]:loc[1]], loc[0])
+		}
+	}
+
+	if cfg != nil {
+		// Literal matches.
+		for _, lit := range cfg.Literals {
+			if lit == "" {
+				continue
+			}
+			idx := 0
+			for {
+				pos := strings.Index(text[idx:], lit)
+				if pos < 0 {
+					break
+				}
+				absPos := idx + pos
+				add(PatternType("LITERAL"), lit, absPos)
+				idx = absPos + len(lit)
+			}
+		}
+
+		// Filter out matches in extended safe lists.
+		extraSafeHosts := make(map[string]bool)
+		for _, h := range cfg.SafeHosts {
+			extraSafeHosts[strings.ToLower(h)] = true
+		}
+		extraSafeIPs := make(map[string]bool)
+		for _, ip := range cfg.SafeIPs {
+			extraSafeIPs[ip] = true
+		}
+
+		var filtered []Match
+		for _, m := range matches {
+			if m.Type == PatternHost && extraSafeHosts[strings.ToLower(m.Value)] {
+				continue
+			}
+			if m.Type == PatternIP && extraSafeIPs[m.Value] {
+				continue
+			}
+			if m.Type == PatternPath {
+				skip := false
+				for _, prefix := range cfg.SafePaths {
+					if strings.HasPrefix(m.Value, prefix) {
+						skip = true
+						break
+					}
+				}
+				if skip {
+					continue
+				}
+			}
+			filtered = append(filtered, m)
+		}
+		matches = filtered
+	}
+
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].Start < matches[j].Start
+	})
+
+	return matches
+}
+
 // isIPLike returns true if the string looks like an IP address (all digits and dots).
 func isIPLike(s string) bool {
 	for _, c := range s {

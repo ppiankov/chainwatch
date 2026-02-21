@@ -1,6 +1,7 @@
 package redact
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -137,6 +138,55 @@ func TestCheckLeaksEmptyMap(t *testing.T) {
 	if len(leaks) != 0 {
 		t.Errorf("expected 0 leaks with empty map, got %d", len(leaks))
 	}
+}
+
+func TestRedactWithConfigNil(t *testing.T) {
+	text := "Server 192.168.1.42 has file at /var/www/site/config.php"
+	tm1 := NewTokenMap("test-nil-1")
+	tm2 := NewTokenMap("test-nil-2")
+
+	redacted1 := Redact(text, tm1)
+	redacted2 := RedactWithConfig(text, tm2, nil, nil)
+
+	if redacted1 != redacted2 {
+		t.Errorf("nil config should match Redact:\n  Redact:         %s\n  RedactWithConfig: %s", redacted1, redacted2)
+	}
+}
+
+func TestRedactWithConfigCustomPattern(t *testing.T) {
+	text := "Database db_production_main on server /var/www/app"
+	cfg := &RedactConfig{}
+	extra := []ExtraPattern{
+		{Name: "DBNAME", Regex: mustCompile(`\bdb_[a-z0-9_]+\b`), TokenPrefix: "DBNAME"},
+	}
+	tm := NewTokenMap("test-custom")
+	redacted := RedactWithConfig(text, tm, cfg, extra)
+
+	if strings.Contains(redacted, "db_production_main") {
+		t.Error("custom pattern not redacted")
+	}
+	if !strings.Contains(redacted, "<<DBNAME_1>>") {
+		t.Errorf("expected <<DBNAME_1>> token, got: %s", redacted)
+	}
+}
+
+func TestRedactWithConfigRoundTrip(t *testing.T) {
+	text := "Connect to db_orders at 192.168.1.42 path /var/www/app"
+	cfg := &RedactConfig{}
+	extra := []ExtraPattern{
+		{Name: "DBNAME", Regex: mustCompile(`\bdb_[a-z0-9_]+\b`), TokenPrefix: "DBNAME"},
+	}
+	tm := NewTokenMap("test-custom-rt")
+	redacted := RedactWithConfig(text, tm, cfg, extra)
+	restored := Detoken(redacted, tm)
+
+	if restored != text {
+		t.Errorf("round-trip failed:\n  original: %s\n  restored: %s", text, restored)
+	}
+}
+
+func mustCompile(pattern string) *regexp.Regexp {
+	return regexp.MustCompile(pattern)
 }
 
 func TestRedactComplexScenario(t *testing.T) {
