@@ -68,6 +68,8 @@ func TestDaemonTemplate(t *testing.T) {
 		"ProtectKernelTunables=true",
 		"RestrictNamespaces=true",
 		"MemoryDenyWriteExecute=true",
+		"PrivateDevices=true",
+		"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
 	} {
 		if !strings.Contains(tmpl, directive) {
 			t.Errorf("template missing security directive %s", directive)
@@ -117,6 +119,8 @@ func TestVMDaemonTemplate(t *testing.T) {
 		"NoNewPrivileges=true",
 		"ProtectSystem=strict",
 		"MemoryDenyWriteExecute=true",
+		"PrivateDevices=true",
+		"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
 	} {
 		if !strings.Contains(tmpl, directive) {
 			t.Errorf("template missing security directive %s", directive)
