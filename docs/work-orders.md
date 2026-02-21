@@ -1959,7 +1959,7 @@ Deployment profile for VMs and containers with no local LLM. Redaction is mandat
 ### Design
 - Profile: `nullbot init --profile vm-cloud`
 - Forces: `NULLBOT_REDACT=always`, observe-only default, strict resource limits
-- Systemd unit with: `CPUQuota=30%`, `MemoryMax=256M`, `TasksMax=30`
+- Systemd unit with: `CPUQuota=30%`, `MemoryMax=256M`, `TasksMax=64`
 - No local model assumed — API URL must be set or nullbot runs in offline mode (collect evidence, queue WO, wait for connectivity)
 - Offline mode: observations cached in state dir, WO generated when LLM becomes available or sent to runforge raw
 
