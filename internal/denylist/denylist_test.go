@@ -108,6 +108,27 @@ func TestProcEnvironBlocked(t *testing.T) {
 	}
 }
 
+func TestAPIKeyEnvVarBlocked(t *testing.T) {
+	dl := NewDefault()
+
+	tests := []struct {
+		cmd  string
+		want bool
+	}{
+		{"echo $GROQ_API_KEY", true},
+		{"echo $OPENAI_API_KEY", true},
+		{"echo $ANTHROPIC_API_KEY", true},
+		{"echo $API_KEY", true},
+		{"echo $HOME", false},
+	}
+	for _, tt := range tests {
+		blocked, _ := dl.IsBlocked(tt.cmd, "shell_exec")
+		if blocked != tt.want {
+			t.Errorf("IsBlocked(%q) = %v, want %v", tt.cmd, blocked, tt.want)
+		}
+	}
+}
+
 func TestSafeCommandAllowed(t *testing.T) {
 	dl := NewDefault()
 
