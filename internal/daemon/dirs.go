@@ -53,6 +53,11 @@ func (d DirConfig) CacheDir() string {
 	return filepath.Join(d.State, "cache")
 }
 
+// ExecutedDir returns the path to the dedup tracking subdirectory.
+func (d DirConfig) ExecutedDir() string {
+	return filepath.Join(d.State, "executed")
+}
+
 // EnsureDirs creates all required directories. Idempotent.
 func EnsureDirs(cfg DirConfig) error {
 	dirs := []string{
@@ -63,6 +68,7 @@ func EnsureDirs(cfg DirConfig) error {
 		cfg.RejectedDir(),
 		cfg.IngestedDir(),
 		cfg.CacheDir(),
+		cfg.ExecutedDir(),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, dirPerm); err != nil {

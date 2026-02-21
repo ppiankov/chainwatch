@@ -71,6 +71,12 @@ func (p *Processor) Process(_ context.Context, jobPath string) error {
 		return p.writeFailedResult(job.ID, fmt.Sprintf("validation failed: %v", err))
 	}
 
+	// Replay protection: reject duplicate job IDs.
+	if p.wasExecuted(job.ID) {
+		_ = os.Remove(jobPath)
+		return p.writeFailedResult(job.ID, "rejected: duplicate job ID (replay protection)")
+	}
+
 	// Move to processing state. Uses moveFile to handle systemd bind mounts (EXDEV).
 	processingPath := filepath.Join(p.cfg.Dirs.ProcessingDir(), job.ID+".json")
 	if err := moveFile(jobPath, processingPath); err != nil {
@@ -92,6 +98,9 @@ func (p *Processor) Process(_ context.Context, jobPath string) error {
 	if err := p.writeResult(result); err != nil {
 		return fmt.Errorf("write result: %w", err)
 	}
+
+	// Record execution for replay protection.
+	p.markExecuted(job.ID)
 
 	// Clean up processing file.
 	_ = os.Remove(processingPath)
@@ -274,6 +283,19 @@ func (p *Processor) writeResult(r *Result) error {
 		return fmt.Errorf("write temp: %w", err)
 	}
 	return os.Rename(tmpPath, finalPath)
+}
+
+// wasExecuted checks if a job ID has been processed before.
+func (p *Processor) wasExecuted(id string) bool {
+	path := filepath.Join(p.cfg.Dirs.ExecutedDir(), id)
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// markExecuted records a job ID as processed for replay protection.
+func (p *Processor) markExecuted(id string) {
+	path := filepath.Join(p.cfg.Dirs.ExecutedDir(), id)
+	_ = os.WriteFile(path, []byte(time.Now().UTC().Format(time.RFC3339)), 0600)
 }
 
 // writeFailedResult writes a minimal failed result when the job can't be parsed.
