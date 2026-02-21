@@ -25,7 +25,7 @@ WantedBy=multi-user.target
 }
 
 // VMDaemonTemplate returns the systemd unit for nullbot daemon on VMs.
-// Tighter resource limits than DaemonTemplate: 256M RAM, 30 tasks.
+// Tighter resource limits than DaemonTemplate: 256M RAM, 64 tasks.
 // Reads environment from /home/nullbot/config/nullbot.env.
 func VMDaemonTemplate() string {
 	return `[Unit]
@@ -59,9 +59,11 @@ PrivateDevices=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 # Resource limits (VM-cloud: stricter than default daemon)
+# TasksMax=64: Go runtime ~10 threads + 5 workers × child processes.
+# 30 was too tight — caused fatal error: newosproc under burst load.
 CPUQuota=30%
 MemoryMax=256M
-TasksMax=30
+TasksMax=64
 
 [Install]
 WantedBy=multi-user.target

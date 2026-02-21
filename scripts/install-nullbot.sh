@@ -343,9 +343,11 @@ PrivateDevices=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 # Resource limits (VM-cloud: stricter than default daemon)
+# TasksMax=64: Go runtime ~10 threads + 5 workers × child processes.
+# 30 was too tight — caused fatal error: newosproc under burst load.
 CPUQuota=30%
 MemoryMax=256M
-TasksMax=30
+TasksMax=64
 
 [Install]
 WantedBy=multi-user.target

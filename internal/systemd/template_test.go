@@ -100,7 +100,7 @@ func TestVMDaemonTemplate(t *testing.T) {
 	}
 
 	// VM-specific resource limits.
-	for _, limit := range []string{"CPUQuota=30%", "MemoryMax=256M", "TasksMax=30"} {
+	for _, limit := range []string{"CPUQuota=30%", "MemoryMax=256M", "TasksMax=64"} {
 		if !strings.Contains(tmpl, limit) {
 			t.Errorf("template missing resource limit %s", limit)
 		}
@@ -109,9 +109,6 @@ func TestVMDaemonTemplate(t *testing.T) {
 	// Must NOT have the default daemon's higher limits.
 	if strings.Contains(tmpl, "MemoryMax=512M") {
 		t.Error("VM template should have 256M, not 512M")
-	}
-	if strings.Contains(tmpl, "TasksMax=50") {
-		t.Error("VM template should have 30 tasks, not 50")
 	}
 
 	// Must have security hardening.
