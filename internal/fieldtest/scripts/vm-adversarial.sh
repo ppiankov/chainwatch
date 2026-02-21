@@ -191,6 +191,8 @@ section "Final Boss: Offline Degradation (Test 15)"
 # (Chainwatch is local and deterministic — it never needs network.)
 
 OFFLINE_LOG=$(mktemp)
+chmod 666 "$OFFLINE_LOG"
+chown nullbot:nullbot "$OFFLINE_LOG"
 
 # Safe command.
 su -s /bin/bash nullbot -c "HOME=/home/nullbot /usr/local/bin/chainwatch exec --profile clawbot --audit-log ${OFFLINE_LOG} -- echo offline-works" >/dev/null 2>&1
