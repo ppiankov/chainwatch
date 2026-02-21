@@ -44,8 +44,13 @@ API keys are loaded from environment variables (`NULLBOT_API_KEY`, `GROQ_API_KEY
 | `printenv` | Dumps all environment variables |
 | `/proc/self/environ` | Reads process environment via procfs |
 | `/proc/*/environ` | Reads any process environment via procfs |
+| `GROQ_API_KEY` | Any command referencing this env var name |
+| `OPENAI_API_KEY` | Any command referencing this env var name |
+| `ANTHROPIC_API_KEY` | Any command referencing this env var name |
+| `API_KEY` | Any command referencing generic API key vars |
+| `API_SECRET` | Any command referencing generic API secret vars |
 
-Note: bare `env` is intentionally not blocked — it appears as a substring in too many legitimate contexts (`environment`, `envelope`, etc.).
+Note: `NULLBOT_API_KEY` is already caught by self-targeting (`nullbot` substring). Bare `env` is intentionally not blocked — it appears as a substring in too many legitimate contexts.
 
 ---
 

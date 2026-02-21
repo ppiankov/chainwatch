@@ -43,5 +43,10 @@ var DefaultPatterns = Patterns{
 		"printenv",
 		"/proc/self/environ",
 		"/proc/*/environ",
+		"GROQ_API_KEY",
+		"OPENAI_API_KEY",
+		"ANTHROPIC_API_KEY",
+		"API_KEY",
+		"API_SECRET",
 	},
 }
