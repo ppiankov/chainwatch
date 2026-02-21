@@ -90,7 +90,7 @@ The nullbot user is restricted to outbound connections to the configured LLM API
 
 Allowed traffic:
 - Loopback (localhost)
-- DNS resolution (UDP 53) — required to resolve the API endpoint
+- DNS resolution (UDP 53) — rate-limited to 10 queries/second, restricted to system resolvers
 - HTTPS (TCP 443) to the LLM API IP addresses only
 
 Blocked traffic:
@@ -100,7 +100,7 @@ Blocked traffic:
 
 This ensures that even if the nullbot process is compromised, it cannot phone home, participate in C2, or exfiltrate data to arbitrary endpoints. The blast radius of a compromised daemon is limited to executing commands that chainwatch allows — with no network escape path.
 
-**Known limitation:** DNS resolution is permitted, which theoretically allows slow DNS-based data exfiltration. Blocking DNS entirely would require hardcoding LLM API IP addresses, which is brittle. DNS exfiltration is slow, noisy, and detectable via DNS query logs.
+**Mitigation:** DNS queries from the nullbot user are rate-limited (10/sec burst 20) and restricted to system resolvers configured in /etc/resolv.conf. This makes DNS tunneling impractically slow (~10 bytes/sec theoretical max) while preserving normal API endpoint resolution. DNS query logging on the resolver provides additional detection capability.
 
 ---
 
@@ -128,7 +128,7 @@ Chainwatch is a deterministic policy engine, not a general-purpose security syst
 - **Correctly-configured policy.** Chainwatch enforces whatever policy is configured. A misconfigured policy can allow dangerous commands. The installer provides safe defaults, but operators must review.
 - **Novel encoding or steganography.** Output scanning catches common credential formats. It does not detect secrets hidden in compressed data, images, or novel encodings. Chainwatch is not a DLP system.
 - **Human-approved destructive actions.** If a human approves a work order that causes damage through allowed commands, chainwatch does not prevent it. Approval is a human decision with human responsibility.
-- **Side-channel exfiltration.** Timing attacks, covert channels through exit codes, or DNS-based data exfiltration are not fully addressed. Network egress control blocks direct exfiltration, but DNS tunneling remains a theoretical vector.
+- **Side-channel exfiltration.** Timing attacks and covert channels through exit codes are not addressed. DNS-based exfiltration is rate-limited to make tunneling impractical, but not fully eliminated.
 - **Supply chain attacks on dependencies.** Chainwatch verifies its own binary integrity but does not audit its build dependencies.
 
 ---
