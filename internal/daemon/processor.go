@@ -23,6 +23,7 @@ type ProcessorConfig struct {
 	Model         string
 	RedactConfig  *redact.RedactConfig
 	ExtraPatterns []redact.ExtraPattern
+	LLMRateLimit  int // requests per minute; 0 = unlimited
 }
 
 // Processor handles job lifecycle transitions.
@@ -160,9 +161,10 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 			result.Error = "no LLM available (evidence cached for retry)"
 		} else {
 			classifyCfg := observe.ClassifierConfig{
-				APIURL: p.cfg.APIURL,
-				APIKey: p.cfg.APIKey,
-				Model:  p.cfg.Model,
+				APIURL:       p.cfg.APIURL,
+				APIKey:       p.cfg.APIKey,
+				Model:        p.cfg.Model,
+				LLMRateLimit: p.cfg.LLMRateLimit,
 			}
 
 			// Redact for cloud mode.

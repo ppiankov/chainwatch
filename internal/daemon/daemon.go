@@ -30,6 +30,7 @@ type Config struct {
 	PollInterval  time.Duration
 	RedactConfig  *redact.RedactConfig
 	ExtraPatterns []redact.ExtraPattern
+	LLMRateLimit  int // requests per minute; 0 = unlimited
 }
 
 // Daemon watches the inbox directory and processes jobs.
@@ -56,6 +57,7 @@ func New(cfg Config) (*Daemon, error) {
 		Model:         cfg.Model,
 		RedactConfig:  cfg.RedactConfig,
 		ExtraPatterns: cfg.ExtraPatterns,
+		LLMRateLimit:  cfg.LLMRateLimit,
 	})
 
 	return &Daemon{
@@ -175,9 +177,10 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 	}
 
 	classifyCfg := observe.ClassifierConfig{
-		APIURL: d.cfg.APIURL,
-		APIKey: d.cfg.APIKey,
-		Model:  d.cfg.Model,
+		APIURL:       d.cfg.APIURL,
+		APIKey:       d.cfg.APIKey,
+		Model:        d.cfg.Model,
+		LLMRateLimit: d.cfg.LLMRateLimit,
 	}
 
 	for _, entry := range entries {
