@@ -40,6 +40,7 @@ test-*.sh
 !artifacts/**/*.json
 !artifacts/**/*.md
 !docs/**/*.md
+docs/design/self-protection.md
 !integrations/**/*.md
 !integrations/**/*.json
 !README.md
