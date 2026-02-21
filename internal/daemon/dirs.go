@@ -1,9 +1,12 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 // dirPerm is the permission for daemon-managed directories.
@@ -69,28 +72,48 @@ func EnsureDirs(cfg DirConfig) error {
 	return nil
 }
 
-// ValidateSameFilesystem checks that inbox, outbox, and state directories
-// are on the same filesystem. This is required for atomic rename operations.
-func ValidateSameFilesystem(cfg DirConfig) error {
-	if err := EnsureDirs(cfg); err != nil {
+// moveFile moves src to dst using os.Rename. If rename fails with EXDEV
+// (cross-device link, common with systemd ReadWritePaths bind mounts),
+// it falls back to copy + remove.
+func moveFile(src, dst string) error {
+	err := os.Rename(src, dst)
+	if err == nil {
+		return nil
+	}
+	// Check for EXDEV (cross-device link).
+	var errno syscall.Errno
+	if !errors.As(err, &errno) || errno != syscall.EXDEV {
+		return err
+	}
+	// Fallback: copy then remove.
+	if err := copyFile(src, dst); err != nil {
+		return err
+	}
+	return os.Remove(src)
+}
+
+// copyFile copies src to dst preserving permissions.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	info, err := in.Stat()
+	if err != nil {
 		return err
 	}
 
-	inboxDev, err := deviceID(cfg.Inbox)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
 	if err != nil {
-		return fmt.Errorf("stat inbox: %w", err)
+		return err
 	}
-	outboxDev, err := deviceID(cfg.Outbox)
-	if err != nil {
-		return fmt.Errorf("stat outbox: %w", err)
-	}
-	stateDev, err := deviceID(cfg.State)
-	if err != nil {
-		return fmt.Errorf("stat state: %w", err)
-	}
+	defer out.Close()
 
-	if inboxDev != outboxDev || inboxDev != stateDev {
-		return fmt.Errorf("inbox, outbox, and state must be on the same filesystem for atomic renames")
+	if _, err := io.Copy(out, in); err != nil {
+		_ = os.Remove(dst)
+		return err
 	}
-	return nil
+	return out.Close()
 }
