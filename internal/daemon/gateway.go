@@ -123,9 +123,9 @@ func (g *Gateway) Approve(woID string) error {
 		return fmt.Errorf("WO %q has expired", woID)
 	}
 
-	// Move to approved.
+	// Move to approved. Uses moveFile to handle systemd bind mounts (EXDEV).
 	dst := filepath.Join(g.stateDir, "approved", woID+".json")
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveFile(src, dst); err != nil {
 		return err
 	}
 

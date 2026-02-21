@@ -57,9 +57,9 @@ func (p *Processor) Process(_ context.Context, jobPath string) error {
 		return p.writeFailedResult(job.ID, fmt.Sprintf("validation failed: %v", err))
 	}
 
-	// Move to processing state.
+	// Move to processing state. Uses moveFile to handle systemd bind mounts (EXDEV).
 	processingPath := filepath.Join(p.cfg.Dirs.ProcessingDir(), job.ID+".json")
-	if err := os.Rename(jobPath, processingPath); err != nil {
+	if err := moveFile(jobPath, processingPath); err != nil {
 		return fmt.Errorf("move to processing: %w", err)
 	}
 
@@ -128,6 +128,8 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 
 	// Classify findings if requested and evidence exists.
 	var observations []wo.Observation
+	var tokenMapRef string
+	mode := redact.ResolveMode(p.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))
 	if classify && evidence != "" {
 		if p.cfg.APIURL == "" {
 			// No LLM configured — cache evidence for later retry.
@@ -142,12 +144,17 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 
 			// Redact for cloud mode.
 			classifyEvidence := evidence
-			mode := redact.ResolveMode(p.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))
 			if mode == redact.ModeCloud {
 				tm := redact.NewTokenMap(fmt.Sprintf("daemon-%s", job.ID))
 				classifyEvidence = redact.Redact(evidence, tm)
 				if tm.Len() > 0 {
 					classifyEvidence = tm.Legend() + "\n" + classifyEvidence
+					// Persist the token map for de-redaction.
+					tmPath := filepath.Join(p.cfg.Dirs.CacheDir(), fmt.Sprintf("tokens-%s.json", job.ID))
+					tmData, _ := json.MarshalIndent(tm, "", "  ")
+					if err := os.WriteFile(tmPath, tmData, 0600); err == nil {
+						tokenMapRef = tmPath
+					}
 				}
 			}
 
@@ -174,7 +181,8 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 			IncidentID:    job.ID,
 			Host:          host,
 			Scope:         job.Target.Scope,
-			RedactionMode: string(redact.ResolveMode(p.cfg.APIURL, os.Getenv("NULLBOT_REDACT"))),
+			RedactionMode: string(mode),
+			TokenMapRef:   tokenMapRef,
 		}
 		goals := deriveGoals(observations)
 		woResult, err := wo.Generate(genCfg, observations, goals)
