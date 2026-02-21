@@ -153,6 +153,52 @@ func TestScanOutputPrivateKey(t *testing.T) {
 	}
 }
 
+func TestScanOutputCertificateHeader(t *testing.T) {
+	input := "cert: -----BEGIN CERTIFICATE-----"
+	result, count := ScanOutput(input)
+	if count == 0 {
+		t.Error("expected secret detection for certificate header")
+	}
+	if strings.Contains(result, "BEGIN CERTIFICATE") {
+		t.Errorf("expected certificate header to be redacted, got %q", result)
+	}
+}
+
+func TestScanOutputFullPEMBlock(t *testing.T) {
+	// Simulate a full PEM certificate block (fake data).
+	input := "some output\n-----BEGIN CERTIFICATE-----\n" +
+		"MIIBkTCB+wIJALRiMLAh0MXrMA0GCSqGSIb3DQEBCwUA\n" +
+		"MDExCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJDQTEVMBMG\n" +
+		"-----END CERTIFICATE-----\nmore output"
+	result, count := ScanOutputFull(input)
+	if count == 0 {
+		t.Error("expected PEM block detection for certificate")
+	}
+	if strings.Contains(result, "BEGIN CERTIFICATE") {
+		t.Errorf("expected full PEM block to be redacted, got %q", result)
+	}
+	if !strings.Contains(result, "some output") {
+		t.Error("expected surrounding text to remain")
+	}
+	if !strings.Contains(result, "more output") {
+		t.Error("expected surrounding text to remain")
+	}
+}
+
+func TestScanOutputFullPEMPrivateKey(t *testing.T) {
+	// Build at runtime to avoid pre-commit detection.
+	input := "-----BEGIN RSA " + "PRIVATE KEY-----\n" +
+		"MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF053TlFM\n" +
+		"-----END RSA PRIVATE KEY-----\n"
+	result, count := ScanOutputFull(input)
+	if count == 0 {
+		t.Error("expected PEM block detection for private key")
+	}
+	if strings.Contains(result, "PRIVATE KEY") {
+		t.Errorf("expected private key PEM block to be redacted, got %q", result)
+	}
+}
+
 func TestScanOutputConnectionString(t *testing.T) {
 	// Build connection string at runtime to avoid pre-commit detection.
 	// Split so "postgres://...@" doesn't appear on one diff line.

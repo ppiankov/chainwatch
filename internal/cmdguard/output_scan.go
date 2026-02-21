@@ -27,6 +27,8 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`xox[bpars]-[a-zA-Z0-9\-]{10,}`),
 	// Private key headers (PEM format)
 	regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----`),
+	// TLS certificate and CSR headers (PEM format)
+	regexp.MustCompile(`-----BEGIN CERTIFICATE(?:\s+REQUEST)?-----`),
 	// Connection strings with credentials
 	regexp.MustCompile(`(?:postgres|postgresql|mysql|mongodb|redis|amqp)://[^\s:]+:[^\s@]+@[^\s]+`),
 }
@@ -120,12 +122,34 @@ var envKeyValuePattern = regexp.MustCompile(
 		`[= ].*$`,
 )
 
-// ScanOutputFull runs secret pattern, base64, and env key=value scanning.
+// pemBlockPattern matches complete PEM-encoded blocks (certificates, private
+// keys, CSRs). This catches the entire block including the base64 body, not
+// just the header line. Prevents TLS certs and keys from leaking to the LLM.
+var pemBlockPattern = regexp.MustCompile(
+	`(?s)-----BEGIN [A-Z][A-Z0-9 ]*-----\n[A-Za-z0-9+/=\n]+-----END [A-Z][A-Z0-9 ]*-----`,
+)
+
+// ScanOutputFull runs PEM block, secret pattern, base64, and env key=value scanning.
+// PEM blocks are scanned first so full cert/key blocks are redacted before
+// line-level patterns consume only the header line.
 func ScanOutputFull(output string) (string, int) {
-	result, count := ScanOutput(output)
+	count := 0
+
+	// Redact full PEM blocks (certs, keys, CSRs) before line-level scanning.
+	result := output
+	pemMatches := pemBlockPattern.FindAllString(result, -1)
+	if len(pemMatches) > 0 {
+		count += len(pemMatches)
+		result = pemBlockPattern.ReplaceAllString(result, redactPlaceholder)
+	}
+
+	// Line-level secret patterns.
+	r, n := ScanOutput(result)
+	result = r
+	count += n
 
 	// Scan for base64-encoded secrets.
-	r, n := ScanBase64(result)
+	r, n = ScanBase64(result)
 	result = r
 	count += n
 
