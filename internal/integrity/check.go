@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -23,12 +24,20 @@ import (
 //
 //	-ldflags "-X github.com/ppiankov/chainwatch/internal/integrity.ExpectedHash=<sha256hex>"
 //
-// When empty (dev builds), verification is skipped.
+// When empty (dev builds), verification falls back to checksum file.
 var ExpectedHash string
 
 // TamperLogDir is the directory where tamper events are written.
 // Defaults to /var/log/chainwatch. Override for testing.
 var TamperLogDir = "/var/log/chainwatch"
+
+// ChecksumPaths are the paths checked (in order) for a sha256 checksum file.
+// The file should contain a single hex-encoded SHA-256 hash.
+// Override for testing.
+var ChecksumPaths = []string{
+	"/etc/chainwatch/binary.sha256",
+	"$HOME/.chainwatch/binary.sha256",
+}
 
 // TamperEvent records a binary integrity violation.
 type TamperEvent struct {
@@ -41,10 +50,16 @@ type TamperEvent struct {
 }
 
 // Verify checks that the running binary matches ExpectedHash.
-// Returns nil if verification passes or if ExpectedHash is empty (dev mode).
+// If ExpectedHash is empty, falls back to checksum file at ChecksumPaths.
+// Returns nil if verification passes or if no expected hash is available (dev mode).
 // On mismatch, writes a tamper event to the tamper log before returning error.
 func Verify() error {
-	if ExpectedHash == "" {
+	expected := ExpectedHash
+	if expected == "" {
+		expected = loadChecksumFile()
+	}
+	if expected == "" {
+		fmt.Fprintf(os.Stderr, "integrity: WARNING no build-time hash or checksum file found (dev build, integrity check skipped)\n")
 		return nil
 	}
 
@@ -58,7 +73,7 @@ func Verify() error {
 		return fmt.Errorf("integrity: cannot hash binary: %w", err)
 	}
 
-	if actual == ExpectedHash {
+	if actual == expected {
 		fmt.Fprintf(os.Stderr, "integrity: binary checksum verified (%s...%s)\n",
 			actual[:8], actual[len(actual)-8:])
 		return nil
@@ -67,7 +82,7 @@ func Verify() error {
 	event := TamperEvent{
 		Timestamp:    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		Binary:       exePath,
-		ExpectedHash: ExpectedHash,
+		ExpectedHash: expected,
 		ActualHash:   actual,
 		Type:         "binary_tamper",
 	}
@@ -75,17 +90,44 @@ func Verify() error {
 
 	writeTamperEvent(event)
 
-	return fmt.Errorf("integrity: binary checksum mismatch (expected %s, got %s)", ExpectedHash, actual)
+	return fmt.Errorf("integrity: binary checksum mismatch (expected %s, got %s)", expected, actual)
 }
 
 // HashSelf returns the SHA-256 hex digest of the running binary.
-// Useful for embedding the hash at build time.
+// Useful for writing the checksum file after install.
 func HashSelf() (string, error) {
 	exePath, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("integrity: cannot resolve executable path: %w", err)
 	}
 	return hashFile(exePath)
+}
+
+// loadChecksumFile reads the expected hash from a checksum file.
+// Returns empty string if no file is found or readable.
+func loadChecksumFile() string {
+	for _, p := range ChecksumPaths {
+		path := os.ExpandEnv(p)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		hash := strings.TrimSpace(string(data))
+		// Validate it looks like a SHA-256 hex digest.
+		if len(hash) == 64 && isHex(hash) {
+			return hash
+		}
+	}
+	return ""
+}
+
+func isHex(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func hashFile(path string) (string, error) {

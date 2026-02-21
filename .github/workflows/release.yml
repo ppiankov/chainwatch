@@ -103,6 +103,10 @@ jobs:
         run: |
           cd dist
           sha256sum chainwatch-* nullbot-* > checksums.txt
+          # Write per-binary checksum files for integrity verification
+          for f in chainwatch-* nullbot-*; do
+            sha256sum "$f" | awk '{print $1}' > "${f}.sha256"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -112,5 +116,6 @@ jobs:
             dist/chainwatch-*
             dist/nullbot-*
             dist/checksums.txt
+            dist/*.sha256
             nullbot-fieldtest.gif
             nullbot-guard.gif
