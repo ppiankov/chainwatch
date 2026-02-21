@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/daemon"
+	"github.com/ppiankov/chainwatch/internal/integrity"
 	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/redact"
@@ -461,6 +462,13 @@ func main() {
 		Use:   "nullbot",
 		Short: "the bot that behaves",
 		Long:  "LLM-driven agent under chainwatch enforcement. The LLM proposes; chainwatch enforces.",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := integrity.Verify(); err != nil {
+				fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+				os.Exit(78) // EX_CONFIG
+			}
+			return nil
+		},
 	}
 
 	runCmd := &cobra.Command{
