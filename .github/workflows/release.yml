@@ -32,7 +32,7 @@ jobs:
           for GOOS in linux darwin; do
             for GOARCH in amd64 arm64; do
               echo "Building chainwatch-${GOOS}-${GOARCH}..."
-              GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "dist/chainwatch-${GOOS}-${GOARCH}" ./cmd/chainwatch
+              GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w -X github.com/ppiankov/chainwatch/internal/cli.version=${VERSION_NUM}" -o "dist/chainwatch-${GOOS}-${GOARCH}" ./cmd/chainwatch
               echo "Building nullbot-${GOOS}-${GOARCH}..."
               GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w -X main.version=${VERSION_NUM}" -o "dist/nullbot-${GOOS}-${GOARCH}" ./cmd/nullbot
             done
