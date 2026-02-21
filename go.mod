@@ -5,7 +5,7 @@ go 1.25.7
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/modelcontextprotocol/go-sdk v1.3.0
-	github.com/ppiankov/neurorouter v0.1.0
+	github.com/ppiankov/neurorouter v0.2.0
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11

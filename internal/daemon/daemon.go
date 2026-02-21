@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/redact"
 	"github.com/ppiankov/chainwatch/internal/wo"
+	"github.com/ppiankov/neurorouter"
 )
 
 // Config holds full daemon configuration.
@@ -202,6 +204,10 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 		if err != nil {
 			entry.RetryCount++
 			_ = observe.WriteCache(cacheDir, entry)
+			if errors.Is(err, neurorouter.ErrRateLimited) {
+				fmt.Fprintf(os.Stderr, "daemon: LLM rate limited, deferring remaining retries\n")
+				return
+			}
 			continue
 		}
 

@@ -23,6 +23,8 @@ github.com/modelcontextprotocol/go-sdk v1.3.0 h1:gMfZkv3DzQF5q/DcQePo5rahEY+sguy
 github.com/modelcontextprotocol/go-sdk v1.3.0/go.mod h1:AnQ//Qc6+4nIyyrB4cxBU7UW9VibK4iOZBeyP/rF1IE=
 github.com/ppiankov/neurorouter v0.1.0 h1:VQbTsTDey8TswXsZVi69mvJw7iPZl9G6VmWJSGasCns=
 github.com/ppiankov/neurorouter v0.1.0/go.mod h1:VtSm4NbwaRZisTIooXaC1vmWVEq/z1ATVmrUleyWSN8=
+github.com/ppiankov/neurorouter v0.2.0 h1:w1BzV6FeBBh7NU+XpVTCe7YuVBPY+6A6GcN99DABtXw=
+github.com/ppiankov/neurorouter v0.2.0/go.mod h1:VtSm4NbwaRZisTIooXaC1vmWVEq/z1ATVmrUleyWSN8=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
