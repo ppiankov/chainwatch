@@ -80,6 +80,7 @@ type config struct {
 	redactCfg     *redact.RedactConfig
 	extraPatterns []redact.ExtraPattern
 	llmRateLimit  int // requests per minute; 0 = unlimited
+	llmFallbacks  []observe.LLMProvider
 }
 
 // step is a single command proposed by the LLM.
@@ -123,6 +124,10 @@ func generateEnvFile(profileName string) string {
 	b.WriteString("# NULLBOT_API_KEY=\n")
 	b.WriteString("# NULLBOT_MODEL=llama-3.1-8b-instant\n")
 	b.WriteString("# NULLBOT_LLM_RPM=30  # LLM requests per minute limit (0 = unlimited)\n")
+	b.WriteString("\n# Fallback LLM provider (optional, used when primary fails)\n")
+	b.WriteString("# NULLBOT_LLM_FALLBACK_URL=http://localhost:11434/v1/chat/completions\n")
+	b.WriteString("# NULLBOT_LLM_FALLBACK_KEY=\n")
+	b.WriteString("# NULLBOT_LLM_FALLBACK_MODEL=llama3.2\n")
 	return b.String()
 }
 
@@ -182,6 +187,19 @@ func resolveConfig(flagURL, flagModel, flagProfile string, flagMaxSteps int, fla
 		if n, err := strconv.Atoi(rpm); err == nil && n > 0 {
 			cfg.llmRateLimit = n
 		}
+	}
+
+	// Resolve fallback LLM provider (optional).
+	if fbURL := os.Getenv("NULLBOT_LLM_FALLBACK_URL"); fbURL != "" {
+		fb := observe.LLMProvider{
+			URL:   fbURL,
+			Key:   os.Getenv("NULLBOT_LLM_FALLBACK_KEY"),
+			Model: os.Getenv("NULLBOT_LLM_FALLBACK_MODEL"),
+		}
+		if fb.Model == "" {
+			fb.Model = cfg.model
+		}
+		cfg.llmFallbacks = append(cfg.llmFallbacks, fb)
 	}
 
 	// Load operator redaction config (optional).
@@ -760,6 +778,7 @@ Examples:
 				RedactConfig:  cfg.redactCfg,
 				ExtraPatterns: cfg.extraPatterns,
 				LLMRateLimit:  cfg.llmRateLimit,
+				LLMFallbacks:  cfg.llmFallbacks,
 			}
 
 			d, err := daemon.New(dcfg)

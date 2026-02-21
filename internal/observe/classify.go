@@ -3,14 +3,23 @@ package observe
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/wo"
 	"github.com/ppiankov/neurorouter"
 )
+
+// LLMProvider holds connection details for a single LLM endpoint.
+type LLMProvider struct {
+	URL   string
+	Key   string
+	Model string
+}
 
 // ClassifierConfig holds parameters for LLM-based observation classification.
 type ClassifierConfig struct {
@@ -20,6 +29,7 @@ type ClassifierConfig struct {
 	MaxTokens    int
 	Timeout      time.Duration
 	LLMRateLimit int // requests per minute; 0 = unlimited
+	Fallbacks    []LLMProvider
 }
 
 // classificationResponse is the expected JSON from the LLM.
@@ -56,7 +66,8 @@ If you find nothing suspicious, return: {"observations":[]}
 Report ALL findings, not just the first one.`
 
 // Classify sends collected evidence to a local LLM for structured classification.
-// Returns typed observations ready for WO generation.
+// Tries the primary provider first. On failure (except rate limiting), tries
+// fallback providers in order. Returns typed observations ready for WO generation.
 func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 600
@@ -66,14 +77,35 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 		timeout = 60 * time.Second
 	}
 
+	// Build provider list: primary + fallbacks.
+	providers := []LLMProvider{{URL: cfg.APIURL, Key: cfg.APIKey, Model: cfg.Model}}
+	providers = append(providers, cfg.Fallbacks...)
+
+	var lastErr error
+	for _, p := range providers {
+		obs, err := classifyWith(p, timeout, cfg.MaxTokens, cfg.LLMRateLimit, evidence)
+		if err == nil {
+			return obs, nil
+		}
+		lastErr = err
+		// Rate limiting is not a provider failure — propagate immediately.
+		if errors.Is(err, neurorouter.ErrRateLimited) {
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "classify: provider %s failed: %v\n", p.URL, err)
+	}
+	return nil, lastErr
+}
+
+func classifyWith(p LLMProvider, timeout time.Duration, maxTokens, rateLimit int, evidence string) ([]wo.Observation, error) {
 	client := &neurorouter.Client{
-		BaseURL:    cfg.APIURL,
-		APIKey:     cfg.APIKey,
-		Model:      cfg.Model,
+		BaseURL:    p.URL,
+		APIKey:     p.Key,
+		Model:      p.Model,
 		HTTPClient: &http.Client{Timeout: timeout},
 	}
-	if cfg.LLMRateLimit > 0 {
-		client.RateLimit = &neurorouter.RateLimit{RequestsPerMinute: cfg.LLMRateLimit}
+	if rateLimit > 0 {
+		client.RateLimit = &neurorouter.RateLimit{RequestsPerMinute: rateLimit}
 	}
 
 	temp := float64(0)
@@ -82,7 +114,7 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 			{Role: "system", Content: classifySystemPrompt},
 			{Role: "user", Content: evidence},
 		},
-		MaxTokens:   cfg.MaxTokens,
+		MaxTokens:   maxTokens,
 		Temperature: &temp,
 	})
 	if err != nil {

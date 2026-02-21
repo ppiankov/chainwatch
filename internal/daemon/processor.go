@@ -24,6 +24,7 @@ type ProcessorConfig struct {
 	RedactConfig  *redact.RedactConfig
 	ExtraPatterns []redact.ExtraPattern
 	LLMRateLimit  int // requests per minute; 0 = unlimited
+	LLMFallbacks  []observe.LLMProvider
 }
 
 // Processor handles job lifecycle transitions.
@@ -165,6 +166,7 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 				APIKey:       p.cfg.APIKey,
 				Model:        p.cfg.Model,
 				LLMRateLimit: p.cfg.LLMRateLimit,
+				Fallbacks:    p.cfg.LLMFallbacks,
 			}
 
 			// Redact for cloud mode.
