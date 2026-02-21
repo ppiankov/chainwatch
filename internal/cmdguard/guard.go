@@ -34,12 +34,53 @@ type Config struct {
 	AuditLogPath string
 }
 
+// DefaultMaxOutputBytes is the default maximum bytes captured per stream.
+// 4 MB is generous for command output while preventing OOM on unbounded commands.
+const DefaultMaxOutputBytes = 4 << 20 // 4 MB
+
 // Result captures subprocess execution outcome.
 type Result struct {
-	Stdout   string         `json:"stdout"`
-	Stderr   string         `json:"stderr"`
-	ExitCode int            `json:"exit_code"`
-	Decision model.Decision `json:"decision"`
+	Stdout          string         `json:"stdout"`
+	Stderr          string         `json:"stderr"`
+	ExitCode        int            `json:"exit_code"`
+	Decision        model.Decision `json:"decision"`
+	StdoutTruncated bool           `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool           `json:"stderr_truncated,omitempty"`
+}
+
+// limitedWriter caps how much data is written to an underlying buffer.
+// Once the limit is reached, additional writes are silently discarded
+// and the truncated flag is set.
+type limitedWriter struct {
+	buf       bytes.Buffer
+	limit     int64
+	written   int64
+	truncated bool
+}
+
+func newLimitedWriter(limit int64) *limitedWriter {
+	return &limitedWriter{limit: limit}
+}
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	total := len(p)
+	if w.written >= w.limit {
+		w.truncated = true
+		return total, nil // discard silently, report full consumption
+	}
+	remaining := w.limit - w.written
+	if int64(total) > remaining {
+		p = p[:remaining]
+		w.truncated = true
+	}
+	n, err := w.buf.Write(p)
+	w.written += int64(n)
+	// Always report full consumption to avoid exec.Command write errors.
+	return total, err
+}
+
+func (w *limitedWriter) String() string {
+	return w.buf.String()
 }
 
 // BlockedError is returned when policy denies command execution.
@@ -222,9 +263,10 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 	// processes cannot exfiltrate credentials via shell builtins.
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = sanitizeEnv(os.Environ())
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := newLimitedWriter(DefaultMaxOutputBytes)
+	stderr := newLimitedWriter(DefaultMaxOutputBytes)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
@@ -241,9 +283,19 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 		}
 	}
 
+	// Append truncation marker so operators know evidence is incomplete.
+	outStr := stdout.String()
+	errStr := stderr.String()
+	if stdout.truncated {
+		outStr += "\n[TRUNCATED]"
+	}
+	if stderr.truncated {
+		errStr += "\n[TRUNCATED]"
+	}
+
 	// Scan output for leaked secrets and redact before returning.
-	cleanOut, nOut := ScanOutputFull(stdout.String())
-	cleanErr, nErr := ScanOutputFull(stderr.String())
+	cleanOut, nOut := ScanOutputFull(outStr)
+	cleanErr, nErr := ScanOutputFull(errStr)
 	if nOut+nErr > 0 && g.auditLog != nil {
 		g.auditLog.Record(audit.AuditEntry{
 			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
@@ -256,11 +308,25 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 		})
 	}
 
+	if (stdout.truncated || stderr.truncated) && g.auditLog != nil {
+		g.auditLog.Record(audit.AuditEntry{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    g.tracer.State.TraceID,
+			Action:     audit.AuditAction{Tool: "output_truncation", Resource: action.Resource},
+			Decision:   "truncated",
+			Reason:     fmt.Sprintf("output exceeded %d byte limit", DefaultMaxOutputBytes),
+			Tier:       2,
+			PolicyHash: g.policyHash,
+		})
+	}
+
 	return &Result{
-		Stdout:   cleanOut,
-		Stderr:   cleanErr,
-		ExitCode: exitCode,
-		Decision: result.Decision,
+		Stdout:          cleanOut,
+		Stderr:          cleanErr,
+		ExitCode:        exitCode,
+		Decision:        result.Decision,
+		StdoutTruncated: stdout.truncated,
+		StderrTruncated: stderr.truncated,
 	}, nil
 }
 
