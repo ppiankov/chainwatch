@@ -1,6 +1,8 @@
 package redact
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -164,6 +166,96 @@ func TestScanNoSensitiveData(t *testing.T) {
 	matches := Scan(text)
 	if len(matches) != 0 {
 		t.Errorf("expected 0 matches for non-sensitive text, got %d: %v", len(matches), matches)
+	}
+}
+
+func TestScanWithConfigNil(t *testing.T) {
+	text := "Server 192.168.1.42 at /var/www/site"
+	m1 := Scan(text)
+	m2 := ScanWithConfig(text, nil, nil)
+
+	if len(m1) != len(m2) {
+		t.Errorf("nil config: Scan found %d, ScanWithConfig found %d", len(m1), len(m2))
+	}
+}
+
+func TestScanWithConfigExtraPattern(t *testing.T) {
+	text := "Connect to db_production_main and db_analytics"
+	extra := []ExtraPattern{
+		{Name: "DBNAME", Regex: regexp.MustCompile(`\bdb_[a-z0-9_]+\b`), TokenPrefix: "DBNAME"},
+	}
+	matches := ScanWithConfig(text, &RedactConfig{}, extra)
+	dbMatches := filterByType(matches, "DBNAME")
+
+	if len(dbMatches) != 2 {
+		t.Errorf("expected 2 DBNAME matches, got %d", len(dbMatches))
+	}
+}
+
+func TestScanWithConfigLiterals(t *testing.T) {
+	text := "Cluster prod-cluster-xyz is running on prod-cluster-abc"
+	cfg := &RedactConfig{
+		Literals: []string{"prod-cluster-xyz"},
+	}
+	matches := ScanWithConfig(text, cfg, nil)
+	litMatches := filterByType(matches, "LITERAL")
+
+	if len(litMatches) != 1 {
+		t.Errorf("expected 1 LITERAL match, got %d", len(litMatches))
+	}
+	if len(litMatches) > 0 && litMatches[0].Value != "prod-cluster-xyz" {
+		t.Errorf("expected prod-cluster-xyz, got %q", litMatches[0].Value)
+	}
+}
+
+func TestScanWithConfigSafeHosts(t *testing.T) {
+	text := "Request to casino-winner.evil.com and internal.company.com"
+	cfg := &RedactConfig{
+		SafeHosts: []string{"internal.company.com"},
+	}
+	matches := ScanWithConfig(text, cfg, nil)
+
+	for _, m := range matches {
+		if m.Value == "internal.company.com" {
+			t.Error("internal.company.com should be safe-listed")
+		}
+	}
+	if !containsValue(matches, "casino-winner.evil.com") {
+		t.Error("casino-winner.evil.com should still be detected")
+	}
+}
+
+func TestScanWithConfigSafeIPs(t *testing.T) {
+	text := "Server at 10.0.0.1 and 192.168.1.42"
+	cfg := &RedactConfig{
+		SafeIPs: []string{"10.0.0.1"},
+	}
+	matches := ScanWithConfig(text, cfg, nil)
+
+	for _, m := range matches {
+		if m.Value == "10.0.0.1" {
+			t.Error("10.0.0.1 should be safe-listed")
+		}
+	}
+	if !containsValue(matches, "192.168.1.42") {
+		t.Error("192.168.1.42 should still be detected")
+	}
+}
+
+func TestScanWithConfigSafePaths(t *testing.T) {
+	text := "Log at /var/log/syslog and config at /var/www/site/wp-config.php"
+	cfg := &RedactConfig{
+		SafePaths: []string{"/var/log/"},
+	}
+	matches := ScanWithConfig(text, cfg, nil)
+
+	for _, m := range matches {
+		if strings.HasPrefix(m.Value, "/var/log/") {
+			t.Errorf("/var/log/ paths should be safe-listed, got: %s", m.Value)
+		}
+	}
+	if !containsValue(matches, "/var/www/site/wp-config.php") {
+		t.Error("/var/www/site/wp-config.php should still be detected")
 	}
 }
 
