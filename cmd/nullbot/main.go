@@ -725,7 +725,7 @@ Examples:
 	}
 
 	observeCmd.Flags().StringVar(&observeScope, "scope", "", "target directory to investigate (required)")
-	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type: wordpress, postfix, linux")
+	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type (see 'nullbot runbooks')")
 	observeCmd.Flags().StringVar(&observeOutput, "output", "", "write results to JSON file")
 	observeCmd.Flags().BoolVar(&observeClassify, "classify", false, "classify findings with local LLM")
 	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")
@@ -952,7 +952,31 @@ Examples:
 	initCmd.Flags().StringVar(&initOutput, "output", "", "write systemd unit to file (default: stdout)")
 	initCmd.Flags().StringVar(&initHome, "home", "/home/nullbot", "nullbot home directory")
 
-	rootCmd.AddCommand(runCmd, observeCmd, daemonCmd, listCmd, approveCmd, rejectCmd, versionCmd, initCmd)
+	runbooksCmd := &cobra.Command{
+		Use:   "runbooks",
+		Short: "list available investigation runbooks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			list := observe.ListRunbooks()
+			fmt.Printf("%s%s=== AVAILABLE RUNBOOKS ===%s\n\n", bold, cyan, reset)
+			for _, info := range list {
+				aliases := ""
+				if len(info.Aliases) > 0 {
+					aliases = fmt.Sprintf(" (aliases: %s)", strings.Join(info.Aliases, ", "))
+				}
+				fmt.Printf("  %s%-12s%s %s%s%s  %s%d steps  [%s]%s\n",
+					bold, info.Type, reset,
+					green, info.Name, reset,
+					dim, info.Steps, info.Source, reset)
+				if aliases != "" {
+					fmt.Printf("  %s%s%s%s\n", strings.Repeat(" ", 13), dim, aliases, reset)
+				}
+			}
+			fmt.Printf("\n%sUser runbooks: ~/.chainwatch/runbooks/<type>.yaml%s\n", dim, reset)
+			return nil
+		},
+	}
+
+	rootCmd.AddCommand(runCmd, observeCmd, daemonCmd, listCmd, approveCmd, rejectCmd, versionCmd, initCmd, runbooksCmd)
 
 	// CI compatibility: bare invocation with GROQ_API_KEY or NULLBOT_CI runs default mission.
 	// This keeps the release workflow VHS recording working.
