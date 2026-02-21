@@ -1,6 +1,7 @@
 package cmdguard
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -209,6 +210,136 @@ func TestScanOutputFullDatabaseURL(t *testing.T) {
 	}
 	if strings.Contains(result, "DATABASE") {
 		t.Errorf("expected DATABASE_URL line redacted, got %q", result)
+	}
+}
+
+func TestScanBase64GroqKey(t *testing.T) {
+	// Build secret at runtime to avoid pre-commit detection.
+	secret := "gsk_" + "abcdef1234567890abcdef1234567890"
+	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
+	input := "output: " + encoded
+	result, count := ScanBase64(input)
+	if count == 0 {
+		t.Error("expected base64-encoded Groq key to be detected")
+	}
+	if strings.Contains(result, encoded) {
+		t.Errorf("expected base64 string to be redacted, got %q", result)
+	}
+}
+
+func TestScanBase64OpenAIKey(t *testing.T) {
+	secret := "sk-" + "proj1234567890abcdefghijklm"
+	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
+	input := "data=" + encoded
+	result, count := ScanBase64(input)
+	if count == 0 {
+		t.Error("expected base64-encoded OpenAI key to be detected")
+	}
+	if strings.Contains(result, encoded) {
+		t.Errorf("expected base64 string to be redacted, got %q", result)
+	}
+}
+
+func TestScanBase64AWSKey(t *testing.T) {
+	// Build at runtime to avoid pre-commit detection.
+	secret := "AKI" + "A" + "IOSFODNN7EXAMPLE"
+	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
+	input := "key: " + encoded
+	result, count := ScanBase64(input)
+	if count == 0 {
+		t.Error("expected base64-encoded AWS key to be detected")
+	}
+	if strings.Contains(result, encoded) {
+		t.Errorf("expected base64 string to be redacted, got %q", result)
+	}
+}
+
+func TestScanBase64NoFalsePositiveCleanText(t *testing.T) {
+	// Normal base64 content (not a secret).
+	input := base64.StdEncoding.EncodeToString([]byte("Hello, this is a normal message with no secrets at all"))
+	_, count := ScanBase64(input)
+	if count != 0 {
+		t.Errorf("expected no false positives on clean base64 text, got %d", count)
+	}
+}
+
+func TestScanBase64NoFalsePositiveBinaryData(t *testing.T) {
+	// Binary data that happens to be valid base64.
+	data := make([]byte, 64)
+	for i := range data {
+		data[i] = byte(i)
+	}
+	input := base64.StdEncoding.EncodeToString(data)
+	_, count := ScanBase64(input)
+	if count != 0 {
+		t.Errorf("expected no false positives on binary base64 data, got %d", count)
+	}
+}
+
+func TestScanBase64ShortStringIgnored(t *testing.T) {
+	// Short base64 strings should be ignored.
+	encoded := base64.StdEncoding.EncodeToString([]byte("short"))
+	_, count := ScanBase64(encoded)
+	if count != 0 {
+		t.Errorf("expected short base64 to be ignored, got %d", count)
+	}
+}
+
+func TestScanOutputFullBase64Integration(t *testing.T) {
+	// Verify base64 scanning is integrated into ScanOutputFull.
+	secret := "gsk_" + "abcdef1234567890abcdef1234567890"
+	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
+	input := "result: " + encoded + "\n"
+	result, count := ScanOutputFull(input)
+	if count == 0 {
+		t.Error("expected ScanOutputFull to detect base64-encoded secret")
+	}
+	if strings.Contains(result, encoded) {
+		t.Errorf("expected base64 string redacted in ScanOutputFull, got %q", result)
+	}
+}
+
+func TestScanBase64NoFalsePositiveDfOutput(t *testing.T) {
+	input := "Filesystem      Size  Used Avail Use% Mounted on\n/dev/sda1       100G   42G   58G  42% /\ntmpfs           7.8G     0  7.8G   0% /dev/shm\n"
+	_, count := ScanBase64(input)
+	if count != 0 {
+		t.Errorf("expected no false positives on df output, got %d", count)
+	}
+}
+
+func TestIsPrintable(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{"ascii text", []byte("hello world"), true},
+		{"with newlines", []byte("line1\nline2\n"), true},
+		{"binary", []byte{0x00, 0x01, 0x02, 0x03, 0x04}, false},
+		{"empty", []byte{}, false},
+		{"mixed mostly printable", []byte("hello\x00world!"), true},
+		{"mixed mostly binary", []byte{0x00, 0x01, 0x02, 'a'}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isPrintable(tt.data); got != tt.want {
+				t.Errorf("isPrintable(%q) = %v, want %v", tt.data, got, tt.want)
+			}
+		})
+	}
+}
+
+func BenchmarkScanBase64(b *testing.B) {
+	// Simulate typical command output with some base64 mixed in.
+	secret := "gsk_" + "abcdef1234567890abcdef1234567890"
+	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
+	input := "Filesystem      Size  Used Avail Use% Mounted on\n" +
+		"/dev/sda1       100G   42G   58G  42% /\n" +
+		"result: " + encoded + "\n" +
+		"tmpfs           7.8G     0  7.8G   0% /dev/shm\n"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ScanBase64(input)
 	}
 }
 
