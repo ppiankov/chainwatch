@@ -41,6 +41,7 @@ test-*.sh
 !artifacts/**/*.md
 !docs/**/*.md
 docs/design/self-protection.md
+docs/runbooks/
 !integrations/**/*.md
 !integrations/**/*.json
 !README.md

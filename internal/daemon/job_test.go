@@ -100,3 +100,19 @@ func TestValidateJobEmptyHostAllowed(t *testing.T) {
 		t.Errorf("empty host should be allowed (local investigation): %v", err)
 	}
 }
+
+func TestValidateJobWithRunbook(t *testing.T) {
+	j := validJob()
+	j.Runbook = "postfix"
+	if err := ValidateJob(j); err != nil {
+		t.Errorf("job with runbook field should be valid: %v", err)
+	}
+}
+
+func TestValidateJobEmptyRunbookAllowed(t *testing.T) {
+	j := validJob()
+	j.Runbook = ""
+	if err := ValidateJob(j); err != nil {
+		t.Errorf("empty runbook should be allowed (defaults to linux): %v", err)
+	}
+}

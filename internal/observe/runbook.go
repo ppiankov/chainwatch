@@ -102,12 +102,66 @@ func LinuxRunbook() *Runbook {
 	}
 }
 
+// PostfixRunbook returns investigation steps for a Postfix mail server.
+// All commands are read-only. {{SCOPE}} is replaced with the target path
+// (typically /var/log for mail logs).
+func PostfixRunbook() *Runbook {
+	return &Runbook{
+		Name: "Postfix mail server investigation",
+		Type: "postfix",
+		Steps: []Step{
+			{
+				Command: "systemctl status postfix 2>/dev/null || service postfix status 2>/dev/null || echo 'postfix service not found'",
+				Purpose: "check Postfix service status",
+			},
+			{
+				Command: "postconf mail_version 2>/dev/null || echo 'postconf not available'",
+				Purpose: "identify Postfix version",
+			},
+			{
+				Command: "mailq 2>/dev/null | tail -1 || echo 'mailq not available'",
+				Purpose: "check mail queue depth",
+			},
+			{
+				Command: "postqueue -p 2>/dev/null | head -50 || echo 'postqueue not available'",
+				Purpose: "list queued messages with recipients and status",
+			},
+			{
+				Command: "tail -100 {{SCOPE}}/mail.log 2>/dev/null || tail -100 {{SCOPE}}/maillog 2>/dev/null || journalctl -u postfix --no-pager -n 100 2>/dev/null || echo 'no mail logs found'",
+				Purpose: "show recent mail log entries",
+			},
+			{
+				Command: "grep -i 'reject\\|bounced\\|deferred\\|error\\|warning' {{SCOPE}}/mail.log 2>/dev/null | tail -30 || grep -i 'reject\\|bounced\\|deferred\\|error\\|warning' {{SCOPE}}/maillog 2>/dev/null | tail -30 || echo 'no error patterns found'",
+				Purpose: "find recent delivery errors and bounces",
+			},
+			{
+				Command: "postconf -n 2>/dev/null | grep -iE 'relay|transport|mydest|mynetworks|smtpd_recipient_restrictions|smtpd_sender_restrictions' || echo 'postconf not available'",
+				Purpose: "check relay and transport configuration",
+			},
+			{
+				Command: "postconf -n 2>/dev/null | grep -iE 'tls|ssl|smtpd_use_tls|smtp_tls' || echo 'no TLS configuration found'",
+				Purpose: "check TLS configuration",
+			},
+			{
+				Command: "ss -tlnp 2>/dev/null | grep -E ':25\\b|:587\\b|:465\\b' || netstat -tlnp 2>/dev/null | grep -E ':25\\b|:587\\b|:465\\b' || echo 'no SMTP ports listening'",
+				Purpose: "check SMTP listening ports (25, 587, 465)",
+			},
+			{
+				Command: "find /var/spool/postfix/deferred/ -type f 2>/dev/null | wc -l || echo '0'",
+				Purpose: "count deferred messages",
+			},
+		},
+	}
+}
+
 // GetRunbook returns the appropriate runbook for the given type.
 // Falls back to Linux runbook for unknown types.
 func GetRunbook(runbookType string) *Runbook {
 	switch runbookType {
 	case "wordpress", "wp":
 		return WordPressRunbook()
+	case "postfix", "mail":
+		return PostfixRunbook()
 	case "linux", "system", "generic":
 		return LinuxRunbook()
 	default:
