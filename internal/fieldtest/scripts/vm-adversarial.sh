@@ -3,7 +3,8 @@
 # Tests that require real systemd, real users, real nftables.
 #
 # Usage: sudo bash vm-adversarial.sh
-set -euo pipefail
+set -uo pipefail
+# No set -e: we track pass/fail manually and must not abort early.
 
 PASS=0
 FAIL=0
