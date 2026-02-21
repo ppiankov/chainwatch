@@ -45,19 +45,6 @@ type RunResult struct {
 	EndAt   time.Time    `json:"end_at"`
 }
 
-// Step defines a single investigation command with its purpose.
-type Step struct {
-	Command string
-	Purpose string
-}
-
-// Runbook is a named set of investigation steps.
-type Runbook struct {
-	Name  string
-	Type  string
-	Steps []Step
-}
-
 // Run executes a runbook through chainwatch and returns the results.
 // Every command is routed through `chainwatch exec --profile clawbot`.
 // The profile is hard-locked — observe mode is structurally inspect-only.

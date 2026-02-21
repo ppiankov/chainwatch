@@ -1,170 +1,244 @@
 package observe
 
-// WordPressRunbook returns investigation steps for a WordPress site.
-// All commands are read-only. {{SCOPE}} is replaced with the target path.
-func WordPressRunbook() *Runbook {
-	return &Runbook{
-		Name: "WordPress investigation",
-		Type: "wordpress",
-		Steps: []Step{
-			{
-				Command: "curl -sL -D - -o /dev/null --max-time 10 http://localhost/",
-				Purpose: "check HTTP response chain for redirects",
-			},
-			{
-				Command: "find {{SCOPE}}/wp-includes/ -name '*.php' -newer {{SCOPE}}/wp-includes/version.php -type f 2>/dev/null | head -20",
-				Purpose: "find recently modified core files",
-			},
-			{
-				Command: "grep -rl 'eval(base64_decode\\|eval(gzinflate\\|eval(str_rot13' {{SCOPE}}/wp-content/ 2>/dev/null | head -20",
-				Purpose: "search for obfuscated code patterns",
-			},
-			{
-				Command: "ls -la {{SCOPE}}/wp-content/mu-plugins/ 2>/dev/null || echo 'no mu-plugins directory'",
-				Purpose: "list must-use plugins for unknown entries",
-			},
-			{
-				Command: "find {{SCOPE}}/wp-content/plugins/ -maxdepth 1 -type d | sort",
-				Purpose: "list installed plugins",
-			},
-			{
-				Command: "find {{SCOPE}}/wp-content/uploads/ -name '*.php' -type f 2>/dev/null | head -20",
-				Purpose: "find PHP files in uploads directory",
-			},
-			{
-				Command: "cat {{SCOPE}}/.htaccess 2>/dev/null || echo 'no .htaccess'",
-				Purpose: "check .htaccess for injected rewrite rules",
-			},
-			{
-				Command: "crontab -l 2>/dev/null; cat /var/spool/cron/crontabs/* 2>/dev/null || echo 'no user crontabs accessible'",
-				Purpose: "check cron jobs for suspicious entries",
-			},
-			{
-				Command: "stat -c '%U:%G %a %n' {{SCOPE}}/wp-config.php 2>/dev/null || echo 'wp-config.php not found'",
-				Purpose: "check wp-config.php ownership and permissions",
-			},
-			{
-				Command: "awk -F: '$3==0 && $1!=\"root\" {print $1\":\"$3\":\"$7}' /etc/passwd 2>/dev/null",
-				Purpose: "check for rogue UID 0 users",
-			},
-		},
-	}
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Runbook is a named set of investigation steps.
+type Runbook struct {
+	Name    string   `yaml:"name"`
+	Type    string   `yaml:"type"`
+	Aliases []string `yaml:"aliases,omitempty"`
+	Steps   []Step   `yaml:"steps"`
+	Source  string   `yaml:"-"` // "built-in" or "user" — set at load time
 }
 
-// LinuxRunbook returns investigation steps for a generic Linux system.
-// All commands are read-only. {{SCOPE}} is replaced with the target path.
-func LinuxRunbook() *Runbook {
-	return &Runbook{
-		Name: "Linux system investigation",
-		Type: "linux",
-		Steps: []Step{
-			{
-				Command: "uname -a",
-				Purpose: "identify kernel and system",
-			},
-			{
-				Command: "whoami && id",
-				Purpose: "identify current user and groups",
-			},
-			{
-				Command: "ps aux --sort=-%cpu | head -20",
-				Purpose: "list top processes by CPU usage",
-			},
-			{
-				Command: "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null",
-				Purpose: "list listening ports and services",
-			},
-			{
-				Command: "crontab -l 2>/dev/null; ls -la /etc/cron.d/ 2>/dev/null",
-				Purpose: "check cron jobs and scheduled tasks",
-			},
-			{
-				Command: "awk -F: '$3==0 && $1!=\"root\" {print}' /etc/passwd",
-				Purpose: "check for rogue UID 0 users",
-			},
-			{
-				Command: "find {{SCOPE}} -perm -o+w -type f 2>/dev/null | head -20",
-				Purpose: "find world-writable files in scope",
-			},
-			{
-				Command: "find {{SCOPE}} -newer /etc/hostname -type f 2>/dev/null | head -20",
-				Purpose: "find recently modified files in scope",
-			},
-			{
-				Command: "last -n 10 2>/dev/null || echo 'last command not available'",
-				Purpose: "check recent login history",
-			},
-			{
-				Command: "df -h && free -m",
-				Purpose: "check disk and memory usage",
-			},
-		},
-	}
+// Step defines a single investigation command with its purpose.
+type Step struct {
+	Command string `yaml:"command"`
+	Purpose string `yaml:"purpose"`
 }
 
-// PostfixRunbook returns investigation steps for a Postfix mail server.
-// All commands are read-only. {{SCOPE}} is replaced with the target path
-// (typically /var/log for mail logs).
-func PostfixRunbook() *Runbook {
-	return &Runbook{
-		Name: "Postfix mail server investigation",
-		Type: "postfix",
-		Steps: []Step{
-			{
-				Command: "systemctl status postfix 2>/dev/null || service postfix status 2>/dev/null || echo 'postfix service not found'",
-				Purpose: "check Postfix service status",
-			},
-			{
-				Command: "postconf mail_version 2>/dev/null || echo 'postconf not available'",
-				Purpose: "identify Postfix version",
-			},
-			{
-				Command: "mailq 2>/dev/null | tail -1 || echo 'mailq not available'",
-				Purpose: "check mail queue depth",
-			},
-			{
-				Command: "postqueue -p 2>/dev/null | head -50 || echo 'postqueue not available'",
-				Purpose: "list queued messages with recipients and status",
-			},
-			{
-				Command: "tail -100 {{SCOPE}}/mail.log 2>/dev/null || tail -100 {{SCOPE}}/maillog 2>/dev/null || journalctl -u postfix --no-pager -n 100 2>/dev/null || echo 'no mail logs found'",
-				Purpose: "show recent mail log entries",
-			},
-			{
-				Command: "grep -i 'reject\\|bounced\\|deferred\\|error\\|warning' {{SCOPE}}/mail.log 2>/dev/null | tail -30 || grep -i 'reject\\|bounced\\|deferred\\|error\\|warning' {{SCOPE}}/maillog 2>/dev/null | tail -30 || echo 'no error patterns found'",
-				Purpose: "find recent delivery errors and bounces",
-			},
-			{
-				Command: "postconf -n 2>/dev/null | grep -iE 'relay|transport|mydest|mynetworks|smtpd_recipient_restrictions|smtpd_sender_restrictions' || echo 'postconf not available'",
-				Purpose: "check relay and transport configuration",
-			},
-			{
-				Command: "postconf -n 2>/dev/null | grep -iE 'tls|ssl|smtpd_use_tls|smtp_tls' || echo 'no TLS configuration found'",
-				Purpose: "check TLS configuration",
-			},
-			{
-				Command: "ss -tlnp 2>/dev/null | grep -E ':25\\b|:587\\b|:465\\b' || netstat -tlnp 2>/dev/null | grep -E ':25\\b|:587\\b|:465\\b' || echo 'no SMTP ports listening'",
-				Purpose: "check SMTP listening ports (25, 587, 465)",
-			},
-			{
-				Command: "find /var/spool/postfix/deferred/ -type f 2>/dev/null | wc -l || echo '0'",
-				Purpose: "count deferred messages",
-			},
-		},
+// destructivePrefixes are command prefixes that runbook steps must not start with.
+// Checked against the primary command (before pipes and fallbacks).
+var destructivePrefixes = []string{
+	"rm ", "mv ", "cp ", "chmod ", "chown ", "tee ", "sed -i", "kill ", "pkill ",
+}
+
+// ValidateRunbook checks that a runbook has all required fields and no
+// destructive primary commands.
+func ValidateRunbook(rb *Runbook) error {
+	if rb.Name == "" {
+		return fmt.Errorf("runbook name is required")
 	}
+	if rb.Type == "" {
+		return fmt.Errorf("runbook type is required")
+	}
+	if len(rb.Steps) == 0 {
+		return fmt.Errorf("runbook must have at least one step")
+	}
+	for i, step := range rb.Steps {
+		if step.Command == "" {
+			return fmt.Errorf("step %d has empty command", i)
+		}
+		if step.Purpose == "" {
+			return fmt.Errorf("step %d has empty purpose", i)
+		}
+		if err := checkDestructive(step); err != nil {
+			return fmt.Errorf("step %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// checkDestructive verifies the primary command (before pipes/fallbacks)
+// does not start with a destructive operation.
+func checkDestructive(step Step) error {
+	primary := step.Command
+	for _, sep := range []string{"||", "|", ";"} {
+		if idx := strings.Index(primary, sep); idx >= 0 {
+			primary = primary[:idx]
+		}
+	}
+	primary = strings.TrimSpace(primary)
+	for _, d := range destructivePrefixes {
+		if strings.HasPrefix(primary, d) {
+			return fmt.Errorf("destructive command %q in step %q", d, step.Purpose)
+		}
+	}
+	return nil
+}
+
+// ParseRunbook parses a YAML runbook definition.
+func ParseRunbook(data []byte) (*Runbook, error) {
+	var rb Runbook
+	if err := yaml.Unmarshal(data, &rb); err != nil {
+		return nil, fmt.Errorf("parse runbook YAML: %w", err)
+	}
+	if err := ValidateRunbook(&rb); err != nil {
+		return nil, fmt.Errorf("invalid runbook: %w", err)
+	}
+	return &rb, nil
+}
+
+// userRunbooksDir returns the path to the user's custom runbook directory.
+func userRunbooksDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".chainwatch", "runbooks")
+}
+
+// loadUserRunbook attempts to load a runbook from the user's runbook directory.
+func loadUserRunbook(name string) (*Runbook, error) {
+	dir := userRunbooksDir()
+	if dir == "" {
+		return nil, fmt.Errorf("no home directory")
+	}
+	path := filepath.Join(dir, name+".yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	rb, err := ParseRunbook(data)
+	if err != nil {
+		return nil, fmt.Errorf("user runbook %s: %w", path, err)
+	}
+	rb.Source = "user"
+	return rb, nil
+}
+
+// LoadRunbook loads a runbook by name or alias. Resolution order:
+//  1. User directory (~/.chainwatch/runbooks/<name>.yaml)
+//  2. Built-in embedded runbooks
+//  3. Falls back to linux if no match
+func LoadRunbook(name string) *Runbook {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		name = "linux"
+	}
+
+	// Check user directory first (override).
+	if rb, err := loadUserRunbook(name); err == nil {
+		return rb
+	}
+
+	// Check built-in embedded runbooks.
+	if rb, err := loadBuiltinRunbook(name); err == nil {
+		rb.Source = "built-in"
+		return rb
+	}
+
+	// Check aliases across all built-in runbooks.
+	for _, entry := range listBuiltinRunbooks() {
+		for _, alias := range entry.Aliases {
+			if alias == name {
+				if rb, err := loadBuiltinRunbook(entry.Type); err == nil {
+					rb.Source = "built-in"
+					return rb
+				}
+			}
+		}
+	}
+
+	// Final fallback: linux.
+	if name != "linux" {
+		return LoadRunbook("linux")
+	}
+
+	// Hardcoded emergency fallback if embedded files are broken.
+	return linuxFallback()
 }
 
 // GetRunbook returns the appropriate runbook for the given type.
-// Falls back to Linux runbook for unknown types.
+// This is the primary entry point used by the daemon and observe command.
 func GetRunbook(runbookType string) *Runbook {
-	switch runbookType {
-	case "wordpress", "wp":
-		return WordPressRunbook()
-	case "postfix", "mail":
-		return PostfixRunbook()
-	case "linux", "system", "generic":
-		return LinuxRunbook()
-	default:
-		return LinuxRunbook()
+	return LoadRunbook(runbookType)
+}
+
+// RunbookInfo holds metadata about an available runbook for listing.
+type RunbookInfo struct {
+	Name    string
+	Type    string
+	Aliases []string
+	Steps   int
+	Source  string
+}
+
+// ListRunbooks returns metadata for all available runbooks (built-in + user).
+// User runbooks with the same type as a built-in override it.
+func ListRunbooks() []RunbookInfo {
+	seen := make(map[string]RunbookInfo)
+
+	// Built-in runbooks first.
+	for _, rb := range listBuiltinRunbooks() {
+		seen[rb.Type] = RunbookInfo{
+			Name:    rb.Name,
+			Type:    rb.Type,
+			Aliases: rb.Aliases,
+			Steps:   len(rb.Steps),
+			Source:  "built-in",
+		}
+	}
+
+	// User runbooks override by type.
+	dir := userRunbooksDir()
+	if dir != "" {
+		entries, err := os.ReadDir(dir)
+		if err == nil {
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+					continue
+				}
+				path := filepath.Join(dir, e.Name())
+				data, err := os.ReadFile(path)
+				if err != nil {
+					continue
+				}
+				rb, err := ParseRunbook(data)
+				if err != nil {
+					continue
+				}
+				seen[rb.Type] = RunbookInfo{
+					Name:    rb.Name,
+					Type:    rb.Type,
+					Aliases: rb.Aliases,
+					Steps:   len(rb.Steps),
+					Source:  "user",
+				}
+			}
+		}
+	}
+
+	result := make([]RunbookInfo, 0, len(seen))
+	for _, info := range seen {
+		result = append(result, info)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Type < result[j].Type
+	})
+	return result
+}
+
+// linuxFallback is a hardcoded emergency fallback if embedded YAML is broken.
+func linuxFallback() *Runbook {
+	return &Runbook{
+		Name:   "Linux system investigation",
+		Type:   "linux",
+		Source: "fallback",
+		Steps: []Step{
+			{Command: "uname -a", Purpose: "identify kernel and system"},
+			{Command: "whoami && id", Purpose: "identify current user and groups"},
+			{Command: "ps aux --sort=-%cpu | head -20", Purpose: "list top processes by CPU usage"},
+			{Command: "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null", Purpose: "list listening ports and services"},
+			{Command: "df -h && free -m", Purpose: "check disk and memory usage"},
+		},
 	}
 }
