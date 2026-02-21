@@ -305,6 +305,12 @@ var sensitiveEnvPrefixes = []string{
 	"ANTHROPIC_API",
 	"AWS_",
 	"CHAINWATCH_",
+	"GITHUB_TOKEN",
+	"GH_TOKEN",
+	"SLACK_TOKEN",
+	"SLACK_BOT",
+	"DATABASE_URL",
+	"REDIS_URL",
 }
 
 // sensitiveEnvExact are env var names stripped by exact match.

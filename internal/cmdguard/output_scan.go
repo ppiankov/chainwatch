@@ -20,6 +20,14 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 	// Bearer tokens
 	regexp.MustCompile(`(?i)bearer\s+[a-zA-Z0-9\-_.]{20,}`),
+	// GitHub tokens: ghp_ (PAT), gho_ (OAuth), ghs_ (server), ghr_ (refresh)
+	regexp.MustCompile(`(?:ghp|gho|ghs|ghr)_[a-zA-Z0-9]{36,}`),
+	// Slack tokens: xoxb-, xoxp-, xoxa-, xoxr-, xoxs-
+	regexp.MustCompile(`xox[bpars]-[a-zA-Z0-9\-]{10,}`),
+	// Private key headers (PEM format)
+	regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----`),
+	// Connection strings with credentials
+	regexp.MustCompile(`(?:postgres|postgresql|mysql|mongodb|redis|amqp)://[^\s:]+:[^\s@]+@[^\s]+`),
 }
 
 // redactPlaceholder replaces matched secrets in output.
@@ -45,7 +53,7 @@ func ScanOutput(output string) (string, int) {
 // `declare -p`, and similar shell builtins.
 var envKeyValuePattern = regexp.MustCompile(
 	`(?im)^(?:declare -x |export )?` +
-		`(NULLBOT_\w*|GROQ_\w*|OPENAI_\w*|ANTHROPIC_\w*|AWS_\w*|API_KEY|API_SECRET|CHAINWATCH_\w*)` +
+		`(NULLBOT_\w*|GROQ_\w*|OPENAI_\w*|ANTHROPIC_\w*|AWS_\w*|GITHUB_TOKEN\w*|GH_TOKEN\w*|SLACK_TOKEN\w*|SLACK_BOT\w*|DATABASE_URL\w*|REDIS_URL\w*|API_KEY|API_SECRET|CHAINWATCH_\w*)` +
 		`[= ].*$`,
 )
 
