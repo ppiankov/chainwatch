@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -171,6 +172,41 @@ func TestProcessorResultJSON(t *testing.T) {
 	}
 	if result.CompletedAt.IsZero() {
 		t.Error("CompletedAt should be set")
+	}
+}
+
+func TestProcessorRejectsSymlink(t *testing.T) {
+	dirs := setupProcessorDirs(t)
+	p := NewProcessor(ProcessorConfig{Dirs: dirs})
+
+	// Create a real job file, then symlink to it from inbox.
+	realJob := &Job{
+		ID:        "symlink-001",
+		Type:      JobTypeObserve,
+		Target:    JobTarget{Scope: "/tmp"},
+		Brief:     "test",
+		Source:    "manual",
+		CreatedAt: time.Now().UTC(),
+	}
+	realPath := writeJobFile(t, t.TempDir(), realJob)
+
+	symlinkPath := filepath.Join(dirs.Inbox, "symlink-001.json")
+	if err := os.Symlink(realPath, symlinkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	err := p.Process(context.Background(), symlinkPath)
+	if err == nil {
+		t.Fatal("expected error for symlink, got nil")
+	}
+	if !strings.Contains(err.Error(), "rejected symlink") {
+		t.Errorf("error = %q, want 'rejected symlink'", err.Error())
+	}
+
+	// Outbox should be empty — no result written for rejected symlinks.
+	entries, _ := os.ReadDir(dirs.Outbox)
+	if len(entries) != 0 {
+		t.Errorf("expected empty outbox for rejected symlink, got %d files", len(entries))
 	}
 }
 

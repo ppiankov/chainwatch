@@ -44,6 +44,18 @@ func NewProcessor(cfg ProcessorConfig) *Processor {
 // Process handles a single job file through its full lifecycle:
 // read → validate → move to processing → execute → write result to outbox.
 func (p *Processor) Process(_ context.Context, jobPath string) error {
+	// Structural symlink defense: reject symlinks before reading.
+	// This prevents an attacker from symlinking inbox files to arbitrary
+	// paths on the filesystem. Without this, a symlink to a valid JSON
+	// file would be processed as a legitimate job.
+	fi, err := os.Lstat(jobPath)
+	if err != nil {
+		return fmt.Errorf("stat job file: %w", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("rejected symlink: %s", filepath.Base(jobPath))
+	}
+
 	// Read and parse the job file.
 	data, err := os.ReadFile(jobPath)
 	if err != nil {
