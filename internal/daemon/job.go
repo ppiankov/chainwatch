@@ -42,6 +42,7 @@ type Job struct {
 	ID        string    `json:"id"`
 	Type      string    `json:"type"`
 	Target    JobTarget `json:"target"`
+	Runbook   string    `json:"runbook,omitempty"`
 	Brief     string    `json:"brief"`
 	Source    string    `json:"source"`
 	CreatedAt time.Time `json:"created_at"`

@@ -123,12 +123,10 @@ func (p *Processor) execute(job *Job) (*Result, error) {
 
 // runInvestigation executes an observation runbook and optionally classifies findings.
 func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
-	// Determine runbook type from the target.
-	rbType := "linux"
-	if job.Target.Scope != "" {
-		// Auto-detect WordPress if the scope contains wp-content or similar markers.
-		rb := observe.GetRunbook(rbType)
-		_ = rb // Use the default for now; runbook selection can be enhanced later.
+	// Determine runbook type: prefer explicit job field, fall back to linux.
+	rbType := job.Runbook
+	if rbType == "" {
+		rbType = "linux"
 	}
 
 	runnerCfg := observe.RunnerConfig{

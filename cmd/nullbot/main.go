@@ -725,7 +725,7 @@ Examples:
 	}
 
 	observeCmd.Flags().StringVar(&observeScope, "scope", "", "target directory to investigate (required)")
-	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type: wordpress, linux")
+	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type: wordpress, postfix, linux")
 	observeCmd.Flags().StringVar(&observeOutput, "output", "", "write results to JSON file")
 	observeCmd.Flags().BoolVar(&observeClassify, "classify", false, "classify findings with local LLM")
 	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")

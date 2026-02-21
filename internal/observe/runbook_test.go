@@ -29,6 +29,18 @@ func TestGetRunbookLinux(t *testing.T) {
 	}
 }
 
+func TestGetRunbookPostfix(t *testing.T) {
+	for _, name := range []string{"postfix", "mail"} {
+		rb := GetRunbook(name)
+		if rb.Type != "postfix" {
+			t.Errorf("GetRunbook(%q) type = %q, want postfix", name, rb.Type)
+		}
+		if len(rb.Steps) < 8 {
+			t.Errorf("Postfix runbook has %d steps, want at least 8", len(rb.Steps))
+		}
+	}
+}
+
 func TestGetRunbookUnknownFallsToLinux(t *testing.T) {
 	rb := GetRunbook("nginx")
 	if rb.Type != "linux" {
@@ -64,6 +76,27 @@ func TestLinuxRunbookNoDestructiveCommands(t *testing.T) {
 	}
 }
 
+func TestPostfixRunbookNoDestructiveCommands(t *testing.T) {
+	rb := PostfixRunbook()
+	for _, step := range rb.Steps {
+		assertNoDestructivePrimary(t, rb.Name, step)
+	}
+}
+
+func TestPostfixRunbookContainsScopePlaceholder(t *testing.T) {
+	rb := PostfixRunbook()
+	hasScopePlaceholder := false
+	for _, step := range rb.Steps {
+		if strings.Contains(step.Command, "{{SCOPE}}") {
+			hasScopePlaceholder = true
+			break
+		}
+	}
+	if !hasScopePlaceholder {
+		t.Error("Postfix runbook should contain {{SCOPE}} placeholder")
+	}
+}
+
 // assertNoDestructivePrimary checks that the primary command (before any
 // pipe or fallback) is not a destructive write operation. Fallback echo
 // messages (|| echo '...') and read-only flags (-perm) are allowed.
@@ -87,7 +120,7 @@ func assertNoDestructivePrimary(t *testing.T, rbName string, step Step) {
 }
 
 func TestRunbookStepsHavePurpose(t *testing.T) {
-	for _, rb := range []*Runbook{WordPressRunbook(), LinuxRunbook()} {
+	for _, rb := range []*Runbook{WordPressRunbook(), LinuxRunbook(), PostfixRunbook()} {
 		for i, step := range rb.Steps {
 			if step.Purpose == "" {
 				t.Errorf("%s step %d has empty purpose", rb.Name, i)
