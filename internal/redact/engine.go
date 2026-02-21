@@ -27,6 +27,27 @@ func Redact(text string, tm *TokenMap) string {
 	return result
 }
 
+// RedactWithConfig is like Redact but uses custom patterns and safe lists.
+// If cfg is nil and extra is nil, behaves identically to Redact.
+func RedactWithConfig(text string, tm *TokenMap, cfg *RedactConfig, extra []ExtraPattern) string {
+	matches := ScanWithConfig(text, cfg, extra)
+	if len(matches) == 0 {
+		return text
+	}
+
+	for _, m := range matches {
+		tm.Token(m.Type, m.Value)
+	}
+
+	result := text
+	for _, val := range tm.Values() {
+		tok := tm.forward[val]
+		result = strings.ReplaceAll(result, val, tok)
+	}
+
+	return result
+}
+
 // Detoken replaces all tokens in text with their original values.
 func Detoken(text string, tm *TokenMap) string {
 	result := text
