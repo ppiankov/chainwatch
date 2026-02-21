@@ -18,6 +18,12 @@ const debounceDefault = 200 * time.Millisecond
 // Prevents resource exhaustion under burst load (e.g., 100 files at once).
 const maxConcurrentJobs = 5
 
+// maxQueueSize is the buffer size for the work queue channel.
+// Must be larger than maxConcurrentJobs to absorb bursts without
+// blocking the debounce flush. 200 handles worst-case burst while
+// bounding memory.
+const maxQueueSize = 200
+
 // pollDefault is the default polling interval when fsnotify is unavailable.
 const pollDefault = 5 * time.Second
 
@@ -49,25 +55,74 @@ func (w *InboxWatcher) Run(ctx context.Context) error {
 		return err
 	}
 
-	// pending tracks files that were recently created but haven't been
-	// dispatched yet (debounce window). Guarded by mu because AfterFunc
-	// callbacks run in separate goroutines.
+	// ready collects file paths that passed debounce. A single timer
+	// resets on each event; when it fires, all accumulated paths flush
+	// to the work queue. This creates zero per-file goroutines —
+	// preventing the fatal thread exhaustion (newosproc) that occurred
+	// when 100 time.AfterFunc goroutines spawned simultaneously.
 	var mu sync.Mutex
-	pending := make(map[string]*time.Timer)
+	ready := make(map[string]bool)
 
-	// sem limits concurrent handler goroutines to prevent resource
-	// exhaustion when many files arrive simultaneously.
-	sem := make(chan struct{}, maxConcurrentJobs)
+	// Work queue consumed by a fixed pool of workers.
+	queue := make(chan string, maxQueueSize)
+
+	// Fixed worker pool — the only goroutines besides the main loop.
+	var wg sync.WaitGroup
+	for i := 0; i < maxConcurrentJobs; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range queue {
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							_ = r
+						}
+					}()
+					w.handler(path)
+				}()
+			}
+		}()
+	}
+
+	// flush moves all ready paths into the work queue.
+	flush := func() {
+		mu.Lock()
+		batch := make([]string, 0, len(ready))
+		for p := range ready {
+			batch = append(batch, p)
+		}
+		ready = make(map[string]bool)
+		mu.Unlock()
+
+		for _, p := range batch {
+			select {
+			case queue <- p:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	// Single debounce timer — reset on each event, no goroutines.
+	// Initialized as stopped; first event starts it.
+	debounceTimer := time.NewTimer(w.debounce)
+	debounceTimer.Stop()
+
+	defer func() {
+		debounceTimer.Stop()
+		flush()
+		close(queue)
+		wg.Wait()
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			mu.Lock()
-			for _, t := range pending {
-				t.Stop()
-			}
-			mu.Unlock()
 			return nil
+
+		case <-debounceTimer.C:
+			flush()
 
 		case event, ok := <-watcher.Events:
 			if !ok {
@@ -80,33 +135,23 @@ func (w *InboxWatcher) Run(ctx context.Context) error {
 				continue
 			}
 
-			path := event.Name
 			mu.Lock()
-			if t, exists := pending[path]; exists {
-				t.Stop()
-			}
-			pending[path] = time.AfterFunc(w.debounce, func() {
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				defer func() {
-					if r := recover(); r != nil {
-						// Log panic but don't crash the daemon.
-						// The file stays unprocessed; operator can retry.
-						_ = r
-					}
-				}()
-				w.handler(path)
-				mu.Lock()
-				delete(pending, path)
-				mu.Unlock()
-			})
+			ready[event.Name] = true
 			mu.Unlock()
+
+			// Reset the single debounce timer. No goroutines created.
+			if !debounceTimer.Stop() {
+				select {
+				case <-debounceTimer.C:
+				default:
+				}
+			}
+			debounceTimer.Reset(w.debounce)
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
-			// Log error but continue watching.
 			_ = err
 		}
 	}
