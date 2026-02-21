@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -215,8 +217,11 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 		}
 	}
 
-	// Execute the command
+	// Execute the command with sanitized environment.
+	// Sensitive env vars (API keys, tokens) are stripped so spawned
+	// processes cannot exfiltrate credentials via shell builtins.
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = sanitizeEnv(os.Environ())
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -236,9 +241,24 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 		}
 	}
 
+	// Scan output for leaked secrets and redact before returning.
+	cleanOut, nOut := ScanOutputFull(stdout.String())
+	cleanErr, nErr := ScanOutputFull(stderr.String())
+	if nOut+nErr > 0 && g.auditLog != nil {
+		g.auditLog.Record(audit.AuditEntry{
+			Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			TraceID:    g.tracer.State.TraceID,
+			Action:     audit.AuditAction{Tool: "output_scan", Resource: action.Resource},
+			Decision:   "redacted",
+			Reason:     fmt.Sprintf("output contained %d secret(s)", nOut+nErr),
+			Tier:       3,
+			PolicyHash: g.policyHash,
+		})
+	}
+
 	return &Result{
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
+		Stdout:   cleanOut,
+		Stderr:   cleanErr,
 		ExitCode: exitCode,
 		Decision: result.Decision,
 	}, nil
@@ -273,6 +293,56 @@ func (g *Guard) dispatchBreakGlass(action *model.Action, result model.PolicyResu
 			Type:       "break_glass_used",
 		})
 	}
+}
+
+// sensitiveEnvPrefixes are env var name prefixes that are stripped from
+// subprocess environments. This prevents credential exfiltration via
+// shell builtins like `set`, `declare -p`, or `env`.
+var sensitiveEnvPrefixes = []string{
+	"NULLBOT_",
+	"GROQ_API",
+	"OPENAI_API",
+	"ANTHROPIC_API",
+	"CHAINWATCH_",
+}
+
+// sensitiveEnvExact are env var names stripped by exact match.
+var sensitiveEnvExact = []string{
+	"API_KEY",
+	"API_SECRET",
+}
+
+// sanitizeEnv filters sensitive environment variables from the list.
+// Returns a new slice with matching entries removed.
+func sanitizeEnv(environ []string) []string {
+	clean := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			clean = append(clean, entry)
+			continue
+		}
+		upper := strings.ToUpper(name)
+		skip := false
+		for _, prefix := range sensitiveEnvPrefixes {
+			if strings.HasPrefix(upper, prefix) {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			for _, exact := range sensitiveEnvExact {
+				if upper == exact {
+					skip = true
+					break
+				}
+			}
+		}
+		if !skip {
+			clean = append(clean, entry)
+		}
+	}
+	return clean
 }
 
 // Check evaluates policy without executing. Dry-run mode.
