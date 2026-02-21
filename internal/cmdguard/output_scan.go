@@ -1,6 +1,7 @@
 package cmdguard
 
 import (
+	"encoding/base64"
 	"regexp"
 	"strings"
 )
@@ -48,6 +49,68 @@ func ScanOutput(output string) (string, int) {
 	return result, count
 }
 
+// base64Pattern matches candidate base64-encoded strings.
+// Minimum 16 chars to avoid false positives on short strings.
+// Requires valid base64 charset and proper padding.
+var base64Pattern = regexp.MustCompile(`[A-Za-z0-9+/]{16,}={0,2}`)
+
+// minDecodedLen is the minimum decoded length to consider for secret scanning.
+// Secrets under 8 bytes are unlikely to be real credentials.
+const minDecodedLen = 8
+
+// ScanBase64 finds candidate base64 strings, decodes them, and checks
+// the decoded content against secret patterns. Returns the output with
+// any base64-encoded secrets redacted and the count of secrets found.
+func ScanBase64(output string) (string, int) {
+	count := 0
+	result := base64Pattern.ReplaceAllStringFunc(output, func(match string) string {
+		decoded, err := base64.StdEncoding.DecodeString(match)
+		if err != nil {
+			// Try RawStdEncoding (no padding).
+			decoded, err = base64.RawStdEncoding.DecodeString(match)
+			if err != nil {
+				return match
+			}
+		}
+
+		if len(decoded) < minDecodedLen {
+			return match
+		}
+
+		// Check if decoded content is mostly printable text.
+		// Binary data (images, compressed) should not be scanned.
+		if !isPrintable(decoded) {
+			return match
+		}
+
+		decodedStr := string(decoded)
+		for _, re := range secretPatterns {
+			if re.MatchString(decodedStr) {
+				count++
+				return redactPlaceholder
+			}
+		}
+		return match
+	})
+	return result, count
+}
+
+// isPrintable returns true if at least 80% of bytes are printable ASCII
+// or common whitespace. This filters out binary data that happens to be
+// valid base64.
+func isPrintable(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	printable := 0
+	for _, b := range data {
+		if (b >= 0x20 && b <= 0x7E) || b == '\n' || b == '\r' || b == '\t' {
+			printable++
+		}
+	}
+	return float64(printable)/float64(len(data)) >= 0.8
+}
+
 // EnvKeyValuePattern matches KEY=VALUE lines where KEY is a known
 // sensitive env var name. This catches output from `set`, `export -p`,
 // `declare -p`, and similar shell builtins.
@@ -57,9 +120,14 @@ var envKeyValuePattern = regexp.MustCompile(
 		`[= ].*$`,
 )
 
-// ScanOutputFull runs both secret pattern scanning and env key=value scanning.
+// ScanOutputFull runs secret pattern, base64, and env key=value scanning.
 func ScanOutputFull(output string) (string, int) {
 	result, count := ScanOutput(output)
+
+	// Scan for base64-encoded secrets.
+	r, n := ScanBase64(result)
+	result = r
+	count += n
 
 	// Also redact env var lines with sensitive names
 	envMatches := envKeyValuePattern.FindAllString(result, -1)
