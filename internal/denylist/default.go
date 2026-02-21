@@ -40,5 +40,8 @@ var DefaultPatterns = Patterns{
 		"sudo -i",
 		"git push --force",
 		"git push -f",
+		"printenv",
+		"/proc/self/environ",
+		"/proc/*/environ",
 	},
 }

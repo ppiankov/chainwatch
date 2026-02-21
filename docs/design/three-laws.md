@@ -112,6 +112,7 @@ The system's job is to **leave evidence**, not to **become the problem**.
 
 ## Related Documents
 
+- [Self-Protection](self-protection.md) — Law 3 implementation details
 - [Governance Doctrine](../governance-doctrine.md) — positioning and philosophy
 - [Five Invariant Categories](invariants.md) — what these laws protect
 - [Enforcement Modes](enforcement-modes.md) — how strictness scales

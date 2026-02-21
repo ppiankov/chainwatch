@@ -90,6 +90,24 @@ func TestPipeToShellBlocked(t *testing.T) {
 	}
 }
 
+func TestPrintenvBlocked(t *testing.T) {
+	dl := NewDefault()
+
+	blocked, _ := dl.IsBlocked("printenv NULLBOT_API_KEY", "shell_exec")
+	if !blocked {
+		t.Error("expected printenv to be blocked")
+	}
+}
+
+func TestProcEnvironBlocked(t *testing.T) {
+	dl := NewDefault()
+
+	blocked, _ := dl.IsBlocked("cat /proc/self/environ", "shell_exec")
+	if !blocked {
+		t.Error("expected /proc/self/environ to be blocked")
+	}
+}
+
 func TestSafeCommandAllowed(t *testing.T) {
 	dl := NewDefault()
 
