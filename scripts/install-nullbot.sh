@@ -9,12 +9,12 @@
 #
 # What it does (8 steps):
 #   1. Check prerequisites — root, Linux, systemd, curl
-#   2. Install binaries — chainwatch + nullbot from GitHub releases
+#   2. Install binaries — chainwatch + nullbot + runforge from GitHub releases
 #   3. Create nullbot user — system user with /home/nullbot
 #   4. Create directories — inbox, outbox, state, config
 #   5. Initialize chainwatch — clawbot profile, denylist, policy
 #   6. Configure environment — nullbot.env with optional GROQ_API_KEY
-#   7. Install systemd service — nullbot-daemon.service, enable, start
+#   7. Install systemd services — nullbot-daemon + runforge-sentinel
 #   8. Verify — 10-point self-protection test matrix
 #
 # To inspect before running:
@@ -219,7 +219,7 @@ create_user() {
 create_dirs() {
     step 4 "Create directories"
 
-    local dirs="inbox outbox state config"
+    local dirs="inbox outbox state state/ingested state/sentinel config"
     for d in $dirs; do
         local path="${NULLBOT_HOME}/${d}"
         if [ -d "$path" ]; then
@@ -370,6 +370,67 @@ UNIT
             warn "service installed but failed to start — check: journalctl -u ${SERVICE}"
         fi
     fi
+
+    # Sentinel service — watches approved WOs and auto-executes them
+    local sentinel_unit="/etc/systemd/system/runforge-sentinel.service"
+
+    if [ ! -x "${INSTALL_DIR}/runforge" ]; then
+        skip "runforge not installed — skipping sentinel service"
+    elif [ ! -f "$sentinel_unit" ]; then
+        cat > "$sentinel_unit" <<'UNIT'
+[Unit]
+Description=Runforge sentinel (WO auto-executor)
+After=nullbot-daemon.service
+Wants=nullbot-daemon.service
+
+[Service]
+Type=simple
+User=nullbot
+Group=nullbot
+EnvironmentFile=/home/nullbot/config/nullbot.env
+ExecStart=/usr/local/bin/runforge sentinel --ingested /home/nullbot/state/ingested --state /home/nullbot/state/sentinel
+Restart=on-failure
+RestartSec=10
+
+# Security hardening (same as nullbot-daemon)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/nullbot/state /home/nullbot/.chainwatch
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+LockPersonality=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# Resource limits
+CPUQuota=50%
+MemoryMax=512M
+TasksMax=50
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+        ok "wrote ${sentinel_unit}"
+
+        systemctl daemon-reload
+        systemctl enable runforge-sentinel >/dev/null 2>&1
+        systemctl start runforge-sentinel 2>/dev/null || true
+        sleep 2
+        if systemctl is-active --quiet runforge-sentinel; then
+            ok "runforge-sentinel active"
+        else
+            warn "sentinel installed but failed to start — check: journalctl -u runforge-sentinel"
+        fi
+    else
+        skip "sentinel service unit exists"
+        systemctl daemon-reload
+    fi
 }
 
 # -------------------------------------------------------------------
@@ -501,11 +562,19 @@ summary() {
         echo "│ Environment        │ Not configured                       │ · off    │"
     fi
 
-    # service
+    # services
     if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
-        echo "│ Systemd service    │ nullbot-daemon.service               │ ✓ active │"
+        echo "│ nullbot-daemon     │ Investigation daemon                 │ ✓ active │"
     else
-        echo "│ Systemd service    │ nullbot-daemon.service               │ · off    │"
+        echo "│ nullbot-daemon     │ Investigation daemon                 │ · off    │"
+    fi
+
+    if systemctl is-active --quiet runforge-sentinel 2>/dev/null; then
+        echo "│ runforge-sentinel  │ WO auto-executor                     │ ✓ active │"
+    elif [ -f /etc/systemd/system/runforge-sentinel.service ]; then
+        echo "│ runforge-sentinel  │ WO auto-executor                     │ · off    │"
+    else
+        echo "│ runforge-sentinel  │ WO auto-executor                     │ · n/a    │"
     fi
 
     # test results
@@ -524,23 +593,46 @@ summary() {
     echo "  ${NULLBOT_HOME}/config/nullbot.env             — API keys & settings"
     echo ""
     echo "Logs:"
-    echo "  journalctl -u ${SERVICE} -f"
+    echo "  journalctl -u ${SERVICE} -f              # nullbot daemon"
+    echo "  journalctl -u runforge-sentinel -f        # sentinel (auto-executor)"
     echo ""
     echo "Operator workflow:"
     echo ""
-    echo "  1. Submit a job:"
-    echo '     cat > /home/nullbot/inbox/job-001.json <<JSON'
-    echo '     {"id":"job-001","type":"investigate","target":{"host":"localhost","scope":"/var/log"},"brief":"check for failed SSH logins","source":"manual","created_at":"2026-01-01T00:00:00Z"}'
+    echo "  1. SUBMIT — drop a job into the inbox:"
+    echo '     cat > /home/nullbot/inbox/job-001.json <<'"'"'JSON'"'"''
+    echo '     {"id":"job-001","type":"investigate","target":{"host":"localhost","scope":"/var/log"},'
+    echo '      "brief":"check for failed SSH logins","source":"manual","created_at":"2026-01-01T00:00:00Z"}'
     echo '     JSON'
     echo ""
-    echo "  2. Review pending work orders:"
+    echo "     The nullbot daemon picks this up, investigates the target scope,"
+    echo "     classifies findings via LLM, and generates a proposed work order."
+    echo ""
+    echo "  2. REVIEW — see what nullbot found and proposed:"
     echo "     nullbot list --outbox ${NULLBOT_HOME}/outbox --state ${NULLBOT_HOME}/state"
     echo ""
-    echo "  3. Approve (creates IngestPayload for runforge):"
-    echo "     nullbot approve <wo-id> --outbox ${NULLBOT_HOME}/outbox --state ${NULLBOT_HOME}/state"
+    echo "     Each WO shows: observations (what was found), proposed goals"
+    echo "     (what to fix), and constraints (paths, network, sudo limits)."
+    echo "     This is the approval gate — nothing executes until you say so."
     echo ""
-    echo "  4. Execute approved remediation:"
+    echo "  3. APPROVE or REJECT — human decision:"
+    echo "     nullbot approve <wo-id> --outbox ${NULLBOT_HOME}/outbox --state ${NULLBOT_HOME}/state"
+    echo "     nullbot reject  <wo-id> --outbox ${NULLBOT_HOME}/outbox --state ${NULLBOT_HOME}/state --reason 'not needed'"
+    echo ""
+    echo "     Approve creates an IngestPayload in state/ingested/. This payload"
+    echo "     contains only typed observations and constraints — no raw evidence."
+    echo "     Approval does NOT bypass chainwatch. All commands are still enforced."
+    echo ""
+    echo "  4. EXECUTE — automatic (sentinel) or manual:"
+    echo "     If runforge-sentinel is running, it picks up the approved WO"
+    echo "     automatically and executes it through the runner cascade."
+    echo ""
+    echo "     Manual alternative:"
     echo "     runforge ingest --payload ${NULLBOT_HOME}/state/ingested/<wo-id>.json"
+    echo ""
+    echo "  5. CHECK RESULTS:"
+    echo "     ls ${NULLBOT_HOME}/state/sentinel/completed/   # successful WOs"
+    echo "     ls ${NULLBOT_HOME}/state/sentinel/failed/      # failed WOs"
+    echo "     cat ${NULLBOT_HOME}/state/sentinel/completed/<wo-id>.json"
 
     if ! grep -q "^NULLBOT_API_KEY=" "${NULLBOT_HOME}/config/nullbot.env" 2>/dev/null; then
         echo ""
