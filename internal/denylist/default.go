@@ -48,5 +48,8 @@ var DefaultPatterns = Patterns{
 		"ANTHROPIC_API_KEY",
 		"API_KEY",
 		"API_SECRET",
+		"declare -p",
+		"export -p",
+		"compgen -v",
 	},
 }
