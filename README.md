@@ -25,10 +25,10 @@
 </p>
 
 # Chainwatch
-
 [![CI](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/ppiankov/chainwatch/actions/workflows/ci.yml)
 [![Go 1.25+](https://img.shields.io/badge/go-1.25+-00ADD8.svg)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![ANCC](https://img.shields.io/badge/ANCC-compliant-brightgreen)](https://ancc.dev)
 
 Runtime control plane for AI agent safety. Intercepts tool calls at irreversible boundaries — payments, credentials, data destruction, external communication — and enforces deterministic policy decisions.
 
