@@ -98,4 +98,6 @@ corporate_test_data/
 
 # Claude Code
 .claude/
+docs/context.txt
+docs/work-orders.md
 CLAUDE.local.md
