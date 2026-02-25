@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -23,13 +24,14 @@ type LLMProvider struct {
 
 // ClassifierConfig holds parameters for LLM-based observation classification.
 type ClassifierConfig struct {
-	APIURL       string
-	APIKey       string
-	Model        string
-	MaxTokens    int
-	Timeout      time.Duration
-	LLMRateLimit int // requests per minute; 0 = unlimited
-	Fallbacks    []LLMProvider
+	APIURL           string
+	APIKey           string
+	Model            string
+	MaxTokens        int
+	Timeout          time.Duration
+	LLMRateLimit     int // requests per minute; 0 = unlimited
+	Fallbacks        []LLMProvider
+	DiagnosticWriter io.Writer // if non-nil, raw LLM response is written here
 }
 
 // classificationResponse is the expected JSON from the LLM.
@@ -83,7 +85,7 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 
 	var lastErr error
 	for _, p := range providers {
-		obs, err := classifyWith(p, timeout, cfg.MaxTokens, cfg.LLMRateLimit, evidence)
+		obs, err := classifyWith(p, timeout, cfg.MaxTokens, cfg.LLMRateLimit, evidence, cfg.DiagnosticWriter)
 		if err == nil {
 			return obs, nil
 		}
@@ -97,7 +99,7 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 	return nil, lastErr
 }
 
-func classifyWith(p LLMProvider, timeout time.Duration, maxTokens, rateLimit int, evidence string) ([]wo.Observation, error) {
+func classifyWith(p LLMProvider, timeout time.Duration, maxTokens, rateLimit int, evidence string, diagW io.Writer) ([]wo.Observation, error) {
 	client := &neurorouter.Client{
 		BaseURL:    p.URL,
 		APIKey:     p.Key,
@@ -119,6 +121,10 @@ func classifyWith(p LLMProvider, timeout time.Duration, maxTokens, rateLimit int
 	})
 	if err != nil {
 		return nil, fmt.Errorf("classify: %w", err)
+	}
+
+	if diagW != nil {
+		fmt.Fprintf(diagW, "=== RECEIVED: RAW LLM RESPONSE ===\n%s\n=== END RECEIVED ===\n\n", resp.Content)
 	}
 
 	return parseClassification(resp.Content)

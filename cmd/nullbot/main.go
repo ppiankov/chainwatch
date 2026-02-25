@@ -541,10 +541,11 @@ Rules:
 	runCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show plan without executing")
 
 	var (
-		observeScope    string
-		observeType     string
-		observeOutput   string
-		observeClassify bool
+		observeScope      string
+		observeType       string
+		observeOutput     string
+		observeClassify   bool
+		observeDiagnostic bool
 	)
 
 	observeCmd := &cobra.Command{
@@ -598,6 +599,26 @@ Examples:
 				return nil
 			}
 
+			// Diagnostic mode: write full pipeline data to file for operator inspection.
+			var diagFile *os.File
+			if observeDiagnostic {
+				if !observeClassify {
+					return fmt.Errorf("--diagnostic requires --classify")
+				}
+				diagPath := fmt.Sprintf("/tmp/nullbot-diagnostic-%d.txt", time.Now().Unix())
+				var err error
+				diagFile, err = os.OpenFile(diagPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+				if err != nil {
+					return fmt.Errorf("create diagnostic file: %w", err)
+				}
+				defer diagFile.Close()
+				fmt.Fprintf(diagFile, "NULLBOT DIAGNOSTIC OUTPUT — NON-PRODUCTION\n")
+				fmt.Fprintf(diagFile, "WARNING: Contains sensitive pre-redaction data.\n")
+				fmt.Fprintf(diagFile, "Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339))
+				fmt.Printf("%s%sWARNING: Diagnostic mode — sensitive data will be written to:%s\n", bold, yellow, reset)
+				fmt.Printf("  %s\n\n", diagPath)
+			}
+
 			// Execute runbook.
 			fmt.Printf("%sRunning investigation...%s\n\n", dim, reset)
 			result, err := observe.Run(runnerCfg, rb)
@@ -628,6 +649,11 @@ Examples:
 
 			// Collect evidence for classification.
 			evidence := observe.CollectEvidence(result)
+
+			if diagFile != nil {
+				fmt.Fprintf(diagFile, "=== COLLECTED: RAW EVIDENCE ===\n%s\n=== END COLLECTED ===\n\n", evidence)
+			}
+
 			if evidence == "" {
 				fmt.Printf("%sNo evidence collected (all steps blocked or empty).%s\n", yellow, reset)
 				return nil
@@ -638,9 +664,10 @@ Examples:
 			if observeClassify {
 				fmt.Printf("%sClassifying findings with %s...%s ", dim, cfg.model, reset)
 				classifyCfg := observe.ClassifierConfig{
-					APIURL: cfg.apiURL,
-					APIKey: cfg.apiKey,
-					Model:  cfg.model,
+					APIURL:           cfg.apiURL,
+					APIKey:           cfg.apiKey,
+					Model:            cfg.model,
+					DiagnosticWriter: diagFile, // nil when --diagnostic not used
 				}
 
 				// Redact evidence if cloud mode.
@@ -652,6 +679,10 @@ Examples:
 					if tokenMap.Len() > 0 {
 						classifyEvidence = tokenMap.Legend() + "\n" + classifyEvidence
 					}
+				}
+
+				if diagFile != nil {
+					fmt.Fprintf(diagFile, "=== SENT: REDACTED EVIDENCE ===\n%s\n=== END SENT ===\n\n", classifyEvidence)
 				}
 
 				obs, err := observe.Classify(classifyCfg, classifyEvidence)
@@ -675,6 +706,10 @@ Examples:
 					}
 					observations = obs
 					fmt.Printf("%sOK%s (%d observations)\n", green, reset, len(obs))
+				}
+
+				if diagFile != nil {
+					fmt.Printf("%sDiagnostic written to: %s%s\n", dim, diagFile.Name(), reset)
 				}
 			}
 
@@ -731,6 +766,7 @@ Examples:
 	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")
 	observeCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name for classification (env: NULLBOT_MODEL)")
 	observeCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show runbook steps without executing")
+	observeCmd.Flags().BoolVar(&observeDiagnostic, "diagnostic", false, "write full pipeline data to file (non-production)")
 
 	var (
 		daemonInbox    string
