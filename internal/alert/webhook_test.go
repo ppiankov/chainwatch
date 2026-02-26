@@ -250,3 +250,92 @@ func TestNewDispatcherNilOnEmpty(t *testing.T) {
 		t.Error("expected nil dispatcher for zero-length configs")
 	}
 }
+
+func TestShouldRedactWebhook(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"http://localhost:8080/hook", false},
+		{"http://127.0.0.1:9090/alert", false},
+		{"https://hooks.slack.com/services/xxx", true},
+		{"https://events.pagerduty.com/v2/enqueue", true},
+		{"http://Localhost:8080/hook", false},
+	}
+	for _, tt := range tests {
+		if got := shouldRedactWebhook(tt.url); got != tt.want {
+			t.Errorf("shouldRedactWebhook(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestSendRedactsCloudWebhook(t *testing.T) {
+	var received AlertEvent
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	event := AlertEvent{
+		TraceID:  "t-001",
+		Tool:     "command",
+		Resource: "/var/www/site/wp-config.php",
+		Decision: "deny",
+		Reason:   "path /etc/shadow in denylist",
+		Tier:     3,
+	}
+
+	// The httptest server uses 127.0.0.1 — override for cloud simulation.
+	// We test the redaction function directly instead.
+	redacted := redactEvent(event)
+
+	if redacted.Resource == "/var/www/site/wp-config.php" {
+		t.Error("expected Resource to be redacted, got raw path")
+	}
+	if redacted.Reason == "path /etc/shadow in denylist" {
+		t.Error("expected Reason to be redacted, got raw path")
+	}
+	// Non-sensitive fields must be preserved.
+	if redacted.TraceID != "t-001" {
+		t.Errorf("TraceID changed: got %q", redacted.TraceID)
+	}
+	if redacted.Tool != "command" {
+		t.Errorf("Tool changed: got %q", redacted.Tool)
+	}
+	if redacted.Decision != "deny" {
+		t.Errorf("Decision changed: got %q", redacted.Decision)
+	}
+	if redacted.Tier != 3 {
+		t.Errorf("Tier changed: got %d", redacted.Tier)
+	}
+}
+
+func TestSendSkipsRedactLocalhost(t *testing.T) {
+	var received AlertEvent
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	event := AlertEvent{
+		Tool:     "command",
+		Resource: "/var/www/site/wp-config.php",
+		Decision: "deny",
+		Reason:   "path /etc/shadow in denylist",
+	}
+
+	// httptest server is 127.0.0.1 — should NOT redact.
+	err := Send(AlertConfig{URL: srv.URL, Format: "generic"}, event)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if received.Resource != "/var/www/site/wp-config.php" {
+		t.Errorf("expected raw Resource for localhost, got %q", received.Resource)
+	}
+	if received.Reason != "path /etc/shadow in denylist" {
+		t.Errorf("expected raw Reason for localhost, got %q", received.Reason)
+	}
+}

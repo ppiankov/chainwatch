@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/ppiankov/chainwatch/internal/redact"
 )
 
 const (
@@ -14,8 +17,28 @@ const (
 
 var httpClient = &http.Client{Timeout: requestTimeout}
 
+// shouldRedactWebhook returns true when the webhook URL points to a
+// remote (non-localhost) endpoint. Mirrors redact.ResolveMode logic.
+func shouldRedactWebhook(url string) bool {
+	lower := strings.ToLower(url)
+	return !strings.Contains(lower, "localhost") && !strings.Contains(lower, "127.0.0.1")
+}
+
+// redactEvent strips sensitive values from Resource and Reason fields.
+// Uses a throwaway TokenMap — webhook payloads are one-way, no detoken needed.
+func redactEvent(event AlertEvent) AlertEvent {
+	tm := redact.NewTokenMap("webhook")
+	event.Resource = redact.Redact(event.Resource, tm)
+	event.Reason = redact.Redact(event.Reason, tm)
+	return event
+}
+
 // Send posts an alert event to a webhook endpoint with retry on 5xx.
 func Send(cfg AlertConfig, event AlertEvent) error {
+	if shouldRedactWebhook(cfg.URL) {
+		event = redactEvent(event)
+	}
+
 	body, err := FormatPayload(cfg.Format, event)
 	if err != nil {
 		return fmt.Errorf("format payload: %w", err)
