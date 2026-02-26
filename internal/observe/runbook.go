@@ -12,11 +12,12 @@ import (
 
 // Runbook is a named set of investigation steps.
 type Runbook struct {
-	Name    string   `yaml:"name"`
-	Type    string   `yaml:"type"`
-	Aliases []string `yaml:"aliases,omitempty"`
-	Steps   []Step   `yaml:"steps"`
-	Source  string   `yaml:"-"` // "built-in" or "user" — set at load time
+	Name        string   `yaml:"name"`
+	Type        string   `yaml:"type"`
+	Aliases     []string `yaml:"aliases,omitempty"`
+	Sensitivity string   `yaml:"sensitivity,omitempty"` // "local" or "any" (default)
+	Steps       []Step   `yaml:"steps"`
+	Source      string   `yaml:"-"` // "built-in" or "user" — set at load time
 }
 
 // Step defines a single investigation command with its purpose.
@@ -39,6 +40,9 @@ func ValidateRunbook(rb *Runbook) error {
 	}
 	if rb.Type == "" {
 		return fmt.Errorf("runbook type is required")
+	}
+	if rb.Sensitivity != "" && rb.Sensitivity != "local" && rb.Sensitivity != "any" {
+		return fmt.Errorf("runbook sensitivity must be \"local\" or \"any\", got %q", rb.Sensitivity)
 	}
 	if len(rb.Steps) == 0 {
 		return fmt.Errorf("runbook must have at least one step")

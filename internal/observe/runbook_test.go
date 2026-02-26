@@ -55,6 +55,32 @@ func TestGetRunbookNginx(t *testing.T) {
 	}
 }
 
+func TestGetRunbookPostfixInbound(t *testing.T) {
+	for _, name := range []string{"postfix-inbound", "inbound", "mail-trace"} {
+		rb := GetRunbook(name)
+		if rb.Type != "postfix-inbound" {
+			t.Errorf("GetRunbook(%q) type = %q, want postfix-inbound", name, rb.Type)
+		}
+		if len(rb.Steps) < 5 {
+			t.Errorf("Postfix inbound runbook has %d steps, want at least 5", len(rb.Steps))
+		}
+	}
+}
+
+func TestPostfixInboundHasQueryPlaceholder(t *testing.T) {
+	rb := GetRunbook("postfix-inbound")
+	hasQuery := false
+	for _, step := range rb.Steps {
+		if strings.Contains(step.Command, "{{QUERY}}") {
+			hasQuery = true
+			break
+		}
+	}
+	if !hasQuery {
+		t.Error("postfix-inbound runbook should contain {{QUERY}} placeholder")
+	}
+}
+
 func TestGetRunbookUnknownFallsToLinux(t *testing.T) {
 	rb := GetRunbook("unknown-service-xyz")
 	if rb.Type != "linux" {
@@ -71,7 +97,7 @@ func TestGetRunbookEmptyFallsToLinux(t *testing.T) {
 
 func TestBuiltinRunbooksHaveScopePlaceholder(t *testing.T) {
 	// All runbooks that investigate a target directory should use {{SCOPE}}.
-	for _, name := range []string{"wordpress", "linux", "postfix", "nginx"} {
+	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx"} {
 		rb := GetRunbook(name)
 		hasScopePlaceholder := false
 		for _, step := range rb.Steps {
@@ -87,7 +113,7 @@ func TestBuiltinRunbooksHaveScopePlaceholder(t *testing.T) {
 }
 
 func TestBuiltinRunbooksNoDestructiveCommands(t *testing.T) {
-	for _, name := range []string{"wordpress", "linux", "postfix", "nginx"} {
+	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx"} {
 		rb := GetRunbook(name)
 		for _, step := range rb.Steps {
 			if err := checkDestructive(step); err != nil {
@@ -98,7 +124,7 @@ func TestBuiltinRunbooksNoDestructiveCommands(t *testing.T) {
 }
 
 func TestBuiltinRunbooksHavePurpose(t *testing.T) {
-	for _, name := range []string{"wordpress", "linux", "postfix", "nginx"} {
+	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx"} {
 		rb := GetRunbook(name)
 		for i, step := range rb.Steps {
 			if step.Purpose == "" {
@@ -120,8 +146,8 @@ func TestBuiltinRunbooksSource(t *testing.T) {
 
 func TestListRunbooks(t *testing.T) {
 	list := ListRunbooks()
-	if len(list) < 4 {
-		t.Errorf("ListRunbooks() returned %d runbooks, want at least 4", len(list))
+	if len(list) < 5 {
+		t.Errorf("ListRunbooks() returned %d runbooks, want at least 5", len(list))
 	}
 
 	types := make(map[string]bool)
@@ -135,7 +161,7 @@ func TestListRunbooks(t *testing.T) {
 		}
 	}
 
-	for _, expected := range []string{"linux", "wordpress", "postfix", "nginx"} {
+	for _, expected := range []string{"linux", "wordpress", "postfix", "postfix-inbound", "nginx"} {
 		if !types[expected] {
 			t.Errorf("ListRunbooks() missing type %q", expected)
 		}
@@ -204,6 +230,39 @@ func TestParseRunbookYAMLRejectsInvalid(t *testing.T) {
 	_, err := ParseRunbook([]byte(yaml))
 	if err == nil {
 		t.Error("expected error for invalid YAML runbook")
+	}
+}
+
+func TestValidateRunbookSensitivity(t *testing.T) {
+	base := Runbook{
+		Name:  "test",
+		Type:  "test",
+		Steps: []Step{{Command: "echo hello", Purpose: "greet"}},
+	}
+
+	// Valid values: empty, "local", "any".
+	for _, val := range []string{"", "local", "any"} {
+		rb := base
+		rb.Sensitivity = val
+		if err := ValidateRunbook(&rb); err != nil {
+			t.Errorf("ValidateRunbook with sensitivity=%q should pass, got: %v", val, err)
+		}
+	}
+
+	// Invalid values should fail.
+	for _, val := range []string{"cloud", "remote", "LOCAL", "high"} {
+		rb := base
+		rb.Sensitivity = val
+		if err := ValidateRunbook(&rb); err == nil {
+			t.Errorf("ValidateRunbook with sensitivity=%q should fail", val)
+		}
+	}
+}
+
+func TestPostfixInboundSensitivityLocal(t *testing.T) {
+	rb := GetRunbook("postfix-inbound")
+	if rb.Sensitivity != "local" {
+		t.Errorf("postfix-inbound sensitivity = %q, want \"local\"", rb.Sensitivity)
 	}
 }
 

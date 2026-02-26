@@ -7,6 +7,7 @@ func TestIsValidType(t *testing.T) {
 		FileHashMismatch, RedirectDetected, UnauthorizedUser,
 		SuspiciousCode, ConfigModified, UnknownFile,
 		PermissionAnomaly, CronAnomaly, ProcessAnomaly, NetworkAnomaly,
+		EmailDelivered, EmailBlocked, EmailDeferred, EmailBounced,
 	}
 	for _, typ := range valid {
 		if !IsValidType(typ) {

@@ -22,6 +22,10 @@ const (
 	CronAnomaly       ObservationType = "cron_anomaly"
 	ProcessAnomaly    ObservationType = "process_anomaly"
 	NetworkAnomaly    ObservationType = "network_anomaly"
+	EmailDelivered    ObservationType = "email_delivered"
+	EmailBlocked      ObservationType = "email_blocked"
+	EmailDeferred     ObservationType = "email_deferred"
+	EmailBounced      ObservationType = "email_bounced"
 )
 
 // validTypes is the set of recognized observation types.
@@ -36,6 +40,10 @@ var validTypes = map[ObservationType]bool{
 	CronAnomaly:       true,
 	ProcessAnomaly:    true,
 	NetworkAnomaly:    true,
+	EmailDelivered:    true,
+	EmailBlocked:      true,
+	EmailDeferred:     true,
+	EmailBounced:      true,
 }
 
 // IsValidType returns true if t is a recognized observation type.

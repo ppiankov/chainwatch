@@ -39,13 +39,14 @@ var validID = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Job is a unit of work dropped into the inbox.
 type Job struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`
-	Target    JobTarget `json:"target"`
-	Runbook   string    `json:"runbook,omitempty"`
-	Brief     string    `json:"brief"`
-	Source    string    `json:"source"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string            `json:"id"`
+	Type      string            `json:"type"`
+	Target    JobTarget         `json:"target"`
+	Runbook   string            `json:"runbook,omitempty"`
+	Params    map[string]string `json:"params,omitempty"`
+	Brief     string            `json:"brief"`
+	Source    string            `json:"source"`
+	CreatedAt time.Time         `json:"created_at"`
 }
 
 // JobTarget identifies the system to investigate.

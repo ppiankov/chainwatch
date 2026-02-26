@@ -20,10 +20,11 @@ const inspectProfile = "clawbot"
 
 // RunnerConfig holds parameters for an investigation run.
 type RunnerConfig struct {
-	Scope      string // target directory, e.g. "/var/www/site"
-	Type       string // runbook type: "wordpress", "linux"
-	Chainwatch string // path to chainwatch binary
-	AuditLog   string // path to audit log
+	Scope      string            // target directory, e.g. "/var/www/site"
+	Type       string            // runbook type: "wordpress", "linux"
+	Chainwatch string            // path to chainwatch binary
+	AuditLog   string            // path to audit log
+	Params     map[string]string // optional query parameters (e.g., QUERY, DATE)
 }
 
 // StepResult captures the output of a single investigation command.
@@ -63,8 +64,11 @@ func Run(cfg RunnerConfig, rb *Runbook) (*RunResult, error) {
 	}
 
 	for _, step := range rb.Steps {
-		// Expand scope placeholder in commands.
+		// Expand placeholders in commands.
 		cmd := strings.ReplaceAll(step.Command, "{{SCOPE}}", cfg.Scope)
+		for k, v := range cfg.Params {
+			cmd = strings.ReplaceAll(cmd, "{{"+k+"}}", v)
+		}
 
 		sr := execStep(cfg, cmd, step.Purpose)
 		result.Steps = append(result.Steps, sr)

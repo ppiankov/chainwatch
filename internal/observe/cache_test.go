@@ -12,13 +12,14 @@ func TestWriteCacheRoundTrip(t *testing.T) {
 	cacheDir := filepath.Join(dir, "cache")
 
 	entry := &CachedObservation{
-		ID:         "job-001",
-		JobID:      "job-001",
-		Scope:      "/var/www/site",
-		Type:       "wordpress",
-		Evidence:   "=== check redirects ===\n$ curl -sI http://example.com\nHTTP/1.1 200 OK\n",
-		CachedAt:   time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
-		RetryCount: 0,
+		ID:          "job-001",
+		JobID:       "job-001",
+		Scope:       "/var/www/site",
+		Type:        "wordpress",
+		Sensitivity: "local",
+		Evidence:    "=== check redirects ===\n$ curl -sI http://example.com\nHTTP/1.1 200 OK\n",
+		CachedAt:    time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
+		RetryCount:  0,
 	}
 
 	if err := WriteCache(cacheDir, entry); err != nil {
@@ -42,6 +43,9 @@ func TestWriteCacheRoundTrip(t *testing.T) {
 	}
 	if got.Type != "wordpress" {
 		t.Errorf("Type = %q", got.Type)
+	}
+	if got.Sensitivity != "local" {
+		t.Errorf("Sensitivity = %q, want \"local\"", got.Sensitivity)
 	}
 	if got.Evidence == "" {
 		t.Error("Evidence is empty")

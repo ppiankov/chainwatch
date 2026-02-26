@@ -1,0 +1,17 @@
+name: "Postfix inbound email trace"
+type: postfix-inbound
+aliases: [inbound, mail-trace]
+sensitivity: local
+steps:
+  - command: "grep -i '{{QUERY}}' {{SCOPE}}/mail.log 2>/dev/null | grep -E 'from=|to=' | tail -50 || echo 'no matches'"
+    purpose: "find all log entries for sender/recipient"
+  - command: "grep -i '{{QUERY}}' {{SCOPE}}/mail.log 2>/dev/null | grep -iE 'status=(sent|bounced|deferred)' | tail -20 || echo 'no delivery status found'"
+    purpose: "check delivery status"
+  - command: "grep -i '{{QUERY}}' {{SCOPE}}/mail.log 2>/dev/null | grep -iE 'reject|denied|refused' | tail -20 || echo 'no rejections found'"
+    purpose: "check for rejections"
+  - command: "grep -i '{{QUERY}}' {{SCOPE}}/mail.log 2>/dev/null | grep -iE 'amavis|spam|virus|blocked|quarantine|milter' | tail -20 || echo 'no spam/virus filter hits'"
+    purpose: "check antispam and antivirus verdicts"
+  - command: "grep -i '{{QUERY}}' {{SCOPE}}/mail.log 2>/dev/null | grep -iE 'bounced|dsn|undeliverable' | tail -10 || echo 'no bounces found'"
+    purpose: "check for bounce notifications"
+  - command: "grep -i '{{QUERY}}' {{SCOPE}}/mail.log 2>/dev/null | wc -l"
+    purpose: "count total log entries for this address"

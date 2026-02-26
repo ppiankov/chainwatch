@@ -81,6 +81,7 @@ type config struct {
 	extraPatterns []redact.ExtraPattern
 	llmRateLimit  int // requests per minute; 0 = unlimited
 	llmFallbacks  []observe.LLMProvider
+	llmPool       []observe.LLMProvider
 }
 
 // step is a single command proposed by the LLM.
@@ -128,6 +129,9 @@ func generateEnvFile(profileName string) string {
 	b.WriteString("# NULLBOT_LLM_FALLBACK_URL=http://localhost:11434/v1/chat/completions\n")
 	b.WriteString("# NULLBOT_LLM_FALLBACK_KEY=\n")
 	b.WriteString("# NULLBOT_LLM_FALLBACK_MODEL=llama3.2\n")
+	b.WriteString("\n# LLM provider pool (optional, round-robin distribution)\n")
+	b.WriteString("# Format: comma-separated URL|KEY|MODEL entries\n")
+	b.WriteString("# NULLBOT_LLM_POOL=http://localhost:11434/v1/chat/completions||llama3.2,https://api.groq.com/openai/v1/chat/completions|gsk_xxx|llama-3.1-8b-instant\n")
 	return b.String()
 }
 
@@ -200,6 +204,26 @@ func resolveConfig(flagURL, flagModel, flagProfile string, flagMaxSteps int, fla
 			fb.Model = cfg.model
 		}
 		cfg.llmFallbacks = append(cfg.llmFallbacks, fb)
+	}
+
+	// Resolve LLM provider pool (optional, comma-separated URL|KEY|MODEL entries).
+	if poolStr := os.Getenv("NULLBOT_LLM_POOL"); poolStr != "" {
+		for _, entry := range strings.Split(poolStr, ",") {
+			parts := strings.SplitN(strings.TrimSpace(entry), "|", 3)
+			if len(parts) < 1 || parts[0] == "" {
+				continue
+			}
+			p := observe.LLMProvider{URL: parts[0]}
+			if len(parts) > 1 {
+				p.Key = parts[1]
+			}
+			if len(parts) > 2 && parts[2] != "" {
+				p.Model = parts[2]
+			} else {
+				p.Model = cfg.model
+			}
+			cfg.llmPool = append(cfg.llmPool, p)
+		}
 	}
 
 	// Load operator redaction config (optional).
@@ -546,6 +570,7 @@ Rules:
 		observeOutput     string
 		observeClassify   bool
 		observeDiagnostic bool
+		observeQuery      string
 	)
 
 	observeCmd := &cobra.Command{
@@ -581,12 +606,18 @@ Examples:
 				Chainwatch: chainwatch,
 				AuditLog:   auditLog,
 			}
+			if observeQuery != "" {
+				runnerCfg.Params = map[string]string{"QUERY": observeQuery}
+			}
 
 			rb := observe.GetRunbook(observeType)
 
 			fmt.Printf("%s%s=== OBSERVE MODE ===%s\n\n", bold, cyan, reset)
 			fmt.Printf("%sScope:   %s%s\n", dim, observeScope, reset)
 			fmt.Printf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
+			if observeQuery != "" {
+				fmt.Printf("%sQuery:   %s%s\n", dim, observeQuery, reset)
+			}
 			fmt.Printf("%sProfile: clawbot (inspect-only, hard-locked)%s\n", dim, reset)
 			fmt.Println()
 
@@ -594,6 +625,9 @@ Examples:
 				fmt.Printf("%s%sDry run — investigation steps:%s\n\n", bold, yellow, reset)
 				for i, step := range rb.Steps {
 					expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", observeScope)
+					for k, v := range runnerCfg.Params {
+						expanded = strings.ReplaceAll(expanded, "{{"+k+"}}", v)
+					}
 					fmt.Printf("  %d. %s%s%s\n     %s%s%s\n", i+1, bold, step.Purpose, reset, dim, expanded, reset)
 				}
 				return nil
@@ -667,6 +701,8 @@ Examples:
 					APIURL:           cfg.apiURL,
 					APIKey:           cfg.apiKey,
 					Model:            cfg.model,
+					Pool:             cfg.llmPool,
+					Sensitivity:      rb.Sensitivity,
 					DiagnosticWriter: diagFile, // nil when --diagnostic not used
 				}
 
@@ -767,6 +803,7 @@ Examples:
 	observeCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name for classification (env: NULLBOT_MODEL)")
 	observeCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show runbook steps without executing")
 	observeCmd.Flags().BoolVar(&observeDiagnostic, "diagnostic", false, "write full pipeline data to file (non-production)")
+	observeCmd.Flags().StringVar(&observeQuery, "query", "", "email address or search term for trace runbooks")
 
 	var (
 		daemonInbox    string
@@ -815,6 +852,7 @@ Examples:
 				ExtraPatterns: cfg.extraPatterns,
 				LLMRateLimit:  cfg.llmRateLimit,
 				LLMFallbacks:  cfg.llmFallbacks,
+				LLMPool:       cfg.llmPool,
 			}
 
 			d, err := daemon.New(dcfg)

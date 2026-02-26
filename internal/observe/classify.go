@@ -9,11 +9,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/wo"
 	"github.com/ppiankov/neurorouter"
 )
+
+// poolCounter distributes requests across pool providers via round-robin.
+var poolCounter uint64
 
 // LLMProvider holds connection details for a single LLM endpoint.
 type LLMProvider struct {
@@ -31,7 +35,9 @@ type ClassifierConfig struct {
 	Timeout          time.Duration
 	LLMRateLimit     int // requests per minute; 0 = unlimited
 	Fallbacks        []LLMProvider
-	DiagnosticWriter io.Writer // if non-nil, raw LLM response is written here
+	Pool             []LLMProvider // round-robin distribution across providers
+	Sensitivity      string        // "local" restricts to localhost providers only
+	DiagnosticWriter io.Writer     // if non-nil, raw LLM response is written here
 }
 
 // classificationResponse is the expected JSON from the LLM.
@@ -58,6 +64,10 @@ Valid observation types:
 - cron_anomaly: suspicious cron job
 - process_anomaly: unexpected process or service
 - network_anomaly: unexpected listening port or connection
+- email_delivered: message successfully delivered to recipient
+- email_blocked: message rejected by policy, antispam, or antivirus
+- email_deferred: message delivery delayed, will retry
+- email_bounced: message delivery failed permanently
 
 Valid severity levels: low, medium, high, critical
 
@@ -67,9 +77,16 @@ Return ONLY valid JSON, no markdown fences, no commentary:
 If you find nothing suspicious, return: {"observations":[]}
 Report ALL findings, not just the first one.`
 
-// Classify sends collected evidence to a local LLM for structured classification.
-// Tries the primary provider first. On failure (except rate limiting), tries
-// fallback providers in order. Returns typed observations ready for WO generation.
+// isLocalProvider returns true if the provider URL points to localhost.
+func isLocalProvider(p LLMProvider) bool {
+	lower := strings.ToLower(p.URL)
+	return strings.Contains(lower, "localhost") || strings.Contains(lower, "127.0.0.1")
+}
+
+// Classify sends collected evidence to an LLM for structured classification.
+// When Pool is non-empty, distributes requests round-robin across pool members.
+// When Pool is empty, uses the primary provider + fallbacks (legacy behavior).
+// When Sensitivity is "local", filters providers to localhost-only.
 func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 600
@@ -79,9 +96,34 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 		timeout = 60 * time.Second
 	}
 
-	// Build provider list: primary + fallbacks.
-	providers := []LLMProvider{{URL: cfg.APIURL, Key: cfg.APIKey, Model: cfg.Model}}
-	providers = append(providers, cfg.Fallbacks...)
+	// Build provider list.
+	var providers []LLMProvider
+	if len(cfg.Pool) > 0 {
+		// Round-robin: start from next pool index, wrap around all members.
+		idx := int(atomic.AddUint64(&poolCounter, 1) - 1)
+		for i := 0; i < len(cfg.Pool); i++ {
+			providers = append(providers, cfg.Pool[(idx+i)%len(cfg.Pool)])
+		}
+		providers = append(providers, cfg.Fallbacks...)
+	} else {
+		// Legacy: primary + fallbacks.
+		providers = []LLMProvider{{URL: cfg.APIURL, Key: cfg.APIKey, Model: cfg.Model}}
+		providers = append(providers, cfg.Fallbacks...)
+	}
+
+	// Sensitivity filtering: "local" restricts to localhost providers only.
+	if cfg.Sensitivity == "local" {
+		var filtered []LLMProvider
+		for _, p := range providers {
+			if isLocalProvider(p) {
+				filtered = append(filtered, p)
+			}
+		}
+		if len(filtered) == 0 {
+			return nil, fmt.Errorf("sensitivity=local but no localhost providers available")
+		}
+		providers = filtered
+	}
 
 	var lastErr error
 	for _, p := range providers {

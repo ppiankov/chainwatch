@@ -25,6 +25,7 @@ type ProcessorConfig struct {
 	ExtraPatterns []redact.ExtraPattern
 	LLMRateLimit  int // requests per minute; 0 = unlimited
 	LLMFallbacks  []observe.LLMProvider
+	LLMPool       []observe.LLMProvider
 }
 
 // Processor handles job lifecycle transitions.
@@ -134,6 +135,7 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 		Type:       rbType,
 		Chainwatch: p.cfg.Chainwatch,
 		AuditLog:   p.cfg.AuditLog,
+		Params:     job.Params,
 	}
 
 	rb := observe.GetRunbook(rbType)
@@ -156,7 +158,7 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 	if classify && evidence != "" {
 		if p.cfg.APIURL == "" {
 			// No LLM configured — cache evidence for later retry.
-			p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
+			p.cacheEvidence(job.ID, job.Target.Scope, rbType, rb.Sensitivity, evidence)
 			result.Error = "no LLM available (evidence cached for retry)"
 		} else {
 			classifyCfg := observe.ClassifierConfig{
@@ -165,6 +167,8 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 				Model:        p.cfg.Model,
 				LLMRateLimit: p.cfg.LLMRateLimit,
 				Fallbacks:    p.cfg.LLMFallbacks,
+				Pool:         p.cfg.LLMPool,
+				Sensitivity:  rb.Sensitivity,
 			}
 
 			// Redact for cloud mode.
@@ -187,7 +191,7 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 			obs, err := observe.Classify(classifyCfg, classifyEvidence)
 			if err != nil {
 				// Classification failed — cache evidence for retry.
-				p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
+				p.cacheEvidence(job.ID, job.Target.Scope, rbType, rb.Sensitivity, evidence)
 				result.Error = fmt.Sprintf("classification failed: %v (evidence cached for retry)", err)
 			} else {
 				// Post-validation and de-redaction.
@@ -197,7 +201,7 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 						allDetails += " " + o.Detail
 					}
 					if leaks := redact.CheckLeaks(allDetails, tm); len(leaks) > 0 {
-						p.cacheEvidence(job.ID, job.Target.Scope, rbType, evidence)
+						p.cacheEvidence(job.ID, job.Target.Scope, rbType, rb.Sensitivity, evidence)
 						result.Error = fmt.Sprintf("classification leak: LLM exposed %d sensitive values (evidence cached)", len(leaks))
 						result.Status = ResultFailed
 						return result, nil
@@ -243,15 +247,16 @@ func (p *Processor) runInvestigation(job *Job, classify bool) (*Result, error) {
 }
 
 // cacheEvidence writes raw evidence to the cache directory for later retry.
-func (p *Processor) cacheEvidence(jobID, scope, rbType, evidence string) {
+func (p *Processor) cacheEvidence(jobID, scope, rbType, sensitivity, evidence string) {
 	cacheDir := observe.CacheDir(p.cfg.Dirs.State)
 	entry := &observe.CachedObservation{
-		ID:       jobID,
-		JobID:    jobID,
-		Scope:    scope,
-		Type:     rbType,
-		Evidence: evidence,
-		CachedAt: time.Now().UTC(),
+		ID:          jobID,
+		JobID:       jobID,
+		Scope:       scope,
+		Type:        rbType,
+		Sensitivity: sensitivity,
+		Evidence:    evidence,
+		CachedAt:    time.Now().UTC(),
 	}
 	if err := observe.WriteCache(cacheDir, entry); err != nil {
 		fmt.Fprintf(os.Stderr, "daemon: cache evidence %s: %v\n", jobID, err)

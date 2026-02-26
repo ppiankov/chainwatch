@@ -32,6 +32,7 @@ type Config struct {
 	ExtraPatterns []redact.ExtraPattern
 	LLMRateLimit  int // requests per minute; 0 = unlimited
 	LLMFallbacks  []observe.LLMProvider
+	LLMPool       []observe.LLMProvider
 }
 
 // Daemon watches the inbox directory and processes jobs.
@@ -60,6 +61,7 @@ func New(cfg Config) (*Daemon, error) {
 		ExtraPatterns: cfg.ExtraPatterns,
 		LLMRateLimit:  cfg.LLMRateLimit,
 		LLMFallbacks:  cfg.LLMFallbacks,
+		LLMPool:       cfg.LLMPool,
 	})
 
 	return &Daemon{
@@ -184,6 +186,7 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 		Model:        d.cfg.Model,
 		LLMRateLimit: d.cfg.LLMRateLimit,
 		Fallbacks:    d.cfg.LLMFallbacks,
+		Pool:         d.cfg.LLMPool,
 	}
 
 	for _, entry := range entries {
@@ -212,6 +215,7 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 			}
 		}
 
+		classifyCfg.Sensitivity = entry.Sensitivity
 		obs, err := observe.Classify(classifyCfg, classifyEvidence)
 		if err != nil {
 			entry.RetryCount++

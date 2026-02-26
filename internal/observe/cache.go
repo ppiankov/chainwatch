@@ -12,13 +12,14 @@ import (
 // CachedObservation holds raw evidence when LLM classification is unavailable.
 // Written to state/cache/ by the daemon processor, retried by the cache sweeper.
 type CachedObservation struct {
-	ID         string    `json:"id"`
-	JobID      string    `json:"job_id"`
-	Scope      string    `json:"scope"`
-	Type       string    `json:"type"`
-	Evidence   string    `json:"evidence"`
-	CachedAt   time.Time `json:"cached_at"`
-	RetryCount int       `json:"retry_count"`
+	ID          string    `json:"id"`
+	JobID       string    `json:"job_id"`
+	Scope       string    `json:"scope"`
+	Type        string    `json:"type"`
+	Sensitivity string    `json:"sensitivity,omitempty"`
+	Evidence    string    `json:"evidence"`
+	CachedAt    time.Time `json:"cached_at"`
+	RetryCount  int       `json:"retry_count"`
 }
 
 // CacheDir returns the standard cache directory path within a state dir.
