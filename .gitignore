@@ -51,8 +51,12 @@ docs/runbooks/
 !CONTRIBUTING.md
 !FIELD_NOTES.md
 !SECURITY.md
-!CLAUDE.md
-!SKILL.md
+
+# Agent files (globally gitignored, but negation patterns above would re-expose them)
+CLAUDE.md
+SKILL.md
+docs/hardening-agents.md
+integrations/openclaw/skill/SKILL.md
 
 # OS
 .DS_Store
