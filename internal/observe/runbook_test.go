@@ -55,6 +55,18 @@ func TestGetRunbookNginx(t *testing.T) {
 	}
 }
 
+func TestGetRunbookMySQL(t *testing.T) {
+	for _, name := range []string{"mysql", "mariadb", "db"} {
+		rb := GetRunbook(name)
+		if rb.Type != "mysql" {
+			t.Errorf("GetRunbook(%q) type = %q, want mysql", name, rb.Type)
+		}
+		if len(rb.Steps) < 8 {
+			t.Errorf("MySQL runbook has %d steps, want at least 8", len(rb.Steps))
+		}
+	}
+}
+
 func TestGetRunbookPostfixInbound(t *testing.T) {
 	for _, name := range []string{"postfix-inbound", "inbound", "mail-trace"} {
 		rb := GetRunbook(name)
@@ -97,7 +109,7 @@ func TestGetRunbookEmptyFallsToLinux(t *testing.T) {
 
 func TestBuiltinRunbooksHaveScopePlaceholder(t *testing.T) {
 	// All runbooks that investigate a target directory should use {{SCOPE}}.
-	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx"} {
+	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql"} {
 		rb := GetRunbook(name)
 		hasScopePlaceholder := false
 		for _, step := range rb.Steps {
@@ -113,7 +125,7 @@ func TestBuiltinRunbooksHaveScopePlaceholder(t *testing.T) {
 }
 
 func TestBuiltinRunbooksNoDestructiveCommands(t *testing.T) {
-	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx"} {
+	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql"} {
 		rb := GetRunbook(name)
 		for _, step := range rb.Steps {
 			if err := checkDestructive(step); err != nil {
@@ -124,7 +136,7 @@ func TestBuiltinRunbooksNoDestructiveCommands(t *testing.T) {
 }
 
 func TestBuiltinRunbooksHavePurpose(t *testing.T) {
-	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx"} {
+	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql"} {
 		rb := GetRunbook(name)
 		for i, step := range rb.Steps {
 			if step.Purpose == "" {
@@ -146,8 +158,8 @@ func TestBuiltinRunbooksSource(t *testing.T) {
 
 func TestListRunbooks(t *testing.T) {
 	list := ListRunbooks()
-	if len(list) < 5 {
-		t.Errorf("ListRunbooks() returned %d runbooks, want at least 5", len(list))
+	if len(list) < 6 {
+		t.Errorf("ListRunbooks() returned %d runbooks, want at least 6", len(list))
 	}
 
 	types := make(map[string]bool)
@@ -161,7 +173,7 @@ func TestListRunbooks(t *testing.T) {
 		}
 	}
 
-	for _, expected := range []string{"linux", "wordpress", "postfix", "postfix-inbound", "nginx"} {
+	for _, expected := range []string{"linux", "wordpress", "postfix", "postfix-inbound", "nginx", "mysql"} {
 		if !types[expected] {
 			t.Errorf("ListRunbooks() missing type %q", expected)
 		}
