@@ -35,32 +35,8 @@ test-*.txt
 test-*.json
 test-*.md
 test-*.sh
-*.json
-*.md
-!artifacts/**/*.json
-!artifacts/**/*.md
-!docs/**/*.md
 docs/design/self-protection.md
 docs/runbooks/
-!integrations/**/*.md
-!integrations/**/*.json
-!README.md
-!PRINCIPLES.md
-!LICENSE
-!CHANGELOG.md
-!CONTRIBUTING.md
-!FIELD_NOTES.md
-!SECURITY.md
-
-# Agent files (globally gitignored, but negation patterns above would re-expose them)
-CLAUDE.md
-SKILL.md
-docs/hardening-agents.md
-integrations/openclaw/skill/SKILL.md
-
-# OS
-.DS_Store
-Thumbs.db
 
 # Python
 __pycache__/
@@ -99,9 +75,3 @@ ENV/
 
 # Generated test data
 corporate_test_data/
-
-# Claude Code
-.claude/
-docs/context.txt
-docs/work-orders.md
-CLAUDE.local.md
