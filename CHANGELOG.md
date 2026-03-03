@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-03
+
+### Added
+
+**Phase 12: SRE & FinOps Agent Patterns**
+
+#### New Profiles
+- `sre-infra` — SRE infrastructure safety profile: min_tier 2, blocks SSH/manual edits/direct infra mutation, allows IaC tools (terraform plan, helm, kubectl apply), requires approval for terraform apply and helm upgrade
+- `finops` — FinOps read-only profile: min_tier 2, blocks all mutation commands, allows read-only cost and metrics tools
+
+#### New Runbooks (7)
+- `kubernetes` — cluster info, node health, non-running pods, events, resource usage, deployments, HPA, PVC (aliases: k8s, kube)
+- `prometheus` — health, targets, alerts, down targets, firing alerts, runtime info, TSDB, custom PromQL via `{{QUERY}}` (aliases: prom, metrics)
+- `cloud-infra` — AWS caller identity, EC2 instances, security groups, unused ENIs, CloudWatch alarms, ELB health, RDS status (aliases: aws, cloud)
+- `aws-billing` — daily cost by service, cost forecast, unattached EBS, unused EIPs, RI utilization, savings plans, untagged resources (aliases: billing, cost, finops)
+- `k8s-utilization` — node/pod resource usage, requests vs limits, completed pods, HPA, PVC sizes (aliases: k8s-cost, k8s-resources, utilization)
+- `cost-anomaly` — AWS anomaly detection, daily service cost, usage type breakdown, CloudTrail RunInstances, untagged resources, regional cost (aliases: spend-spike, cost-spike)
+- `clickhouse` — version, top tables, replication health, long-running queries, error logs, metrics, PK memory, partition breakdown, active merges, slowest queries (aliases: ch, clickhouse-server; sensitivity: local)
+
+#### Agent-Reviews-Agent Approval Pattern
+- `RequestedBy` and `ApprovedBy` fields on approval requests for cross-agent accountability
+- Anti-circular check: an agent cannot approve its own request
+- Human approvals (empty approvedBy) always bypass the check
+
+#### Multi-Runbook Evidence Correlator
+- `RunMulti()` function merges steps from multiple runbooks into a single result
+- `nullbot observe --types kubernetes,prometheus` — comma-separated multi-runbook investigation
+- Backward compatible: `--type linux` still works unchanged
+
 ## [1.1.0] - 2026-02-19
 
 ### Added
