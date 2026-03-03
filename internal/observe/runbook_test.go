@@ -7,6 +7,23 @@ import (
 	"testing"
 )
 
+// allBuiltinTypes lists every built-in runbook type for loop tests.
+var allBuiltinTypes = []string{
+	"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql",
+	"kubernetes", "prometheus", "cloud-infra",
+	"aws-billing", "k8s-utilization", "cost-anomaly",
+	"clickhouse",
+}
+
+// scopedBuiltinTypes lists runbooks that investigate a target directory/namespace via {{SCOPE}}.
+// Account-level runbooks (aws-billing, cost-anomaly) and server-level (clickhouse) use
+// fixed endpoints rather than a scoped directory.
+var scopedBuiltinTypes = []string{
+	"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql",
+	"kubernetes", "prometheus", "cloud-infra",
+	"k8s-utilization",
+}
+
 func TestGetRunbookWordPress(t *testing.T) {
 	for _, name := range []string{"wordpress", "wp"} {
 		rb := GetRunbook(name)
@@ -108,8 +125,8 @@ func TestGetRunbookEmptyFallsToLinux(t *testing.T) {
 }
 
 func TestBuiltinRunbooksHaveScopePlaceholder(t *testing.T) {
-	// All runbooks that investigate a target directory should use {{SCOPE}}.
-	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql"} {
+	// Runbooks that investigate a target directory/namespace should use {{SCOPE}}.
+	for _, name := range scopedBuiltinTypes {
 		rb := GetRunbook(name)
 		hasScopePlaceholder := false
 		for _, step := range rb.Steps {
@@ -125,7 +142,7 @@ func TestBuiltinRunbooksHaveScopePlaceholder(t *testing.T) {
 }
 
 func TestBuiltinRunbooksNoDestructiveCommands(t *testing.T) {
-	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql"} {
+	for _, name := range allBuiltinTypes {
 		rb := GetRunbook(name)
 		for _, step := range rb.Steps {
 			if err := checkDestructive(step); err != nil {
@@ -136,7 +153,7 @@ func TestBuiltinRunbooksNoDestructiveCommands(t *testing.T) {
 }
 
 func TestBuiltinRunbooksHavePurpose(t *testing.T) {
-	for _, name := range []string{"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql"} {
+	for _, name := range allBuiltinTypes {
 		rb := GetRunbook(name)
 		for i, step := range rb.Steps {
 			if step.Purpose == "" {
@@ -158,8 +175,8 @@ func TestBuiltinRunbooksSource(t *testing.T) {
 
 func TestListRunbooks(t *testing.T) {
 	list := ListRunbooks()
-	if len(list) < 6 {
-		t.Errorf("ListRunbooks() returned %d runbooks, want at least 6", len(list))
+	if len(list) < 13 {
+		t.Errorf("ListRunbooks() returned %d runbooks, want at least 13", len(list))
 	}
 
 	types := make(map[string]bool)
@@ -173,7 +190,7 @@ func TestListRunbooks(t *testing.T) {
 		}
 	}
 
-	for _, expected := range []string{"linux", "wordpress", "postfix", "postfix-inbound", "nginx", "mysql"} {
+	for _, expected := range allBuiltinTypes {
 		if !types[expected] {
 			t.Errorf("ListRunbooks() missing type %q", expected)
 		}
@@ -275,6 +292,117 @@ func TestPostfixInboundSensitivityLocal(t *testing.T) {
 	rb := GetRunbook("postfix-inbound")
 	if rb.Sensitivity != "local" {
 		t.Errorf("postfix-inbound sensitivity = %q, want \"local\"", rb.Sensitivity)
+	}
+}
+
+// --- SRE runbooks (CW65) ---
+
+func TestGetRunbookKubernetes(t *testing.T) {
+	for _, name := range []string{"kubernetes", "k8s", "kube"} {
+		rb := GetRunbook(name)
+		if rb.Type != "kubernetes" {
+			t.Errorf("GetRunbook(%q) type = %q, want kubernetes", name, rb.Type)
+		}
+		if len(rb.Steps) < 8 {
+			t.Errorf("Kubernetes runbook has %d steps, want at least 8", len(rb.Steps))
+		}
+	}
+}
+
+func TestGetRunbookPrometheus(t *testing.T) {
+	for _, name := range []string{"prometheus", "prom", "metrics"} {
+		rb := GetRunbook(name)
+		if rb.Type != "prometheus" {
+			t.Errorf("GetRunbook(%q) type = %q, want prometheus", name, rb.Type)
+		}
+		if len(rb.Steps) < 6 {
+			t.Errorf("Prometheus runbook has %d steps, want at least 6", len(rb.Steps))
+		}
+	}
+}
+
+func TestPrometheusHasQueryPlaceholder(t *testing.T) {
+	rb := GetRunbook("prometheus")
+	hasQuery := false
+	for _, step := range rb.Steps {
+		if strings.Contains(step.Command, "{{QUERY}}") {
+			hasQuery = true
+			break
+		}
+	}
+	if !hasQuery {
+		t.Error("prometheus runbook should contain {{QUERY}} placeholder")
+	}
+}
+
+func TestGetRunbookCloudInfra(t *testing.T) {
+	for _, name := range []string{"cloud-infra", "aws", "cloud"} {
+		rb := GetRunbook(name)
+		if rb.Type != "cloud-infra" {
+			t.Errorf("GetRunbook(%q) type = %q, want cloud-infra", name, rb.Type)
+		}
+		if len(rb.Steps) < 6 {
+			t.Errorf("Cloud infra runbook has %d steps, want at least 6", len(rb.Steps))
+		}
+	}
+}
+
+// --- FinOps runbooks (CW67) ---
+
+func TestGetRunbookAWSBilling(t *testing.T) {
+	for _, name := range []string{"aws-billing", "billing", "cost", "finops"} {
+		rb := GetRunbook(name)
+		if rb.Type != "aws-billing" {
+			t.Errorf("GetRunbook(%q) type = %q, want aws-billing", name, rb.Type)
+		}
+		if len(rb.Steps) < 6 {
+			t.Errorf("AWS billing runbook has %d steps, want at least 6", len(rb.Steps))
+		}
+	}
+}
+
+func TestGetRunbookK8sUtilization(t *testing.T) {
+	for _, name := range []string{"k8s-utilization", "k8s-cost", "k8s-resources", "utilization"} {
+		rb := GetRunbook(name)
+		if rb.Type != "k8s-utilization" {
+			t.Errorf("GetRunbook(%q) type = %q, want k8s-utilization", name, rb.Type)
+		}
+		if len(rb.Steps) < 6 {
+			t.Errorf("K8s utilization runbook has %d steps, want at least 6", len(rb.Steps))
+		}
+	}
+}
+
+func TestGetRunbookCostAnomaly(t *testing.T) {
+	for _, name := range []string{"cost-anomaly", "spend-spike", "cost-spike"} {
+		rb := GetRunbook(name)
+		if rb.Type != "cost-anomaly" {
+			t.Errorf("GetRunbook(%q) type = %q, want cost-anomaly", name, rb.Type)
+		}
+		if len(rb.Steps) < 5 {
+			t.Errorf("Cost anomaly runbook has %d steps, want at least 5", len(rb.Steps))
+		}
+	}
+}
+
+// --- ClickHouse runbook (CW69) ---
+
+func TestGetRunbookClickHouse(t *testing.T) {
+	for _, name := range []string{"clickhouse", "ch", "clickhouse-server"} {
+		rb := GetRunbook(name)
+		if rb.Type != "clickhouse" {
+			t.Errorf("GetRunbook(%q) type = %q, want clickhouse", name, rb.Type)
+		}
+		if len(rb.Steps) < 8 {
+			t.Errorf("ClickHouse runbook has %d steps, want at least 8", len(rb.Steps))
+		}
+	}
+}
+
+func TestClickHouseSensitivityLocal(t *testing.T) {
+	rb := GetRunbook("clickhouse")
+	if rb.Sensitivity != "local" {
+		t.Errorf("clickhouse sensitivity = %q, want \"local\"", rb.Sensitivity)
 	}
 }
 

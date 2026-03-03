@@ -240,6 +240,7 @@ func (m *Monitor) scan() {
 				fmt.Sprintf("%s operation requires approval", rule.Category),
 				"root_monitor."+rule.Category,
 				proc.Command,
+				"",
 			)
 		}
 

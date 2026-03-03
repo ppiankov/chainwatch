@@ -1,0 +1,20 @@
+name: "Prometheus monitoring investigation"
+type: prometheus
+aliases: [prom, metrics]
+steps:
+  - command: "curl -sf http://{{SCOPE}}:9090/-/healthy 2>/dev/null || echo 'prometheus not reachable at {{SCOPE}}:9090'"
+    purpose: "check Prometheus health endpoint"
+  - command: "curl -sf http://{{SCOPE}}:9090/api/v1/targets 2>/dev/null | head -100 || echo 'targets API not available'"
+    purpose: "check scrape target health and status"
+  - command: "curl -sf http://{{SCOPE}}:9090/api/v1/alerts 2>/dev/null | head -100 || echo 'alerts API not available'"
+    purpose: "check active alerts"
+  - command: "curl -sf 'http://{{SCOPE}}:9090/api/v1/query?query=up==0' 2>/dev/null | head -50 || echo 'cannot query down targets'"
+    purpose: "find scrape targets that are down"
+  - command: "curl -sf 'http://{{SCOPE}}:9090/api/v1/query?query=ALERTS{alertstate=\"firing\"}' 2>/dev/null | head -50 || echo 'cannot query firing alerts'"
+    purpose: "list currently firing alerts"
+  - command: "curl -sf http://{{SCOPE}}:9090/api/v1/status/runtimeinfo 2>/dev/null | head -30 || echo 'runtime info not available'"
+    purpose: "check Prometheus runtime info and storage"
+  - command: "curl -sf http://{{SCOPE}}:9090/api/v1/status/tsdb 2>/dev/null | head -30 || echo 'TSDB status not available'"
+    purpose: "check time-series database health"
+  - command: "curl -sf 'http://{{SCOPE}}:9090/api/v1/query?query={{QUERY}}' 2>/dev/null | head -50 || echo 'custom query failed or not specified'"
+    purpose: "run custom PromQL query if provided"

@@ -239,7 +239,7 @@ func (g *Guard) Run(ctx context.Context, name string, args []string, stdin io.Re
 			// fall through to execute
 		} else {
 			if status != approval.StatusPending && status != approval.StatusDenied {
-				g.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+				g.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, g.cfg.AgentID)
 			}
 			return nil, &BlockedError{
 				Command:  action.Resource,

@@ -22,6 +22,7 @@ const inspectProfile = "clawbot"
 type RunnerConfig struct {
 	Scope      string            // target directory, e.g. "/var/www/site"
 	Type       string            // runbook type: "wordpress", "linux"
+	Types      []string          // multiple runbook types for multi-runbook runs
 	Chainwatch string            // path to chainwatch binary
 	AuditLog   string            // path to audit log
 	Params     map[string]string // optional query parameters (e.g., QUERY, DATE)
@@ -72,6 +73,50 @@ func Run(cfg RunnerConfig, rb *Runbook) (*RunResult, error) {
 
 		sr := execStep(cfg, cmd, step.Purpose)
 		result.Steps = append(result.Steps, sr)
+	}
+
+	result.EndAt = time.Now().UTC()
+	return result, nil
+}
+
+// RunMulti executes multiple runbooks in sequence and merges all steps
+// into a single RunResult. A failed runbook is recorded as an error step
+// but does not block subsequent runbooks.
+func RunMulti(cfg RunnerConfig, types []string) (*RunResult, error) {
+	if cfg.Chainwatch == "" {
+		cfg.Chainwatch = "chainwatch"
+	}
+	if cfg.AuditLog == "" {
+		cfg.AuditLog = "/tmp/nullbot-observe.jsonl"
+	}
+
+	result := &RunResult{
+		Scope:   cfg.Scope,
+		Type:    strings.Join(types, "+"),
+		StartAt: time.Now().UTC(),
+	}
+
+	for _, rbType := range types {
+		rb := GetRunbook(rbType)
+
+		partial, err := Run(RunnerConfig{
+			Scope:      cfg.Scope,
+			Type:       rbType,
+			Chainwatch: cfg.Chainwatch,
+			AuditLog:   cfg.AuditLog,
+			Params:     cfg.Params,
+		}, rb)
+		if err != nil {
+			result.Steps = append(result.Steps, StepResult{
+				Command:  fmt.Sprintf("runbook:%s", rbType),
+				Purpose:  fmt.Sprintf("run runbook %q", rbType),
+				Output:   err.Error(),
+				ExitCode: 1,
+			})
+			continue
+		}
+
+		result.Steps = append(result.Steps, partial.Steps...)
 	}
 
 	result.EndAt = time.Now().UTC()

@@ -51,7 +51,7 @@ func (c *Client) Wrap(fn ToolFunc, opts ...WrapOption) ToolFunc {
 					return fn(ctx, action)
 				}
 				if status != approval.StatusPending && status != approval.StatusDenied {
-					c.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+					c.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, c.cfg.agentID)
 				}
 			}
 			return nil, &BlockedError{

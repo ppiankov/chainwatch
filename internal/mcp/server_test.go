@@ -126,7 +126,7 @@ func TestApproveAndCheck(t *testing.T) {
 	ctx := context.Background()
 
 	// First create a pending approval
-	s.approvals.Request("test_key", "test reason", "test.policy", "test resource")
+	s.approvals.Request("test_key", "test reason", "test.policy", "test resource", "")
 
 	// Approve it
 	_, approveOut, err := s.handleApprove(ctx, &mcpsdk.CallToolRequest{}, ApproveInput{
@@ -144,7 +144,7 @@ func TestApproveWithDuration(t *testing.T) {
 	s := newTestServer(t)
 	ctx := context.Background()
 
-	s.approvals.Request("timed_key", "test", "test", "resource")
+	s.approvals.Request("timed_key", "test", "test", "resource", "")
 
 	_, out, err := s.handleApprove(ctx, &mcpsdk.CallToolRequest{}, ApproveInput{
 		Key:      "timed_key",
@@ -163,8 +163,8 @@ func TestPendingList(t *testing.T) {
 	ctx := context.Background()
 
 	// Create some pending approvals
-	s.approvals.Request("key_a", "reason a", "policy.a", "resource_a")
-	s.approvals.Request("key_b", "reason b", "policy.b", "resource_b")
+	s.approvals.Request("key_a", "reason a", "policy.a", "resource_a", "")
+	s.approvals.Request("key_b", "reason b", "policy.b", "resource_b", "")
 
 	_, out, err := s.handlePending(ctx, &mcpsdk.CallToolRequest{}, PendingInput{})
 	if err != nil {

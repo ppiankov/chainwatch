@@ -200,7 +200,7 @@ func (s *Server) handleHTTP(ctx context.Context, req *mcpsdk.CallToolRequest, in
 			// fall through to execute
 		} else {
 			if status != approval.StatusPending && status != approval.StatusDenied {
-				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, s.agentID)
 			}
 			out := HTTPOutput{
 				Blocked:     true,
@@ -297,7 +297,7 @@ func (s *Server) handleApprove(ctx context.Context, req *mcpsdk.CallToolRequest,
 		}
 	}
 
-	if err := s.approvals.Approve(input.Key, duration); err != nil {
+	if err := s.approvals.Approve(input.Key, duration, s.agentID); err != nil {
 		return nil, ApproveOutput{}, err
 	}
 

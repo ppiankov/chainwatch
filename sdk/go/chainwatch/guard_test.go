@@ -123,7 +123,7 @@ func TestWrapApprovalFlow(t *testing.T) {
 
 	// Approve the key
 	if blocked.ApprovalKey != "" {
-		approveErr := c.approvals.Approve(blocked.ApprovalKey, 5*time.Minute)
+		approveErr := c.approvals.Approve(blocked.ApprovalKey, 5*time.Minute, "")
 		if approveErr != nil {
 			t.Fatalf("failed to approve: %v", approveErr)
 		}

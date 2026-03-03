@@ -85,6 +85,57 @@ func TestRunnerConfigHasNoProfileField(t *testing.T) {
 	_ = cfg
 }
 
+func TestRunMultiMergesSteps(t *testing.T) {
+	// RunMulti should merge steps from both runbooks.
+	cfg := RunnerConfig{
+		Scope:      "/tmp/test",
+		Chainwatch: "/nonexistent/chainwatch",
+		AuditLog:   "/tmp/test-multi.jsonl",
+	}
+
+	// Use real runbook types; steps will fail (chainwatch binary missing) but merge correctly.
+	rbLinux := GetRunbook("linux")
+	rbNginx := GetRunbook("nginx")
+	expectedSteps := len(rbLinux.Steps) + len(rbNginx.Steps)
+
+	result, err := RunMulti(cfg, []string{"linux", "nginx"})
+	if err != nil {
+		t.Fatalf("RunMulti returned error: %v", err)
+	}
+
+	if len(result.Steps) != expectedSteps {
+		t.Fatalf("expected %d merged steps, got %d", expectedSteps, len(result.Steps))
+	}
+}
+
+func TestRunMultiTypeField(t *testing.T) {
+	cfg := RunnerConfig{
+		Scope:      "/tmp/test",
+		Chainwatch: "/nonexistent/chainwatch",
+		AuditLog:   "/tmp/test-multi.jsonl",
+	}
+
+	result, err := RunMulti(cfg, []string{"linux", "wordpress"})
+	if err != nil {
+		t.Fatalf("RunMulti returned error: %v", err)
+	}
+
+	if result.Type != "linux+wordpress" {
+		t.Errorf("expected type 'linux+wordpress', got %q", result.Type)
+	}
+}
+
+func TestRunnerConfigTypesField(t *testing.T) {
+	// Verify Types field exists and is usable.
+	cfg := RunnerConfig{
+		Scope: "/tmp/test",
+		Types: []string{"kubernetes", "prometheus"},
+	}
+	if len(cfg.Types) != 2 {
+		t.Fatalf("expected 2 types, got %d", len(cfg.Types))
+	}
+}
+
 func TestManualObservation(t *testing.T) {
 	obs := ManualObservation(wo.SuspiciousCode, wo.SeverityHigh, "eval(base64_decode in header.php")
 	if obs.Type != wo.SuspiciousCode {

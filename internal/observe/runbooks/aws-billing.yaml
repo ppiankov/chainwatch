@@ -1,0 +1,20 @@
+name: "AWS billing and cost investigation"
+type: aws-billing
+aliases: [billing, cost, finops]
+steps:
+  - command: "aws ce get-cost-and-usage --time-period Start=$(date -d '-30 days' +%Y-%m-%d 2>/dev/null || date -v-30d +%Y-%m-%d),End=$(date +%Y-%m-%d) --granularity DAILY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE 2>/dev/null | head -80 || echo 'cost explorer not available'"
+    purpose: "daily cost breakdown by service for last 30 days"
+  - command: "aws ce get-cost-and-usage --time-period Start=$(date -d '-7 days' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d),End=$(date +%Y-%m-%d) --granularity DAILY --metrics UnblendedCost 2>/dev/null | head -30 || echo 'weekly cost not available'"
+    purpose: "daily total cost for the last 7 days"
+  - command: "aws ce get-cost-forecast --time-period Start=$(date +%Y-%m-%d),End=$(date -d '+30 days' +%Y-%m-%d 2>/dev/null || date -v+30d +%Y-%m-%d) --metric UNBLENDED_COST --granularity MONTHLY 2>/dev/null || echo 'cost forecast not available'"
+    purpose: "cost forecast for the next 30 days"
+  - command: "aws ec2 describe-volumes --filters 'Name=status,Values=available' --query 'Volumes[].[VolumeId,Size,VolumeType,CreateTime]' --output table 2>/dev/null | head -20 || echo 'no unattached EBS volumes'"
+    purpose: "find unattached EBS volumes wasting spend"
+  - command: "aws ec2 describe-addresses --query 'Addresses[?AssociationId==null].[PublicIp,AllocationId]' --output table 2>/dev/null || echo 'no unused EIPs'"
+    purpose: "find unused Elastic IPs charged when unattached"
+  - command: "aws ce get-reservation-utilization --time-period Start=$(date -d '-30 days' +%Y-%m-%d 2>/dev/null || date -v-30d +%Y-%m-%d),End=$(date +%Y-%m-%d) 2>/dev/null | head -30 || echo 'reservation utilization not available'"
+    purpose: "check reserved instance utilization"
+  - command: "aws ce get-savings-plans-utilization --time-period Start=$(date -d '-30 days' +%Y-%m-%d 2>/dev/null || date -v-30d +%Y-%m-%d),End=$(date +%Y-%m-%d) 2>/dev/null | head -30 || echo 'savings plans utilization not available'"
+    purpose: "check savings plans utilization"
+  - command: "aws resourcegroupstaggingapi get-resources --query 'ResourceTagMappingList[?Tags==`[]`].[ResourceARN]' --output table 2>/dev/null | head -30 || echo 'untagged resource query not available'"
+    purpose: "find untagged resources with cost attribution gaps"

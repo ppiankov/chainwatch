@@ -1,0 +1,77 @@
+name: sre-infra
+description: IaC-only safety profile for SRE infrastructure agents
+min_tier: 2
+
+authority_boundaries:
+  - pattern: "manually.*edit|manual.*change"
+    reason: "Manual configuration edits blocked — use IaC"
+  - pattern: "SSH.*into|ssh.*connect"
+    reason: "Direct SSH access blocked — use IaC or kubectl exec"
+  - pattern: "bypass.*terraform|skip.*argocd|skip.*gitops"
+    reason: "IaC bypass attempt blocked"
+  - pattern: "ignore.*previous.*instructions"
+    reason: "Prompt injection attempt"
+  - pattern: "hotfix.*directly|patch.*directly"
+    reason: "Direct hotfixes blocked — route through IaC"
+  - pattern: "install.*package.*manually"
+    reason: "Manual package installation blocked — use IaC"
+
+execution_boundaries:
+  urls:
+    - "*/admin*"
+    - "*/checkout*"
+    - "*/payment*"
+    - "*/oauth/token*"
+    - "*/api/keys*"
+    - "*/account/delete*"
+  files:
+    - "~/.ssh/*"
+    - "~/.aws/credentials"
+    - "**/.env"
+    - "**/credentials*"
+    - "**/secrets.yaml"
+    - "**/secrets.json"
+  commands:
+    - "ssh "
+    - "scp "
+    - "vi /etc/"
+    - "vim /etc/"
+    - "nano /etc/"
+    - "systemctl"
+    - "service "
+    - "apt "
+    - "yum "
+    - "dnf "
+    - "pip install"
+    - "docker run"
+    - "docker exec"
+    - "rm -rf"
+    - "curl|sh"
+    - "curl | sh"
+    - "wget|sh"
+    - "wget | sh"
+    - "sudo su"
+    - "chmod 777"
+
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*terraform apply*"
+      decision: require_approval
+      reason: "IaC write operation requires approval"
+    - purpose: "*"
+      resource_pattern: "*helm upgrade*"
+      decision: require_approval
+      reason: "Helm deployment requires approval"
+    - purpose: "*"
+      resource_pattern: "*helm install*"
+      decision: require_approval
+      reason: "Helm installation requires approval"
+    - purpose: "*"
+      resource_pattern: "*password*"
+      decision: deny
+      reason: "credential access blocked by sre-infra profile"
+    - purpose: "*"
+      resource_pattern: "*secret*"
+      decision: deny
+      reason: "secrets access blocked by sre-infra profile"

@@ -18,7 +18,7 @@ func newTestStore(t *testing.T) *Store {
 
 func TestRequestCreatesFile(t *testing.T) {
 	s := newTestStore(t)
-	err := s.Request("test_key", "test reason", "policy.test", "/data/file.csv")
+	err := s.Request("test_key", "test reason", "policy.test", "/data/file.csv", "")
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
@@ -46,8 +46,8 @@ func TestRequestCreatesFile(t *testing.T) {
 
 func TestRequestIdempotent(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "reason1", "p1", "/r1")
-	s.Request("key1", "reason2", "p2", "/r2") // should not overwrite
+	s.Request("key1", "reason1", "p1", "/r1", "")
+	s.Request("key1", "reason2", "p2", "/r2", "") // should not overwrite
 
 	a, _ := s.read("key1")
 	if a.Reason != "reason1" {
@@ -57,9 +57,9 @@ func TestRequestIdempotent(t *testing.T) {
 
 func TestApproveOneTime(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
+	s.Request("key1", "test", "p1", "/r1", "")
 
-	err := s.Approve("key1", 0)
+	err := s.Approve("key1", 0, "")
 	if err != nil {
 		t.Fatalf("Approve failed: %v", err)
 	}
@@ -80,9 +80,9 @@ func TestApproveOneTime(t *testing.T) {
 
 func TestApproveTimeLimited(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
+	s.Request("key1", "test", "p1", "/r1", "")
 
-	err := s.Approve("key1", 5*time.Minute)
+	err := s.Approve("key1", 5*time.Minute, "")
 	if err != nil {
 		t.Fatalf("Approve failed: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestApproveTimeLimited(t *testing.T) {
 
 func TestDeny(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
+	s.Request("key1", "test", "p1", "/r1", "")
 
 	err := s.Deny("key1")
 	if err != nil {
@@ -113,7 +113,7 @@ func TestDeny(t *testing.T) {
 
 func TestCheckPending(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
+	s.Request("key1", "test", "p1", "/r1", "")
 
 	status, err := s.Check("key1")
 	if err != nil {
@@ -126,8 +126,8 @@ func TestCheckPending(t *testing.T) {
 
 func TestCheckApproved(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
-	s.Approve("key1", 0)
+	s.Request("key1", "test", "p1", "/r1", "")
+	s.Approve("key1", 0, "")
 
 	status, _ := s.Check("key1")
 	if status != StatusApproved {
@@ -137,7 +137,7 @@ func TestCheckApproved(t *testing.T) {
 
 func TestCheckDenied(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
+	s.Request("key1", "test", "p1", "/r1", "")
 	s.Deny("key1")
 
 	status, _ := s.Check("key1")
@@ -148,10 +148,10 @@ func TestCheckDenied(t *testing.T) {
 
 func TestCheckExpired(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
+	s.Request("key1", "test", "p1", "/r1", "")
 
 	// Approve with very short duration
-	s.Approve("key1", 1*time.Millisecond)
+	s.Approve("key1", 1*time.Millisecond, "")
 	time.Sleep(5 * time.Millisecond)
 
 	status, _ := s.Check("key1")
@@ -171,8 +171,8 @@ func TestCheckNotFound(t *testing.T) {
 
 func TestConsume(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
-	s.Approve("key1", 0)
+	s.Request("key1", "test", "p1", "/r1", "")
+	s.Approve("key1", 0, "")
 
 	err := s.Consume("key1")
 	if err != nil {
@@ -187,8 +187,8 @@ func TestConsume(t *testing.T) {
 
 func TestConsumeAlreadyConsumed(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
-	s.Approve("key1", 0)
+	s.Request("key1", "test", "p1", "/r1", "")
+	s.Approve("key1", 0, "")
 	s.Consume("key1")
 
 	err := s.Consume("key1")
@@ -199,9 +199,9 @@ func TestConsumeAlreadyConsumed(t *testing.T) {
 
 func TestList(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "reason1", "p1", "/r1")
-	s.Request("key2", "reason2", "p2", "/r2")
-	s.Request("key3", "reason3", "p3", "/r3")
+	s.Request("key1", "reason1", "p1", "/r1", "")
+	s.Request("key2", "reason2", "p2", "/r2", "")
+	s.Request("key3", "reason3", "p3", "/r3", "")
 
 	list, err := s.List()
 	if err != nil {
@@ -214,8 +214,8 @@ func TestList(t *testing.T) {
 
 func TestCleanup(t *testing.T) {
 	s := newTestStore(t)
-	s.Request("key1", "test", "p1", "/r1")
-	s.Request("key2", "test", "p2", "/r2")
+	s.Request("key1", "test", "p1", "/r1", "")
+	s.Request("key2", "test", "p2", "/r2", "")
 
 	err := s.Cleanup()
 	if err != nil {
@@ -237,7 +237,7 @@ func TestConcurrentAccess(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			key := "concurrent_key"
-			s.Request(key, "test", "p1", "/r1")
+			s.Request(key, "test", "p1", "/r1", "")
 			s.Check(key)
 		}(i)
 	}
@@ -254,7 +254,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 func TestApproveNonexistent(t *testing.T) {
 	s := newTestStore(t)
-	err := s.Approve("nonexistent", 0)
+	err := s.Approve("nonexistent", 0, "")
 	if err == nil {
 		t.Error("expected error for approving nonexistent key")
 	}
@@ -265,5 +265,72 @@ func TestDenyNonexistent(t *testing.T) {
 	err := s.Deny("nonexistent")
 	if err == nil {
 		t.Error("expected error for denying nonexistent key")
+	}
+}
+
+func TestApproveAntiCircular(t *testing.T) {
+	s := newTestStore(t)
+	s.Request("key1", "test", "p1", "/r1", "agent-alpha")
+
+	err := s.Approve("key1", 0, "agent-alpha")
+	if err == nil {
+		t.Fatal("expected error: agent cannot approve its own request")
+	}
+
+	status, _ := s.Check("key1")
+	if status != StatusPending {
+		t.Errorf("expected still pending, got %s", status)
+	}
+}
+
+func TestApproveDifferentAgent(t *testing.T) {
+	s := newTestStore(t)
+	s.Request("key1", "test", "p1", "/r1", "agent-alpha")
+
+	err := s.Approve("key1", 0, "agent-beta")
+	if err != nil {
+		t.Fatalf("different agent should be able to approve: %v", err)
+	}
+
+	a, _ := s.read("key1")
+	if a.ApprovedBy != "agent-beta" {
+		t.Errorf("expected approvedBy=agent-beta, got %s", a.ApprovedBy)
+	}
+}
+
+func TestApproveHumanBypass(t *testing.T) {
+	s := newTestStore(t)
+	s.Request("key1", "test", "p1", "/r1", "agent-alpha")
+
+	// Human approval (empty approvedBy) always allowed
+	err := s.Approve("key1", 0, "")
+	if err != nil {
+		t.Fatalf("human should always be able to approve: %v", err)
+	}
+
+	status, _ := s.Check("key1")
+	if status != StatusApproved {
+		t.Errorf("expected approved, got %s", status)
+	}
+}
+
+func TestApprovalTracksRequestedBy(t *testing.T) {
+	s := newTestStore(t)
+	s.Request("key1", "test", "p1", "/r1", "agent-alpha")
+
+	a, _ := s.read("key1")
+	if a.RequestedBy != "agent-alpha" {
+		t.Errorf("expected requestedBy=agent-alpha, got %s", a.RequestedBy)
+	}
+}
+
+func TestApprovalTracksApprovedBy(t *testing.T) {
+	s := newTestStore(t)
+	s.Request("key1", "test", "p1", "/r1", "agent-alpha")
+	s.Approve("key1", 0, "agent-beta")
+
+	a, _ := s.read("key1")
+	if a.ApprovedBy != "agent-beta" {
+		t.Errorf("expected approvedBy=agent-beta, got %s", a.ApprovedBy)
 	}
 }

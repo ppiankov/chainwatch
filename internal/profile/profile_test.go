@@ -287,7 +287,7 @@ func TestValidateProfileBadRegex(t *testing.T) {
 }
 
 func TestAllBuiltinProfilesLoad(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
+	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud", "sre-infra", "finops"}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -301,7 +301,7 @@ func TestAllBuiltinProfilesLoad(t *testing.T) {
 }
 
 func TestAllBuiltinProfilesValidate(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
+	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud", "sre-infra", "finops"}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -368,7 +368,7 @@ func TestInitProfileReturnsValidYAML(t *testing.T) {
 }
 
 func TestAllProfilesHaveNonEmptyBoundaries(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
+	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud", "sre-infra", "finops"}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -425,6 +425,175 @@ func TestVMCloudBlocksPackageManagement(t *testing.T) {
 		blocked, _ := dl.IsBlocked(cmd, "command")
 		if !blocked {
 			t.Errorf("expected %q to be blocked by vm-cloud", cmd)
+		}
+	}
+}
+
+// --- SRE Infrastructure profile (CW63) ---
+
+func TestSREInfraMinTier(t *testing.T) {
+	p, err := Load("sre-infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MinTier < 2 {
+		t.Errorf("expected min_tier >= 2, got %d", p.MinTier)
+	}
+}
+
+func TestSREInfraBlocksManualOps(t *testing.T) {
+	p, err := Load("sre-infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"ssh user@host",
+		"scp file.txt user@host:/tmp/",
+		"systemctl restart nginx",
+		"service nginx start",
+		"apt install nginx",
+		"yum install httpd",
+		"docker run ubuntu",
+		"docker exec -it container bash",
+		"vi /etc/nginx/nginx.conf",
+		"nano /etc/hosts",
+	} {
+		blocked, _ := dl.IsBlocked(cmd, "command")
+		if !blocked {
+			t.Errorf("expected %q to be blocked by sre-infra", cmd)
+		}
+	}
+}
+
+func TestSREInfraAllowsIaCTools(t *testing.T) {
+	p, err := Load("sre-infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"terraform plan",
+		"kubectl get pods",
+		"kubectl describe pod nginx",
+		"kubectl logs nginx",
+		"helm list",
+		"helm status myrelease",
+		"git status",
+		"git push origin main",
+	} {
+		blocked, reason := dl.IsBlocked(cmd, "command")
+		if blocked {
+			t.Errorf("expected %q to be allowed by sre-infra, blocked: %s", cmd, reason)
+		}
+	}
+}
+
+func TestSREInfraBlocksSSHAuthority(t *testing.T) {
+	p, err := Load("sre-infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	matched, _ := MatchesAuthority(p, "SSH into the production server")
+	if !matched {
+		t.Error("expected sre-infra to block SSH authority instruction")
+	}
+}
+
+func TestSREInfraBlocksBypassTerraform(t *testing.T) {
+	p, err := Load("sre-infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	matched, _ := MatchesAuthority(p, "bypass terraform and edit directly")
+	if !matched {
+		t.Error("expected sre-infra to block terraform bypass instruction")
+	}
+}
+
+// --- FinOps profile (CW66) ---
+
+func TestFinOpsMinTier(t *testing.T) {
+	p, err := Load("finops")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MinTier < 2 {
+		t.Errorf("expected min_tier >= 2, got %d", p.MinTier)
+	}
+}
+
+func TestFinOpsBlocksMutationCommands(t *testing.T) {
+	p, err := Load("finops")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"terraform apply",
+		"terraform destroy",
+		"kubectl delete pod nginx",
+		"kubectl apply -f deploy.yaml",
+		"aws ec2 terminate-instances --instance-ids i-123",
+		"aws ec2 run-instances --image-id ami-123",
+		"aws ec2 stop-instances --instance-ids i-123",
+		"sudo rm -rf /tmp",
+		"ssh user@host",
+	} {
+		blocked, _ := dl.IsBlocked(cmd, "command")
+		if !blocked {
+			t.Errorf("expected %q to be blocked by finops", cmd)
+		}
+	}
+}
+
+func TestFinOpsAllowsReadOnlyCommands(t *testing.T) {
+	p, err := Load("finops")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"aws ce get-cost-and-usage --time-period Start=2025-01-01,End=2025-01-31",
+		"kubectl get pods --all-namespaces",
+		"kubectl top nodes",
+		"cat report.csv",
+	} {
+		blocked, reason := dl.IsBlocked(cmd, "command")
+		if blocked {
+			t.Errorf("expected %q to be allowed by finops, blocked: %s", cmd, reason)
+		}
+	}
+}
+
+func TestFinOpsBlocksWriteAuthority(t *testing.T) {
+	p, err := Load("finops")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, instruction := range []string{
+		"delete the unused instances",
+		"terminate the idle servers",
+		"scale down the cluster",
+	} {
+		matched, _ := MatchesAuthority(p, instruction)
+		if !matched {
+			t.Errorf("expected finops to block %q via authority boundaries", instruction)
 		}
 	}
 }

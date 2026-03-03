@@ -159,8 +159,8 @@ func TestApprovalGracePeriod(t *testing.T) {
 	}
 
 	// Pre-approve sudo
-	store.Request("root_sudo", "test", "test", "sudo apt update")
-	store.Approve("root_sudo", 5*time.Minute)
+	store.Request("root_sudo", "test", "test", "sudo apt update", "")
+	store.Approve("root_sudo", 5*time.Minute, "")
 
 	cfg := Config{
 		TargetPID:    1000,
@@ -200,8 +200,8 @@ func TestApprovalExpired(t *testing.T) {
 	}
 
 	// Approve with already-expired duration
-	store.Request("root_sudo", "test", "test", "sudo rm -rf /tmp/test")
-	store.Approve("root_sudo", 1*time.Nanosecond)
+	store.Request("root_sudo", "test", "test", "sudo rm -rf /tmp/test", "")
+	store.Approve("root_sudo", 1*time.Nanosecond, "")
 	time.Sleep(2 * time.Millisecond) // ensure expiration
 
 	cfg := Config{

@@ -567,6 +567,7 @@ Rules:
 	var (
 		observeScope      string
 		observeType       string
+		observeTypes      string
 		observeOutput     string
 		observeClassify   bool
 		observeDiagnostic bool
@@ -583,6 +584,7 @@ Produces structured observations as JSON.
 Examples:
   nullbot observe --scope /var/www/site --type wordpress
   nullbot observe --scope /var/www/site --type linux --output /tmp/observations.json
+  nullbot observe --scope /var/www/site --types kubernetes,prometheus --classify
   nullbot observe --scope /var/www/site --classify`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if observeScope == "" {
@@ -600,9 +602,23 @@ Examples:
 				auditLog = "/tmp/nullbot-observe.jsonl"
 			}
 
+			// Resolve runbook types: --types takes precedence over --type.
+			var runbookTypes []string
+			if observeTypes != "" {
+				for _, t := range strings.Split(observeTypes, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						runbookTypes = append(runbookTypes, t)
+					}
+				}
+			} else {
+				runbookTypes = []string{observeType}
+			}
+
 			runnerCfg := observe.RunnerConfig{
 				Scope:      observeScope,
-				Type:       observeType,
+				Type:       runbookTypes[0],
+				Types:      runbookTypes,
 				Chainwatch: chainwatch,
 				AuditLog:   auditLog,
 			}
@@ -610,11 +626,16 @@ Examples:
 				runnerCfg.Params = map[string]string{"QUERY": observeQuery}
 			}
 
-			rb := observe.GetRunbook(observeType)
+			multiMode := len(runbookTypes) > 1
 
 			fmt.Printf("%s%s=== OBSERVE MODE ===%s\n\n", bold, cyan, reset)
 			fmt.Printf("%sScope:   %s%s\n", dim, observeScope, reset)
-			fmt.Printf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
+			if multiMode {
+				fmt.Printf("%sRunbooks: %s%s\n", dim, strings.Join(runbookTypes, ", "), reset)
+			} else {
+				rb := observe.GetRunbook(runbookTypes[0])
+				fmt.Printf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
+			}
 			if observeQuery != "" {
 				fmt.Printf("%sQuery:   %s%s\n", dim, observeQuery, reset)
 			}
@@ -623,12 +644,24 @@ Examples:
 
 			if cfg.dryRun {
 				fmt.Printf("%s%sDry run — investigation steps:%s\n\n", bold, yellow, reset)
-				for i, step := range rb.Steps {
-					expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", observeScope)
-					for k, v := range runnerCfg.Params {
-						expanded = strings.ReplaceAll(expanded, "{{"+k+"}}", v)
+				stepNum := 0
+				for _, rbType := range runbookTypes {
+					rb := observe.GetRunbook(rbType)
+					if rb == nil {
+						fmt.Printf("  %sRunbook %q not found%s\n", red, rbType, reset)
+						continue
 					}
-					fmt.Printf("  %d. %s%s%s\n     %s%s%s\n", i+1, bold, step.Purpose, reset, dim, expanded, reset)
+					if multiMode {
+						fmt.Printf("  %s--- %s ---%s\n", dim, rb.Name, reset)
+					}
+					for _, step := range rb.Steps {
+						stepNum++
+						expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", observeScope)
+						for k, v := range runnerCfg.Params {
+							expanded = strings.ReplaceAll(expanded, "{{"+k+"}}", v)
+						}
+						fmt.Printf("  %d. %s%s%s\n     %s%s%s\n", stepNum, bold, step.Purpose, reset, dim, expanded, reset)
+					}
 				}
 				return nil
 			}
@@ -653,11 +686,22 @@ Examples:
 				fmt.Printf("  %s\n\n", diagPath)
 			}
 
-			// Execute runbook.
+			// Execute runbook(s).
 			fmt.Printf("%sRunning investigation...%s\n\n", dim, reset)
-			result, err := observe.Run(runnerCfg, rb)
-			if err != nil {
-				return fmt.Errorf("observe failed: %w", err)
+			var result *observe.RunResult
+			if multiMode {
+				var err error
+				result, err = observe.RunMulti(runnerCfg, runbookTypes)
+				if err != nil {
+					return fmt.Errorf("observe failed: %w", err)
+				}
+			} else {
+				rb := observe.GetRunbook(runbookTypes[0])
+				var err error
+				result, err = observe.Run(runnerCfg, rb)
+				if err != nil {
+					return fmt.Errorf("observe failed: %w", err)
+				}
 			}
 
 			// Display step results.
@@ -697,12 +741,22 @@ Examples:
 			var observations []wo.Observation
 			if observeClassify {
 				fmt.Printf("%sClassifying findings with %s...%s ", dim, cfg.model, reset)
+
+				// Resolve sensitivity: strictest across all runbooks.
+				sensitivity := ""
+				for _, rbType := range runbookTypes {
+					if rb := observe.GetRunbook(rbType); rb != nil && rb.Sensitivity == "local" {
+						sensitivity = "local"
+						break
+					}
+				}
+
 				classifyCfg := observe.ClassifierConfig{
 					APIURL:           cfg.apiURL,
 					APIKey:           cfg.apiKey,
 					Model:            cfg.model,
 					Pool:             cfg.llmPool,
-					Sensitivity:      rb.Sensitivity,
+					Sensitivity:      sensitivity,
 					DiagnosticWriter: diagFile, // nil when --diagnostic not used
 				}
 
@@ -797,6 +851,7 @@ Examples:
 
 	observeCmd.Flags().StringVar(&observeScope, "scope", "", "target directory to investigate (required)")
 	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type (see 'nullbot runbooks')")
+	observeCmd.Flags().StringVar(&observeTypes, "types", "", "comma-separated runbook types for multi-runbook investigation")
 	observeCmd.Flags().StringVar(&observeOutput, "output", "", "write results to JSON file")
 	observeCmd.Flags().BoolVar(&observeClassify, "classify", false, "classify findings with local LLM")
 	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")

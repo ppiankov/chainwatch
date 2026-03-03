@@ -32,7 +32,7 @@ func runApprove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to open approval store: %w", err)
 	}
 
-	if err := store.Approve(key, approveDuration); err != nil {
+	if err := store.Approve(key, approveDuration, ""); err != nil {
 		return err
 	}
 

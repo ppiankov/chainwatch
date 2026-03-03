@@ -196,7 +196,7 @@ func (s *Server) Evaluate(ctx context.Context, req *pb.EvalRequest) (*pb.EvalRes
 			result.Decision = model.Allow
 			result.Reason = "approved: " + result.Reason
 		} else if status != approval.StatusPending && status != approval.StatusDenied {
-			s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+			s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, "")
 		}
 	}
 
@@ -221,7 +221,7 @@ func (s *Server) Approve(ctx context.Context, req *pb.ApproveRequest) (*pb.Appro
 		}
 	}
 
-	if err := s.approvals.Approve(req.Key, duration); err != nil {
+	if err := s.approvals.Approve(req.Key, duration, ""); err != nil {
 		return nil, err
 	}
 

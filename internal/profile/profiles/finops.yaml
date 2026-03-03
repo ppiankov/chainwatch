@@ -1,0 +1,74 @@
+name: finops
+description: Read-only safety profile for cost analysis and FinOps AI agents
+min_tier: 2
+
+authority_boundaries:
+  - pattern: "delete|terminate|destroy"
+    reason: "Destructive operations blocked for FinOps agent"
+  - pattern: "create|provision|launch|deploy"
+    reason: "Resource creation blocked for read-only FinOps agent"
+  - pattern: "modify|update|write|apply"
+    reason: "Write operations blocked for FinOps agent"
+  - pattern: "scale|resize"
+    reason: "Infrastructure scaling blocked for read-only agent"
+  - pattern: "send.*external|upload|transmit|export"
+    reason: "Data egress blocked for FinOps agent"
+  - pattern: "ignore.*previous.*instructions"
+    reason: "Prompt injection attempt"
+
+execution_boundaries:
+  urls:
+    - "*/api/write*"
+    - "*/api/delete*"
+    - "*/upload*"
+    - "*/send*"
+    - "*/checkout*"
+    - "*/payment*"
+    - "*/oauth/token*"
+    - "*/api/keys*"
+    - "*/account/delete*"
+  files:
+    - "**/.env"
+    - "**/credentials*"
+    - "~/.ssh/*"
+    - "~/.aws/credentials"
+    - "**/secrets.yaml"
+    - "**/secrets.json"
+  commands:
+    - "rm "
+    - "mv "
+    - "sudo"
+    - "ssh "
+    - "scp "
+    - "terraform apply"
+    - "terraform destroy"
+    - "kubectl delete"
+    - "kubectl apply"
+    - "kubectl edit"
+    - "aws ec2 terminate-instances"
+    - "aws ec2 run-instances"
+    - "aws ec2 stop-instances"
+    - "aws rds delete-db"
+
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*password*"
+      decision: deny
+      reason: "credential access blocked by finops profile"
+    - purpose: "*"
+      resource_pattern: "*ssn*"
+      decision: deny
+      reason: "SSN access blocked by finops profile"
+    - purpose: "*"
+      resource_pattern: "*credit_card*"
+      decision: deny
+      reason: "credit card access blocked by finops profile"
+    - purpose: "*"
+      resource_pattern: "*secret*"
+      decision: deny
+      reason: "secret access blocked by finops profile"
+    - purpose: "*"
+      resource_pattern: "*salary*"
+      decision: deny
+      reason: "salary data blocked by finops profile"

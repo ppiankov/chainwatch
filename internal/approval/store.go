@@ -42,14 +42,16 @@ const (
 
 // Approval represents a single approval request and its state.
 type Approval struct {
-	Key        string     `json:"key"`
-	Status     Status     `json:"status"`
-	Reason     string     `json:"reason"`
-	PolicyID   string     `json:"policy_id"`
-	Resource   string     `json:"resource"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+	Key         string     `json:"key"`
+	Status      Status     `json:"status"`
+	Reason      string     `json:"reason"`
+	PolicyID    string     `json:"policy_id"`
+	Resource    string     `json:"resource"`
+	RequestedBy string     `json:"requested_by,omitempty"`
+	ApprovedBy  string     `json:"approved_by,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
 }
 
 // Store manages approval files on disk.
@@ -76,7 +78,8 @@ func DefaultDir() string {
 }
 
 // Request creates a pending approval file. No-op if file already exists.
-func (s *Store) Request(key, reason, policyID, resource string) error {
+// requestedBy identifies the agent that created this request (empty for human/legacy).
+func (s *Store) Request(key, reason, policyID, resource, requestedBy string) error {
 	if err := validateKey(key); err != nil {
 		return fmt.Errorf("invalid approval key: %w", err)
 	}
@@ -90,12 +93,13 @@ func (s *Store) Request(key, reason, policyID, resource string) error {
 	}
 
 	a := Approval{
-		Key:       key,
-		Status:    StatusPending,
-		Reason:    reason,
-		PolicyID:  policyID,
-		Resource:  resource,
-		CreatedAt: time.Now().UTC(),
+		Key:         key,
+		Status:      StatusPending,
+		Reason:      reason,
+		PolicyID:    policyID,
+		Resource:    resource,
+		RequestedBy: requestedBy,
+		CreatedAt:   time.Now().UTC(),
 	}
 
 	return s.writeAtomic(path, a)
@@ -103,7 +107,9 @@ func (s *Store) Request(key, reason, policyID, resource string) error {
 
 // Approve marks an approval as approved. If duration > 0, sets expiration.
 // If duration == 0, the approval is one-time (consumed on first use).
-func (s *Store) Approve(key string, duration time.Duration) error {
+// approvedBy identifies who is approving (empty for human/CLI).
+// Anti-circular: an agent cannot approve its own request.
+func (s *Store) Approve(key string, duration time.Duration, approvedBy string) error {
 	if err := validateKey(key); err != nil {
 		return fmt.Errorf("invalid approval key: %w", err)
 	}
@@ -116,7 +122,13 @@ func (s *Store) Approve(key string, duration time.Duration) error {
 		return fmt.Errorf("approval %q not found: %w", key, err)
 	}
 
+	// Anti-circular: agent cannot approve its own request.
+	if a.RequestedBy != "" && approvedBy != "" && a.RequestedBy == approvedBy {
+		return fmt.Errorf("agent %q cannot approve its own request", approvedBy)
+	}
+
 	a.Status = StatusApproved
+	a.ApprovedBy = approvedBy
 	now := time.Now().UTC()
 	a.ResolvedAt = &now
 	if duration > 0 {

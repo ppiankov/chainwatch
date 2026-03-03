@@ -1,0 +1,20 @@
+name: "Kubernetes resource utilization investigation"
+type: k8s-utilization
+aliases: [k8s-cost, k8s-resources, utilization]
+steps:
+  - command: "kubectl top nodes 2>/dev/null || echo 'metrics-server not available'"
+    purpose: "check node-level CPU and memory usage"
+  - command: "kubectl top pods -n {{SCOPE}} --sort-by=cpu 2>/dev/null | head -20 || kubectl top pods --all-namespaces --sort-by=cpu 2>/dev/null | head -20 || echo 'pod metrics not available'"
+    purpose: "find top CPU consumers"
+  - command: "kubectl top pods -n {{SCOPE}} --sort-by=memory 2>/dev/null | head -20 || kubectl top pods --all-namespaces --sort-by=memory 2>/dev/null | head -20 || echo 'pod metrics not available'"
+    purpose: "find top memory consumers"
+  - command: "kubectl get pods -n {{SCOPE}} -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.containers[*].resources.requests.cpu}{\"\\t\"}{.spec.containers[*].resources.requests.memory}{\"\\n\"}{end}' 2>/dev/null | head -30 || echo 'cannot read resource requests'"
+    purpose: "list pod resource requests for overprovisioning analysis"
+  - command: "kubectl get pods -n {{SCOPE}} -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.containers[*].resources.limits.cpu}{\"\\t\"}{.spec.containers[*].resources.limits.memory}{\"\\n\"}{end}' 2>/dev/null | head -30 || echo 'cannot read resource limits'"
+    purpose: "list pod resource limits"
+  - command: "kubectl get pods --all-namespaces --field-selector=status.phase=Succeeded -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{\"\\n\"}{end}' 2>/dev/null | head -20 || echo 'no completed pods'"
+    purpose: "find completed pods still consuming resources"
+  - command: "kubectl get hpa -n {{SCOPE}} -o wide 2>/dev/null || kubectl get hpa --all-namespaces -o wide 2>/dev/null | head -20 || echo 'no HPA configured'"
+    purpose: "check autoscaler configuration and current replicas"
+  - command: "kubectl get pvc -n {{SCOPE}} -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.resources.requests.storage}{\"\\t\"}{.status.phase}{\"\\n\"}{end}' 2>/dev/null | head -20 || echo 'no PVCs'"
+    purpose: "check persistent volume claim sizes and status"

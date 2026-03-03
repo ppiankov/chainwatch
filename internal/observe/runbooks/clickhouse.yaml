@@ -1,0 +1,25 @@
+name: "ClickHouse server investigation"
+type: clickhouse
+aliases: [ch, clickhouse-server]
+sensitivity: local
+steps:
+  - command: "clickhouse-client --query 'SELECT version()' 2>/dev/null || echo 'clickhouse-client not available'"
+    purpose: "check ClickHouse version and connectivity"
+  - command: "clickhouse-client --query 'SELECT database, table, formatReadableSize(sum(bytes_on_disk)) as size, sum(rows) as total_rows FROM system.parts WHERE active GROUP BY database, table ORDER BY sum(bytes_on_disk) DESC LIMIT 20' 2>/dev/null || echo 'cannot query parts'"
+    purpose: "top tables by disk usage"
+  - command: "clickhouse-client --query 'SELECT * FROM system.replicas WHERE active_replicas < total_replicas' 2>/dev/null | head -20 || echo 'replica status not available'"
+    purpose: "check replication health and lagging replicas"
+  - command: "clickhouse-client --query 'SELECT query_id, user, elapsed, read_rows, memory_usage, substring(query, 1, 120) as query_preview FROM system.processes ORDER BY elapsed DESC LIMIT 10' 2>/dev/null || echo 'cannot list running queries'"
+    purpose: "check long-running queries"
+  - command: "clickhouse-client --query 'SELECT event_time, level, message FROM system.text_log WHERE level IN ($$Error$$, $$Fatal$$) ORDER BY event_time DESC LIMIT 30' 2>/dev/null || echo 'text_log not available'"
+    purpose: "recent error and fatal log entries"
+  - command: "clickhouse-client --query 'SELECT metric, value FROM system.metrics WHERE metric LIKE $$%Connection%$$ OR metric LIKE $$%Query%$$ OR metric LIKE $$%Memory%$$' 2>/dev/null || echo 'metrics not available'"
+    purpose: "current connection query and memory metrics"
+  - command: "clickhouse-client --query 'SELECT database, table, formatReadableSize(sum(primary_key_bytes_in_memory)) as pk_memory FROM system.parts WHERE active GROUP BY database, table ORDER BY sum(primary_key_bytes_in_memory) DESC LIMIT 10' 2>/dev/null || echo 'cannot check PK memory'"
+    purpose: "tables consuming most primary key memory"
+  - command: "clickhouse-client --query 'SELECT database, table, partition_id, formatReadableSize(sum(bytes_on_disk)) as size FROM system.parts WHERE active GROUP BY database, table, partition_id ORDER BY sum(bytes_on_disk) DESC LIMIT 20' 2>/dev/null || echo 'partition breakdown not available'"
+    purpose: "disk usage by partition for {{SCOPE}} analysis"
+  - command: "clickhouse-client --query 'SELECT * FROM system.merges LIMIT 10' 2>/dev/null || echo 'no active merges'"
+    purpose: "check active merge operations"
+  - command: "clickhouse-client --query 'SELECT event_time, query_duration_ms, read_rows, result_rows, memory_usage, substring(query, 1, 120) as query_preview FROM system.query_log WHERE type = 2 AND event_time > now() - INTERVAL 1 HOUR ORDER BY query_duration_ms DESC LIMIT 15' 2>/dev/null || echo 'query_log not available'"
+    purpose: "slowest queries in the last hour"

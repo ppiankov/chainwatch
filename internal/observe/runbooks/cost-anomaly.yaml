@@ -1,0 +1,18 @@
+name: "Cost anomaly investigation"
+type: cost-anomaly
+aliases: [spend-spike, cost-spike]
+steps:
+  - command: "aws ce get-anomalies --date-interval Start=$(date -d '-14 days' +%Y-%m-%d 2>/dev/null || date -v-14d +%Y-%m-%d),End=$(date +%Y-%m-%d) 2>/dev/null | head -50 || echo 'cost anomaly detection not available'"
+    purpose: "check AWS Cost Anomaly Detection findings"
+  - command: "aws ce get-cost-and-usage --time-period Start=$(date -d '-14 days' +%Y-%m-%d 2>/dev/null || date -v-14d +%Y-%m-%d),End=$(date +%Y-%m-%d) --granularity DAILY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE 2>/dev/null | head -80 || echo 'daily service cost not available'"
+    purpose: "check daily cost by service to identify spike source"
+  - command: "aws ce get-cost-and-usage --time-period Start=$(date -d '-7 days' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d),End=$(date +%Y-%m-%d) --granularity DAILY --metrics UnblendedCost --group-by Type=DIMENSION,Key=USAGE_TYPE 2>/dev/null | head -80 || echo 'usage type breakdown not available'"
+    purpose: "break down cost by usage type to pinpoint anomaly"
+  - command: "aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=RunInstances --start-time $(date -d '-7 days' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -v-7d +%Y-%m-%dT00:00:00Z) 2>/dev/null | head -50 || echo 'CloudTrail not available'"
+    purpose: "check for new EC2 instances launched recently"
+  - command: "aws resourcegroupstaggingapi get-resources --query 'ResourceTagMappingList[?Tags==`[]`].[ResourceARN]' --output table 2>/dev/null | head -30 || echo 'cannot check untagged resources'"
+    purpose: "find untagged resources that may drive unattributed cost"
+  - command: "aws ce get-cost-and-usage --time-period Start=$(date -d '-30 days' +%Y-%m-%d 2>/dev/null || date -v-30d +%Y-%m-%d),End=$(date +%Y-%m-%d) --granularity DAILY --metrics UnblendedCost --group-by Type=DIMENSION,Key=REGION 2>/dev/null | head -50 || echo 'regional cost not available'"
+    purpose: "check cost by region to detect unexpected regional spend"
+  - command: "aws ce get-cost-and-usage --time-period Start=$(date -d '-7 days' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d),End=$(date +%Y-%m-%d) --granularity DAILY --metrics UnblendedCost --group-by Type=DIMENSION,Key=LINKED_ACCOUNT 2>/dev/null | head -50 || echo 'account breakdown not available'"
+    purpose: "check cost by linked account for multi-account spend attribution"

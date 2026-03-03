@@ -272,7 +272,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 			// fall through to forward
 		} else {
 			if status != approval.StatusPending && status != approval.StatusDenied {
-				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, s.cfg.AgentID)
 			}
 			writeBlocked(w, http.StatusForbidden, result)
 			return
@@ -391,7 +391,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 			// fall through to tunnel
 		} else {
 			if status != approval.StatusPending && status != approval.StatusDenied {
-				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+				s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, s.cfg.AgentID)
 			}
 			http.Error(w, fmt.Sprintf("CONNECT blocked: %s (approval_key=%s)", result.Reason, result.ApprovalKey), http.StatusForbidden)
 			return

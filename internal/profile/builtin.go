@@ -20,6 +20,12 @@ var dataAnalystYAML []byte
 //go:embed profiles/vm-cloud.yaml
 var vmCloudYAML []byte
 
+//go:embed profiles/sre-infra.yaml
+var sreInfraYAML []byte
+
+//go:embed profiles/finops.yaml
+var finopsYAML []byte
+
 // builtinProfiles maps profile names to their embedded YAML content.
 var builtinProfiles = map[string][]byte{
 	"clawbot":          clawbotYAML,
@@ -28,4 +34,6 @@ var builtinProfiles = map[string][]byte{
 	"customer-support": customerSupportYAML,
 	"data-analyst":     dataAnalystYAML,
 	"vm-cloud":         vmCloudYAML,
+	"sre-infra":        sreInfraYAML,
+	"finops":           finopsYAML,
 }

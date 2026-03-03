@@ -636,7 +636,7 @@ func (s *Server) evaluateToolCall(tc ToolCall) model.PolicyResult {
 			}
 		}
 		if status != approval.StatusPending && status != approval.StatusDenied {
-			s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource)
+			s.approvals.Request(result.ApprovalKey, result.Reason, result.PolicyID, action.Resource, s.cfg.AgentID)
 		}
 	}
 
