@@ -207,7 +207,7 @@ func (d *Daemon) retryCachedObservations(ctx context.Context) {
 			if tm.Len() > 0 {
 				classifyEvidence = tm.Legend() + "\n" + classifyEvidence
 				// Persist token map for audit trail.
-				tmPath := filepath.Join(cacheDir, fmt.Sprintf("tokens-retry-%s.json", entry.ID))
+				tmPath := filepath.Join(d.cfg.Dirs.CacheDir(), fmt.Sprintf("tokens-retry-%s.json", entry.ID))
 				tmData, _ := json.MarshalIndent(tm, "", "  ")
 				if err := os.WriteFile(tmPath, tmData, 0600); err == nil {
 					tokenMapRef = tmPath
