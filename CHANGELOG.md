@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-03-06
+
+### Added
+
+- `chainwatch generate-seccomp` — generate seccomp JSON profiles from chainwatch policy for container hardening
+- `chainwatch generate-apparmor` / `generate-selinux` — generate OS-native mandatory access control profiles from chainwatch policy
+- SQLite observation cache with FTS5 full-text search (replaces JSON file cache in nullbot daemon)
+- Multi-channel alert abstraction: `Alerter` interface with webhook, Telegram, and email implementations
+- `NULLBOT_ALERT_CHANNELS` env var for configuring active alert channels
+
 ## [1.3.0] - 2026-03-03
 
 ### Added
