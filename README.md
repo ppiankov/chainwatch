@@ -282,7 +282,7 @@ See [docs/irreversible-boundaries.md](docs/irreversible-boundaries.md) and [docs
 
 - **CLI-only** — no web UI or dashboard
 - **Single-node** — no distributed coordination or multi-tenant support
-- **Process polling** — `exec` mode uses process-level wrapping, not seccomp/eBPF
+- **Process wrapping** — runtime enforcement is process-level (`exec`); seccomp can be generated for container hardening via `chainwatch profile seccomp`
 - **Python SDK** — subprocess-based (wraps the Go binary, not a native library)
 - **No content inspection** — classification based on resource names, not file contents
 
