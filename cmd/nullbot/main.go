@@ -19,6 +19,7 @@ import (
 
 	"github.com/ppiankov/chainwatch/internal/daemon"
 	"github.com/ppiankov/chainwatch/internal/integrity"
+	"github.com/ppiankov/chainwatch/internal/inventory"
 	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/profile"
 	"github.com/ppiankov/chainwatch/internal/redact"
@@ -40,12 +41,13 @@ const (
 	dim    = "\033[2m"
 	reset  = "\033[0m"
 
-	defaultOllamaURL = "http://localhost:11434/v1/chat/completions"
-	defaultGroqURL   = "https://api.groq.com/openai/v1/chat/completions"
-	defaultModel     = "llama3.2"
-	defaultGroqModel = "llama-3.1-8b-instant"
-	defaultProfile   = "clawbot"
-	defaultMaxSteps  = 8
+	defaultOllamaURL                 = "http://localhost:11434/v1/chat/completions"
+	defaultGroqURL                   = "https://api.groq.com/openai/v1/chat/completions"
+	defaultModel                     = "llama3.2"
+	defaultGroqModel                 = "llama-3.1-8b-instant"
+	defaultProfile                   = "clawbot"
+	defaultMaxSteps                  = 8
+	defaultObserveScopeFromInventory = "/var/lib/clickhouse"
 
 	// defaultMission is the sysadmin brief used in CI and when no args given with GROQ_API_KEY set.
 	defaultMission = `You are a Linux system administration agent. Your task:
@@ -521,6 +523,112 @@ func runShow(name string, args ...string) {
 	}
 }
 
+func cloneParams(params map[string]string) map[string]string {
+	if len(params) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(params))
+	for key, value := range params {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func runnerConfigForHost(
+	baseCfg observe.RunnerConfig,
+	cluster inventory.Cluster,
+	host inventory.Host,
+) observe.RunnerConfig {
+	cfg := baseCfg
+	cfg.ClusterName = cluster.Name
+	cfg.Host = host.Name
+	cfg.SSHUser = host.SSHUser
+	cfg.Port = host.ClickHousePort
+	cfg.ConfigRepo = cluster.ConfigRepoPath()
+	cfg.ConfigPath = cluster.ConfigPathResolved()
+
+	params := cloneParams(baseCfg.Params)
+	if params == nil {
+		params = make(map[string]string, 6)
+	}
+	params["CLUSTER"] = cluster.Name
+	params["HOST"] = host.Name
+	params["SSH_USER"] = host.SSHUser
+	params["CLICKHOUSE_PORT"] = strconv.Itoa(host.ClickHousePort)
+	params["CONFIG_REPO"] = cfg.ConfigRepo
+	params["CONFIG_PATH"] = cfg.ConfigPath
+	cfg.Params = params
+
+	return cfg
+}
+
+func runObserveWithInventory(
+	baseCfg observe.RunnerConfig,
+	runbookTypes []string,
+	inv *inventory.Inventory,
+) (*observe.RunResult, error) {
+	if len(runbookTypes) == 0 {
+		return nil, fmt.Errorf("at least one runbook type is required")
+	}
+
+	result := &observe.RunResult{
+		Scope:   baseCfg.Scope,
+		Type:    strings.Join(runbookTypes, "+"),
+		StartAt: time.Now().UTC(),
+	}
+	multiMode := len(runbookTypes) > 1
+
+	for _, cluster := range inv.Clusters() {
+		for _, host := range cluster.Hosts() {
+			hostCfg := runnerConfigForHost(baseCfg, cluster, host)
+			var hostResult *observe.RunResult
+			var err error
+
+			if multiMode {
+				hostResult, err = observe.RunMulti(hostCfg, runbookTypes)
+			} else {
+				hostResult, err = observe.Run(hostCfg, observe.GetRunbook(runbookTypes[0]))
+			}
+			if err != nil {
+				result.Steps = append(result.Steps, observe.StepResult{
+					Command:  strings.Join(runbookTypes, ","),
+					Purpose:  fmt.Sprintf("run runbook(s) for %s/%s", cluster.Name, host.Name),
+					Output:   err.Error(),
+					ExitCode: 1,
+					Cluster:  cluster.Name,
+					Host:     host.Name,
+				})
+				continue
+			}
+
+			result.Steps = append(result.Steps, hostResult.Steps...)
+		}
+	}
+
+	result.EndAt = time.Now().UTC()
+	return result, nil
+}
+
+func resolveRunbookTypes(cmd *cobra.Command, observeTypes, observeType string, hasInventory bool) []string {
+	if observeTypes != "" {
+		var runbookTypes []string
+		for _, raw := range strings.Split(observeTypes, ",") {
+			trimmed := strings.TrimSpace(raw)
+			if trimmed == "" {
+				continue
+			}
+			runbookTypes = append(runbookTypes, trimmed)
+		}
+		return runbookTypes
+	}
+
+	if hasInventory && !cmd.Flags().Changed("type") {
+		return []string{"clickhouse"}
+	}
+
+	return []string{observeType}
+}
+
 func main() {
 	var (
 		flagURL      string
@@ -585,13 +693,18 @@ Rules:
 	runCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show plan without executing")
 
 	var (
-		observeScope      string
-		observeType       string
-		observeTypes      string
-		observeOutput     string
-		observeClassify   bool
-		observeDiagnostic bool
-		observeQuery      string
+		observeScope       string
+		observeType        string
+		observeTypes       string
+		observeInventory   string
+		observeOutput      string
+		observeFormat      string
+		observeClassify    bool
+		observeDiagnostic  bool
+		observeCluster     bool
+		observeNoDedup     bool
+		observeDedupWindow time.Duration
+		observeQuery       string
 	)
 
 	observeCmd := &cobra.Command{
@@ -605,13 +718,27 @@ Examples:
   nullbot observe --scope /var/www/site --type wordpress
   nullbot observe --scope /var/www/site --type linux --output /tmp/observations.json
   nullbot observe --scope /var/www/site --types kubernetes,prometheus --classify
+  nullbot observe --scope /var/lib/clickhouse --type clickhouse --cluster
+  nullbot observe --inventory inventory.yaml
   nullbot observe --scope /var/www/site --classify`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if observeScope == "" {
-				return fmt.Errorf("--scope is required")
+			outputFormat, formatErr := normalizeObserveFormat(observeFormat)
+			if formatErr != nil {
+				return formatErr
 			}
-
-			cfg := resolveConfig(flagURL, flagModel, flagProfile, flagMaxSteps, flagDryRun)
+			logOut := os.Stdout
+			if outputFormat == observeFormatWO {
+				logOut = os.Stderr
+			}
+			logf := func(format string, args ...any) {
+				_, _ = fmt.Fprintf(logOut, format, args...)
+			}
+			logln := func(args ...any) {
+				_, _ = fmt.Fprintln(logOut, args...)
+			}
+			if outputFormat == observeFormatWO {
+				observeClassify = true
+			}
 
 			chainwatch := os.Getenv("CHAINWATCH_BIN")
 			if chainwatch == "" {
@@ -622,23 +749,41 @@ Examples:
 				auditLog = "/tmp/nullbot-observe.jsonl"
 			}
 
-			// Resolve runbook types: --types takes precedence over --type.
-			var runbookTypes []string
-			if observeTypes != "" {
-				for _, t := range strings.Split(observeTypes, ",") {
-					t = strings.TrimSpace(t)
-					if t != "" {
-						runbookTypes = append(runbookTypes, t)
-					}
+			var inv *inventory.Inventory
+			if observeInventory != "" {
+				loaded, err := inventory.Load(observeInventory)
+				if err != nil {
+					return fmt.Errorf("load inventory: %w", err)
 				}
-			} else {
-				runbookTypes = []string{observeType}
+				inv = loaded
+			}
+
+			if observeScope == "" {
+				if inv != nil {
+					observeScope = defaultObserveScopeFromInventory
+				} else {
+					return fmt.Errorf("--scope is required unless --inventory is set")
+				}
+			}
+
+			runbookTypes := resolveRunbookTypes(cmd, observeTypes, observeType, inv != nil)
+			if len(runbookTypes) == 0 {
+				return fmt.Errorf("at least one runbook type is required")
+			}
+
+			cfg := resolveConfig(flagURL, flagModel, flagProfile, flagMaxSteps, flagDryRun)
+			modelExplicit := cmd.Flags().Changed("model") || os.Getenv("NULLBOT_MODEL") != ""
+			if inv != nil && !modelExplicit {
+				if model := strings.TrimSpace(inv.BedrockConfig().Models.NullbotAnalysis); model != "" {
+					cfg.model = model
+				}
 			}
 
 			runnerCfg := observe.RunnerConfig{
 				Scope:      observeScope,
 				Type:       runbookTypes[0],
 				Types:      runbookTypes,
+				Cluster:    observeCluster,
 				Chainwatch: chainwatch,
 				AuditLog:   auditLog,
 			}
@@ -648,39 +793,87 @@ Examples:
 
 			multiMode := len(runbookTypes) > 1
 
-			fmt.Printf("%s%s=== OBSERVE MODE ===%s\n\n", bold, cyan, reset)
-			fmt.Printf("%sScope:   %s%s\n", dim, observeScope, reset)
+			logf("%s%s=== OBSERVE MODE ===%s\n\n", bold, cyan, reset)
+			logf("%sScope:   %s%s\n", dim, observeScope, reset)
+			if inv != nil {
+				logf("%sInventory: %s%s\n", dim, inv.Path(), reset)
+				logf("%sClusters: %d%s\n", dim, len(inv.Clusters()), reset)
+			}
 			if multiMode {
-				fmt.Printf("%sRunbooks: %s%s\n", dim, strings.Join(runbookTypes, ", "), reset)
+				logf("%sRunbooks: %s%s\n", dim, strings.Join(runbookTypes, ", "), reset)
 			} else {
 				rb := observe.GetRunbook(runbookTypes[0])
-				fmt.Printf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
+				logf("%sRunbook: %s (%d steps)%s\n", dim, rb.Name, len(rb.Steps), reset)
+			}
+			if inv != nil {
+				bedrockCfg := inv.BedrockConfig()
+				if bedrockCfg.Region != "" {
+					logf("%sBedrock: %s%s\n", dim, bedrockCfg.Region, reset)
+				}
 			}
 			if observeQuery != "" {
-				fmt.Printf("%sQuery:   %s%s\n", dim, observeQuery, reset)
+				logf("%sQuery:   %s%s\n", dim, observeQuery, reset)
 			}
-			fmt.Printf("%sProfile: clawbot (inspect-only, hard-locked)%s\n", dim, reset)
-			fmt.Println()
+			if observeCluster {
+				logf("%sMode:    cluster-aware%s\n", dim, reset)
+			}
+			logf("%sProfile: clawbot (inspect-only, hard-locked)%s\n", dim, reset)
+			logln()
 
 			if cfg.dryRun {
-				fmt.Printf("%s%sDry run — investigation steps:%s\n\n", bold, yellow, reset)
+				logf("%s%sDry run — investigation steps:%s\n\n", bold, yellow, reset)
 				stepNum := 0
-				for _, rbType := range runbookTypes {
-					rb := observe.GetRunbook(rbType)
-					if rb == nil {
-						fmt.Printf("  %sRunbook %q not found%s\n", red, rbType, reset)
-						continue
-					}
-					if multiMode {
-						fmt.Printf("  %s--- %s ---%s\n", dim, rb.Name, reset)
-					}
-					for _, step := range rb.Steps {
-						stepNum++
-						expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", observeScope)
-						for k, v := range runnerCfg.Params {
-							expanded = strings.ReplaceAll(expanded, "{{"+k+"}}", v)
+				if inv != nil {
+					for _, cluster := range inv.Clusters() {
+						logf("  %sCluster:%s %s\n", bold, reset, cluster.Name)
+						logf("    %sconfig repo: %s%s\n", dim, cluster.ConfigRepoPath(), reset)
+						for _, host := range cluster.Hosts() {
+							hostCfg := runnerConfigForHost(runnerCfg, cluster, host)
+							logf("    %sHost:%s %s\n", bold, reset, host.Name)
+							for _, rbType := range runbookTypes {
+								rb := observe.GetRunbook(rbType)
+								if rb == nil {
+									logf("      %sRunbook %q not found%s\n", red, rbType, reset)
+									continue
+								}
+								if multiMode {
+									logf("      %s--- %s ---%s\n", dim, rb.Name, reset)
+								}
+								for _, step := range rb.Steps {
+									if step.Cluster && !hostCfg.Cluster {
+										continue
+									}
+									stepNum++
+									expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", hostCfg.Scope)
+									for k, v := range hostCfg.Params {
+										expanded = strings.ReplaceAll(expanded, "{{"+k+"}}", v)
+									}
+									logf("      %d. %s%s%s\n         %s%s%s\n", stepNum, bold, step.Purpose, reset, dim, expanded, reset)
+								}
+							}
 						}
-						fmt.Printf("  %d. %s%s%s\n     %s%s%s\n", stepNum, bold, step.Purpose, reset, dim, expanded, reset)
+					}
+				} else {
+					for _, rbType := range runbookTypes {
+						rb := observe.GetRunbook(rbType)
+						if rb == nil {
+							logf("  %sRunbook %q not found%s\n", red, rbType, reset)
+							continue
+						}
+						if multiMode {
+							logf("  %s--- %s ---%s\n", dim, rb.Name, reset)
+						}
+						for _, step := range rb.Steps {
+							if step.Cluster && !runnerCfg.Cluster {
+								continue
+							}
+							stepNum++
+							expanded := strings.ReplaceAll(step.Command, "{{SCOPE}}", observeScope)
+							for k, v := range runnerCfg.Params {
+								expanded = strings.ReplaceAll(expanded, "{{"+k+"}}", v)
+							}
+							logf("  %d. %s%s%s\n     %s%s%s\n", stepNum, bold, step.Purpose, reset, dim, expanded, reset)
+						}
 					}
 				}
 				return nil
@@ -698,69 +891,89 @@ Examples:
 				if err != nil {
 					return fmt.Errorf("create diagnostic file: %w", err)
 				}
-				defer diagFile.Close()
-				fmt.Fprintf(diagFile, "NULLBOT DIAGNOSTIC OUTPUT — NON-PRODUCTION\n")
-				fmt.Fprintf(diagFile, "WARNING: Contains sensitive pre-redaction data.\n")
-				fmt.Fprintf(diagFile, "Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339))
-				fmt.Printf("%s%sWARNING: Diagnostic mode — sensitive data will be written to:%s\n", bold, yellow, reset)
-				fmt.Printf("  %s\n\n", diagPath)
+				defer func() {
+					_ = diagFile.Close()
+				}()
+				if _, err := fmt.Fprintf(diagFile, "NULLBOT DIAGNOSTIC OUTPUT — NON-PRODUCTION\n"); err != nil {
+					return fmt.Errorf("write diagnostic header: %w", err)
+				}
+				if _, err := fmt.Fprintf(diagFile, "WARNING: Contains sensitive pre-redaction data.\n"); err != nil {
+					return fmt.Errorf("write diagnostic warning: %w", err)
+				}
+				if _, err := fmt.Fprintf(diagFile, "Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339)); err != nil {
+					return fmt.Errorf("write diagnostic timestamp: %w", err)
+				}
+				logf("%s%sWARNING: Diagnostic mode — sensitive data will be written to:%s\n", bold, yellow, reset)
+				logf("  %s\n\n", diagPath)
 			}
 
 			// Execute runbook(s).
-			fmt.Printf("%sRunning investigation...%s\n\n", dim, reset)
+			logf("%sRunning investigation...%s\n\n", dim, reset)
 			var result *observe.RunResult
-			if multiMode {
-				var err error
+			var err error
+			if inv != nil {
+				result, err = runObserveWithInventory(runnerCfg, runbookTypes, inv)
+			} else if multiMode {
 				result, err = observe.RunMulti(runnerCfg, runbookTypes)
-				if err != nil {
-					return fmt.Errorf("observe failed: %w", err)
-				}
 			} else {
-				rb := observe.GetRunbook(runbookTypes[0])
-				var err error
-				result, err = observe.Run(runnerCfg, rb)
-				if err != nil {
-					return fmt.Errorf("observe failed: %w", err)
-				}
+				result, err = observe.Run(runnerCfg, observe.GetRunbook(runbookTypes[0]))
+			}
+			if err != nil {
+				return fmt.Errorf("observe failed: %w", err)
 			}
 
 			// Display step results.
 			for i, sr := range result.Steps {
-				fmt.Printf("%s[%d/%d]%s %s\n", bold, i+1, len(result.Steps), reset, sr.Purpose)
+				stepContext := ""
+				if sr.Cluster != "" || sr.Host != "" {
+					var contextParts []string
+					if sr.Cluster != "" {
+						contextParts = append(contextParts, sr.Cluster)
+					}
+					if sr.Host != "" {
+						contextParts = append(contextParts, sr.Host)
+					}
+					stepContext = fmt.Sprintf(" [%s]", strings.Join(contextParts, "/"))
+				}
+				logf("%s[%d/%d]%s %s%s\n", bold, i+1, len(result.Steps), reset, sr.Purpose, stepContext)
 				if sr.Blocked {
-					fmt.Printf("  %sBLOCKED%s by chainwatch\n", red, reset)
+					logf("  %sBLOCKED%s by chainwatch\n", red, reset)
 				} else if sr.ExitCode != 0 {
-					fmt.Printf("  %sERROR%s exit=%d\n", red, reset, sr.ExitCode)
+					logf("  %sERROR%s exit=%d\n", red, reset, sr.ExitCode)
 				} else if sr.Output == "" {
-					fmt.Printf("  %s(no output)%s\n", dim, reset)
+					logf("  %s(no output)%s\n", dim, reset)
 				} else {
 					lines := strings.SplitN(sr.Output, "\n", 4)
 					for _, line := range lines[:min(len(lines), 3)] {
-						fmt.Printf("  %s%s%s\n", dim, line, reset)
+						logf("  %s%s%s\n", dim, line, reset)
 					}
 					if len(lines) > 3 {
-						fmt.Printf("  %s... (%d more lines)%s\n", dim, strings.Count(sr.Output, "\n")-2, reset)
+						logf("  %s... (%d more lines)%s\n", dim, strings.Count(sr.Output, "\n")-2, reset)
 					}
 				}
-				fmt.Println()
+				logln()
 			}
 
 			// Collect evidence for classification.
 			evidence := observe.CollectEvidence(result)
 
 			if diagFile != nil {
-				fmt.Fprintf(diagFile, "=== COLLECTED: RAW EVIDENCE ===\n%s\n=== END COLLECTED ===\n\n", evidence)
+				if _, err := fmt.Fprintf(diagFile, "=== COLLECTED: RAW EVIDENCE ===\n%s\n=== END COLLECTED ===\n\n", evidence); err != nil {
+					return fmt.Errorf("write diagnostic raw evidence: %w", err)
+				}
 			}
 
 			if evidence == "" {
-				fmt.Printf("%sNo evidence collected (all steps blocked or empty).%s\n", yellow, reset)
-				return nil
+				if outputFormat != observeFormatWO {
+					logf("%sNo evidence collected (all steps blocked or empty).%s\n", yellow, reset)
+					return nil
+				}
 			}
 
 			// Classify with LLM if requested.
 			var observations []wo.Observation
-			if observeClassify {
-				fmt.Printf("%sClassifying findings with %s...%s ", dim, cfg.model, reset)
+			if observeClassify && evidence != "" {
+				logf("%sClassifying findings with %s...%s ", dim, cfg.model, reset)
 
 				// Resolve sensitivity: strictest across all runbooks.
 				sensitivity := ""
@@ -792,13 +1005,15 @@ Examples:
 				}
 
 				if diagFile != nil {
-					fmt.Fprintf(diagFile, "=== SENT: REDACTED EVIDENCE ===\n%s\n=== END SENT ===\n\n", classifyEvidence)
+					if _, err := fmt.Fprintf(diagFile, "=== SENT: REDACTED EVIDENCE ===\n%s\n=== END SENT ===\n\n", classifyEvidence); err != nil {
+						return fmt.Errorf("write diagnostic redacted evidence: %w", err)
+					}
 				}
 
 				obs, err := observe.Classify(classifyCfg, classifyEvidence)
 				if err != nil {
-					fmt.Printf("%sFAILED%s (%v)\n", red, reset, err)
-					fmt.Printf("%sEvidence collected but classification failed. Use --output to save raw results.%s\n", yellow, reset)
+					logf("%sFAILED%s (%v)\n", red, reset, err)
+					logf("%sEvidence collected but classification failed. Use --output to save raw results.%s\n", yellow, reset)
 				} else {
 					// Post-validation: check for leaks and de-redact.
 					if tokenMap != nil && tokenMap.Len() > 0 {
@@ -807,7 +1022,7 @@ Examples:
 							allDetails += " " + o.Detail
 						}
 						if leaks := redact.CheckLeaks(allDetails, tokenMap); len(leaks) > 0 {
-							fmt.Printf("%sFAILED%s (LLM leaked %d sensitive values)\n", red, reset, len(leaks))
+							logf("%sFAILED%s (LLM leaked %d sensitive values)\n", red, reset, len(leaks))
 							return fmt.Errorf("classification leak: LLM exposed %d sensitive values", len(leaks))
 						}
 						for i := range obs {
@@ -815,32 +1030,81 @@ Examples:
 						}
 					}
 					observations = obs
-					fmt.Printf("%sOK%s (%d observations)\n", green, reset, len(obs))
+					logf("%sOK%s (%d observations)\n", green, reset, len(obs))
 				}
 
 				if diagFile != nil {
-					fmt.Printf("%sDiagnostic written to: %s%s\n", dim, diagFile.Name(), reset)
+					logf("%sDiagnostic written to: %s%s\n", dim, diagFile.Name(), reset)
 				}
+			}
+
+			typeLabel := runbookTypes[0]
+			if multiMode {
+				typeLabel = strings.Join(runbookTypes, ",")
+			}
+
+			if outputFormat == observeFormatWO {
+				repo := ""
+				if inv != nil && len(inv.Clusters()) == 1 {
+					repo = inv.Clusters()[0].ConfigRepoPath()
+				}
+
+				woTasks, err := buildWOTasks(observations, woTaskBuildConfig{
+					Scope:        observeScope,
+					Runbook:      typeLabel,
+					Repo:         repo,
+					DedupDBPath:  observe.CacheDir(resolveObserveStateDir()),
+					DedupWindow:  observeDedupWindow,
+					DisableDedup: observeNoDedup,
+					Now:          time.Now().UTC(),
+				})
+				if err != nil {
+					return fmt.Errorf("build WO tasks: %w", err)
+				}
+
+				data, err := json.MarshalIndent(woTasks.Payload, "", "  ")
+				if err != nil {
+					return fmt.Errorf("marshal WO output: %w", err)
+				}
+				if observeOutput != "" {
+					if err := os.WriteFile(observeOutput, data, 0600); err != nil {
+						return fmt.Errorf("write output: %w", err)
+					}
+					logf("\n%sResults written to %s%s\n", green, observeOutput, reset)
+				}
+				logf(
+					"%sDedup: emitted=%d suppressed=%d reopened=%d%s\n",
+					dim,
+					woTasks.Emitted,
+					woTasks.Suppressed,
+					woTasks.Reopened,
+					reset,
+				)
+				fmt.Printf("%s\n", data)
+				return nil
 			}
 
 			// Output.
 			if observeOutput != "" {
 				output := map[string]interface{}{
 					"scope":        observeScope,
-					"type":         observeType,
+					"type":         typeLabel,
 					"steps":        result.Steps,
 					"evidence":     evidence,
 					"observations": observations,
+				}
+				if inv != nil {
+					output["inventory"] = inv.Path()
 				}
 				data, _ := json.MarshalIndent(output, "", "  ")
 				if err := os.WriteFile(observeOutput, data, 0600); err != nil {
 					return fmt.Errorf("write output: %w", err)
 				}
-				fmt.Printf("\n%sResults written to %s%s\n", green, observeOutput, reset)
+				logf("\n%sResults written to %s%s\n", green, observeOutput, reset)
 			}
 
 			// Summary.
-			fmt.Printf("\n%s=== SUMMARY ===%s\n", bold, reset)
+			logf("\n%s=== SUMMARY ===%s\n", bold, reset)
 			total := len(result.Steps)
 			blocked := 0
 			for _, sr := range result.Steps {
@@ -848,10 +1112,10 @@ Examples:
 					blocked++
 				}
 			}
-			fmt.Printf("  Steps: %d  |  %sCompleted: %d%s  |  %sBlocked: %d%s\n",
+			logf("  Steps: %d  |  %sCompleted: %d%s  |  %sBlocked: %d%s\n",
 				total, green, total-blocked, reset, red, blocked, reset)
 			if len(observations) > 0 {
-				fmt.Printf("  Observations: %d\n", len(observations))
+				logf("  Observations: %d\n", len(observations))
 				for _, obs := range observations {
 					severity := string(obs.Severity)
 					color := dim
@@ -861,7 +1125,7 @@ Examples:
 					case wo.SeverityHigh:
 						color = yellow
 					}
-					fmt.Printf("    %s[%s]%s %s: %s\n", color, severity, reset, obs.Type, obs.Detail)
+					logf("    %s[%s]%s %s: %s\n", color, severity, reset, obs.Type, obs.Detail)
 				}
 			}
 
@@ -869,15 +1133,20 @@ Examples:
 		},
 	}
 
-	observeCmd.Flags().StringVar(&observeScope, "scope", "", "target directory to investigate (required)")
+	observeCmd.Flags().StringVar(&observeScope, "scope", "", "target directory to investigate (required unless --inventory is set)")
 	observeCmd.Flags().StringVar(&observeType, "type", "linux", "runbook type (see 'nullbot runbooks')")
 	observeCmd.Flags().StringVar(&observeTypes, "types", "", "comma-separated runbook types for multi-runbook investigation")
+	observeCmd.Flags().StringVar(&observeInventory, "inventory", "", "path to inventory.yaml for cluster/host discovery")
 	observeCmd.Flags().StringVar(&observeOutput, "output", "", "write results to JSON file")
+	observeCmd.Flags().StringVar(&observeFormat, "format", observeFormatText, "output format: text, wo")
 	observeCmd.Flags().BoolVar(&observeClassify, "classify", false, "classify findings with local LLM")
 	observeCmd.Flags().StringVar(&flagURL, "api-url", "", "LLM API endpoint for classification (env: NULLBOT_API_URL)")
 	observeCmd.Flags().StringVar(&flagModel, "model", "", "LLM model name for classification (env: NULLBOT_MODEL)")
 	observeCmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "show runbook steps without executing")
 	observeCmd.Flags().BoolVar(&observeDiagnostic, "diagnostic", false, "write full pipeline data to file (non-production)")
+	observeCmd.Flags().BoolVar(&observeCluster, "cluster", false, "enable cluster-only runbook steps")
+	observeCmd.Flags().BoolVar(&observeNoDedup, "no-dedup", false, "bypass WO deduplication for this run")
+	observeCmd.Flags().DurationVar(&observeDedupWindow, "dedup-window", defaultObserveDedupWindow, "time window to suppress recurrences after closure")
 	observeCmd.Flags().StringVar(&observeQuery, "query", "", "email address or search term for trace runbooks")
 
 	var (
@@ -1134,10 +1403,16 @@ Examples:
 
 		// CI uses ./chainwatch not system-installed
 		if _, err := os.Stat("./chainwatch"); err == nil {
-			os.Setenv("CHAINWATCH_BIN", "./chainwatch")
+			if err := os.Setenv("CHAINWATCH_BIN", "./chainwatch"); err != nil {
+				fmt.Fprintf(os.Stderr, "nullbot: set CHAINWATCH_BIN: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		// CI audit log path
-		os.Setenv("AUDIT_LOG", "/tmp/release-fieldtest.jsonl")
+		if err := os.Setenv("AUDIT_LOG", "/tmp/release-fieldtest.jsonl"); err != nil {
+			fmt.Fprintf(os.Stderr, "nullbot: set AUDIT_LOG: %v\n", err)
+			os.Exit(1)
+		}
 
 		if err := runMission(cfg, defaultMission); err != nil {
 			fmt.Fprintf(os.Stderr, "nullbot: %s\n", err)

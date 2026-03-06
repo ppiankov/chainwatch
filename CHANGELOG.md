@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-03-07
+
+### Added
+
+**ClickHouse SRE Pipeline (Phase 13)**
+
+- Observation-to-WO template engine: maps findings to actionable work orders via YAML template registry (WO-080)
+- Cluster-aware ClickHouse runbook: `cluster: true` steps for system.clusters, DDL queue, cross-shard replication (WO-081)
+- `terraform-planner` profile: allows plan/init/validate, hard-blocks apply/destroy and `--auto-approve` (WO-082)
+- `--format wo` flag for nullbot observe: outputs tokencontrol-compatible JSON for automated dispatch (WO-083)
+- Centralized inventory system: YAML-based multi-cluster topology with env var overrides (WO-087)
+- Terraform ClickHouse templates: 6 embedded `.tf.tmpl` files for TTL, grants, roles, quotas, databases, users (WO-088)
+- Finding deduplication: SHA256 content-based dedup with configurable window, reopen on recurrence (WO-090)
+- Plan output capture integrated into orchestrator workflow (WO-092)
+- WO lifecycle tracking: SQLite state machine (finding → wo → dispatched → pr_open → pr_merged → applied → verified) with `orchestrator` CLI (WO-093)
+- Slack notification channel: severity-based routing with stale PR detection (WO-096)
+
+### Fixed
+
+- `RunMulti` now forwards all inventory metadata fields (ClusterName, Host, SSHUser, Port, ConfigRepo, ConfigPath) to sub-configs
+
 ## [1.3.1] - 2026-03-06
 
 ### Added

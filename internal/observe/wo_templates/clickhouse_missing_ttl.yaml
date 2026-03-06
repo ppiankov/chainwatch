@@ -1,0 +1,21 @@
+name: clickhouse_missing_ttl
+runbooks:
+  - clickhouse
+finding_types:
+  - clickhouse_missing_ttl
+  - config_modified
+triggers:
+  - missing ttl
+  - without ttl
+  - ttl policy
+severity: high
+remediation_type: terraform
+title: "Add ClickHouse TTL policy on {{.Scope}}"
+description: |
+  Finding: {{.Detail}}
+  Add deterministic retention with a table TTL policy so storage growth stays bounded.
+terraform_finding_type: clickhouse_missing_ttl
+terraform_context:
+  RetentionDays: 30
+  Engine: MergeTree()
+  TTLColumn: event_time

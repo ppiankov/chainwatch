@@ -1,0 +1,9 @@
+resource "clickhouse_table" "{{.ResourceName}}" {
+  database = "{{.Database}}"
+  name     = "{{.TableName}}"
+  engine   = "{{.Engine}}"
+
+  ttl {
+    expression = "{{.TTLColumn}} + INTERVAL {{.RetentionDays}} DAY"
+  }
+}

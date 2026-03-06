@@ -20,12 +20,19 @@ const inspectProfile = "clawbot"
 
 // RunnerConfig holds parameters for an investigation run.
 type RunnerConfig struct {
-	Scope      string            // target directory, e.g. "/var/www/site"
-	Type       string            // runbook type: "wordpress", "linux"
-	Types      []string          // multiple runbook types for multi-runbook runs
-	Chainwatch string            // path to chainwatch binary
-	AuditLog   string            // path to audit log
-	Params     map[string]string // optional query parameters (e.g., QUERY, DATE)
+	Scope       string            // target directory, e.g. "/var/www/site"
+	Type        string            // runbook type: "wordpress", "linux"
+	Types       []string          // multiple runbook types for multi-runbook runs
+	Cluster     bool              // true enables cluster-only runbook steps
+	ClusterName string            // optional cluster label for inventory-backed runs
+	Host        string            // optional host label for inventory-backed runs
+	ConfigRepo  string            // optional resolved config repository path
+	ConfigPath  string            // optional config path under config repository
+	SSHUser     string            // optional SSH user (for runbook templating)
+	Port        int               // optional ClickHouse port (for runbook templating)
+	Chainwatch  string            // path to chainwatch binary
+	AuditLog    string            // path to audit log
+	Params      map[string]string // optional query parameters (e.g., QUERY, DATE)
 }
 
 // StepResult captures the output of a single investigation command.
@@ -35,6 +42,8 @@ type StepResult struct {
 	Output   string        `json:"output"`
 	ExitCode int           `json:"exit_code"`
 	Blocked  bool          `json:"blocked"`
+	Cluster  string        `json:"cluster,omitempty"`
+	Host     string        `json:"host,omitempty"`
 	Duration time.Duration `json:"duration_ms"`
 }
 
@@ -64,10 +73,37 @@ func Run(cfg RunnerConfig, rb *Runbook) (*RunResult, error) {
 		StartAt: time.Now().UTC(),
 	}
 
+	params := make(map[string]string, len(cfg.Params)+6)
+	for key, value := range cfg.Params {
+		params[key] = value
+	}
+	if cfg.ClusterName != "" {
+		params["CLUSTER"] = cfg.ClusterName
+	}
+	if cfg.Host != "" {
+		params["HOST"] = cfg.Host
+	}
+	if cfg.SSHUser != "" {
+		params["SSH_USER"] = cfg.SSHUser
+	}
+	if cfg.Port > 0 {
+		params["CLICKHOUSE_PORT"] = fmt.Sprintf("%d", cfg.Port)
+	}
+	if cfg.ConfigRepo != "" {
+		params["CONFIG_REPO"] = cfg.ConfigRepo
+	}
+	if cfg.ConfigPath != "" {
+		params["CONFIG_PATH"] = cfg.ConfigPath
+	}
+
 	for _, step := range rb.Steps {
+		if step.Cluster && !cfg.Cluster {
+			continue
+		}
+
 		// Expand placeholders in commands.
 		cmd := strings.ReplaceAll(step.Command, "{{SCOPE}}", cfg.Scope)
-		for k, v := range cfg.Params {
+		for k, v := range params {
 			cmd = strings.ReplaceAll(cmd, "{{"+k+"}}", v)
 		}
 
@@ -100,11 +136,18 @@ func RunMulti(cfg RunnerConfig, types []string) (*RunResult, error) {
 		rb := GetRunbook(rbType)
 
 		partial, err := Run(RunnerConfig{
-			Scope:      cfg.Scope,
-			Type:       rbType,
-			Chainwatch: cfg.Chainwatch,
-			AuditLog:   cfg.AuditLog,
-			Params:     cfg.Params,
+			Scope:       cfg.Scope,
+			Type:        rbType,
+			Cluster:     cfg.Cluster,
+			ClusterName: cfg.ClusterName,
+			Host:        cfg.Host,
+			SSHUser:     cfg.SSHUser,
+			Port:        cfg.Port,
+			ConfigRepo:  cfg.ConfigRepo,
+			ConfigPath:  cfg.ConfigPath,
+			Chainwatch:  cfg.Chainwatch,
+			AuditLog:    cfg.AuditLog,
+			Params:      cfg.Params,
 		}, rb)
 		if err != nil {
 			result.Steps = append(result.Steps, StepResult{
@@ -137,6 +180,8 @@ func execStep(cfg RunnerConfig, command, purpose string) StepResult {
 		Command:  command,
 		Purpose:  purpose,
 		Output:   strings.TrimSpace(string(out)),
+		Cluster:  cfg.ClusterName,
+		Host:     cfg.Host,
 		Duration: time.Since(start),
 	}
 

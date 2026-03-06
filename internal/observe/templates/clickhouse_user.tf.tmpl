@@ -1,0 +1,5 @@
+resource "clickhouse_user" "{{.ResourceName}}" {
+  name     = "{{.UserName}}"
+  password = "{{.Password}}"
+  roles    = [{{- range $i, $role := .Roles}}{{if $i}}, {{end}}"{{$role}}"{{- end}}]
+}

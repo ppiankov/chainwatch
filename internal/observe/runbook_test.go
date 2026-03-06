@@ -235,6 +235,7 @@ steps:
     purpose: "say hello"
   - command: "ls {{SCOPE}}"
     purpose: "list scope"
+    cluster: true
 `
 	rb, err := ParseRunbook([]byte(yaml))
 	if err != nil {
@@ -251,6 +252,12 @@ steps:
 	}
 	if len(rb.Steps) != 2 {
 		t.Errorf("steps = %d, want 2", len(rb.Steps))
+	}
+	if rb.Steps[0].Cluster {
+		t.Error("step 0 cluster = true, want false")
+	}
+	if !rb.Steps[1].Cluster {
+		t.Error("step 1 cluster = false, want true")
 	}
 }
 
@@ -403,6 +410,47 @@ func TestClickHouseSensitivityLocal(t *testing.T) {
 	rb := GetRunbook("clickhouse")
 	if rb.Sensitivity != "local" {
 		t.Errorf("clickhouse sensitivity = %q, want \"local\"", rb.Sensitivity)
+	}
+}
+
+func TestClickHouseClusterAwareSteps(t *testing.T) {
+	rb := GetRunbook("clickhouse")
+
+	requiredQueries := []string{
+		"system.clusters",
+		"system.distributed_ddl_queue",
+		"replication_queue",
+		"countIf(active) AS active_parts",
+	}
+	for _, query := range requiredQueries {
+		found := false
+		for _, step := range rb.Steps {
+			if strings.Contains(step.Command, query) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("clickhouse runbook missing required cluster-aware query fragment: %q", query)
+		}
+	}
+
+	clusterSteps := 0
+	for _, step := range rb.Steps {
+		if !step.Cluster {
+			continue
+		}
+		clusterSteps++
+		if !strings.Contains(step.Command, "system.clusters") &&
+			!strings.Contains(step.Command, "system.distributed_ddl_queue") &&
+			!strings.Contains(step.Command, "system.replication_queue") &&
+			!strings.Contains(step.Command, "clusterAllReplicas") {
+			t.Errorf("cluster step does not look cluster-specific: %q", step.Purpose)
+		}
+	}
+
+	if clusterSteps < 4 {
+		t.Errorf("clickhouse runbook has %d cluster-only steps, want at least 4", clusterSteps)
 	}
 }
 

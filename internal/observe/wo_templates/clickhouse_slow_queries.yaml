@@ -1,0 +1,17 @@
+name: clickhouse_slow_queries
+runbooks:
+  - clickhouse
+finding_types:
+  - clickhouse_slow_queries
+  - process_anomaly
+triggers:
+  - slow quer
+  - long-running query
+  - query_duration
+  - elapsed
+severity: medium
+remediation_type: config
+title: "Optimize ClickHouse slow queries on {{.Scope}}"
+description: |
+  Finding: {{.Detail}}
+  Identify expensive query patterns and tune schema/indexing or query shape to reduce latency.

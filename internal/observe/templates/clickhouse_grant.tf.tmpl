@@ -1,0 +1,6 @@
+resource "clickhouse_grant" "{{.ResourceName}}" {
+  role       = "{{.RoleName}}"
+  database   = "{{.Database}}"
+  table      = "{{.TableName}}"
+  privileges = [{{- range $i, $priv := .Privileges}}{{if $i}}, {{end}}"{{$priv}}"{{- end}}]
+}

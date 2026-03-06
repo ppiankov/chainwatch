@@ -24,6 +24,7 @@ type Runbook struct {
 type Step struct {
 	Command string `yaml:"command"`
 	Purpose string `yaml:"purpose"`
+	Cluster bool   `yaml:"cluster,omitempty"` // true: run only when cluster mode is enabled
 }
 
 // destructivePrefixes are command prefixes that runbook steps must not start with.

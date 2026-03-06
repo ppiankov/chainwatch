@@ -26,14 +26,18 @@ var sreInfraYAML []byte
 //go:embed profiles/finops.yaml
 var finopsYAML []byte
 
+//go:embed profiles/terraform-planner.yaml
+var terraformPlannerYAML []byte
+
 // builtinProfiles maps profile names to their embedded YAML content.
 var builtinProfiles = map[string][]byte{
-	"clawbot":          clawbotYAML,
-	"coding-agent":     codingAgentYAML,
-	"research-agent":   researchAgentYAML,
-	"customer-support": customerSupportYAML,
-	"data-analyst":     dataAnalystYAML,
-	"vm-cloud":         vmCloudYAML,
-	"sre-infra":        sreInfraYAML,
-	"finops":           finopsYAML,
+	"clawbot":           clawbotYAML,
+	"coding-agent":      codingAgentYAML,
+	"research-agent":    researchAgentYAML,
+	"customer-support":  customerSupportYAML,
+	"data-analyst":      dataAnalystYAML,
+	"vm-cloud":          vmCloudYAML,
+	"sre-infra":         sreInfraYAML,
+	"finops":            finopsYAML,
+	"terraform-planner": terraformPlannerYAML,
 }

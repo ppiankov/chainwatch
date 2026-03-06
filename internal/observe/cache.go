@@ -280,6 +280,15 @@ func ensureSchema(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_cached_at ON observations(cached_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS finding_hashes (
+			hash TEXT PRIMARY KEY,
+			first_seen INTEGER NOT NULL,
+			last_seen INTEGER NOT NULL,
+			wo_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'open'
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_hashes_status ON finding_hashes(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_hashes_last_seen ON finding_hashes(last_seen DESC)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
 			evidence,
 			content='observations',

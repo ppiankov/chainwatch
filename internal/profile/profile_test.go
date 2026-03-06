@@ -6,6 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ppiankov/chainwatch/internal/denylist"
+	"github.com/ppiankov/chainwatch/internal/model"
 	"github.com/ppiankov/chainwatch/internal/policy"
 )
 
@@ -287,7 +288,17 @@ func TestValidateProfileBadRegex(t *testing.T) {
 }
 
 func TestAllBuiltinProfilesLoad(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud", "sre-infra", "finops"}
+	names := []string{
+		"clawbot",
+		"coding-agent",
+		"research-agent",
+		"customer-support",
+		"data-analyst",
+		"vm-cloud",
+		"sre-infra",
+		"finops",
+		"terraform-planner",
+	}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -301,7 +312,17 @@ func TestAllBuiltinProfilesLoad(t *testing.T) {
 }
 
 func TestAllBuiltinProfilesValidate(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud", "sre-infra", "finops"}
+	names := []string{
+		"clawbot",
+		"coding-agent",
+		"research-agent",
+		"customer-support",
+		"data-analyst",
+		"vm-cloud",
+		"sre-infra",
+		"finops",
+		"terraform-planner",
+	}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -316,7 +337,17 @@ func TestAllBuiltinProfilesValidate(t *testing.T) {
 
 func TestProfileListIncludesAllBuiltins(t *testing.T) {
 	names := List()
-	expected := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud"}
+	expected := []string{
+		"clawbot",
+		"coding-agent",
+		"research-agent",
+		"customer-support",
+		"data-analyst",
+		"vm-cloud",
+		"sre-infra",
+		"finops",
+		"terraform-planner",
+	}
 	for _, exp := range expected {
 		found := false
 		for _, n := range names {
@@ -368,7 +399,17 @@ func TestInitProfileReturnsValidYAML(t *testing.T) {
 }
 
 func TestAllProfilesHaveNonEmptyBoundaries(t *testing.T) {
-	names := []string{"clawbot", "coding-agent", "research-agent", "customer-support", "data-analyst", "vm-cloud", "sre-infra", "finops"}
+	names := []string{
+		"clawbot",
+		"coding-agent",
+		"research-agent",
+		"customer-support",
+		"data-analyst",
+		"vm-cloud",
+		"sre-infra",
+		"finops",
+		"terraform-planner",
+	}
 	for _, name := range names {
 		p, err := Load(name)
 		if err != nil {
@@ -594,6 +635,126 @@ func TestFinOpsBlocksWriteAuthority(t *testing.T) {
 		matched, _ := MatchesAuthority(p, instruction)
 		if !matched {
 			t.Errorf("expected finops to block %q via authority boundaries", instruction)
+		}
+	}
+}
+
+// --- Terraform planner profile (WO-082 support) ---
+
+func TestTerraformPlannerBlocksMutationCommands(t *testing.T) {
+	p, err := Load("terraform-planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"terraform apply tfplan",
+		"terraform destroy",
+		"terraform import clickhouse_table.events analytics.events",
+		"terraform apply -auto-approve",
+		"terraform plan -out=tfplan -auto-approve",
+		"terraform plan -out=tfplan --auto-approve",
+		"kubectl apply -f deploy.yaml",
+		"kubectl delete pod clickhouse-0",
+	} {
+		blocked, _ := dl.IsBlocked(cmd, "command")
+		if !blocked {
+			t.Errorf("expected %q to be blocked by terraform-planner", cmd)
+		}
+	}
+}
+
+func TestTerraformPlannerAllowsPlanningCommands(t *testing.T) {
+	p, err := Load("terraform-planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+
+	for _, cmd := range []string{
+		"terraform init",
+		"terraform plan -out=tfplan",
+		"terraform show -no-color tfplan",
+		"terraform validate",
+		"terraform fmt",
+		"git commit -m \"wo-082 planner output\"",
+		"gh pr create --title \"WO-CH-001\" --body \"plan attached\"",
+		"git push origin wo-ch-001",
+	} {
+		blocked, reason := dl.IsBlocked(cmd, "command")
+		if blocked {
+			t.Errorf("expected %q to be allowed by terraform-planner, blocked: %s", cmd, reason)
+		}
+	}
+}
+
+func TestTerraformPlannerBlocksApplyAuthority(t *testing.T) {
+	p, err := Load("terraform-planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	matched, _ := MatchesAuthority(p, "run terraform apply after opening the PR")
+	if !matched {
+		t.Error("expected terraform-planner to block terraform apply instructions")
+	}
+}
+
+func TestTerraformPlannerAllowsPlanCommandsInPolicy(t *testing.T) {
+	p, err := Load("terraform-planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+	cfg := ApplyToPolicy(p, policy.DefaultConfig())
+
+	for _, cmd := range []string{
+		"terraform plan -out=tfplan",
+		"gh pr create --title \"WO-082\" --body \"plan\"",
+	} {
+		action := &model.Action{
+			Tool:      "command",
+			Resource:  cmd,
+			Operation: "execute",
+		}
+		result := policy.Evaluate(action, model.NewTraceState("wo-082-allow"), "general", "", dl, cfg)
+		if result.Decision != model.Allow {
+			t.Fatalf("expected %q to be allow, got %s (%s)", cmd, result.Decision, result.Reason)
+		}
+	}
+}
+
+func TestTerraformPlannerDeniesApplyInPolicy(t *testing.T) {
+	p, err := Load("terraform-planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dl := denylist.NewDefault()
+	ApplyToDenylist(p, dl)
+	cfg := ApplyToPolicy(p, policy.DefaultConfig())
+
+	for _, cmd := range []string{
+		"terraform apply",
+		"terraform destroy",
+		"terraform plan -auto-approve",
+		"terraform plan --auto-approve",
+	} {
+		action := &model.Action{
+			Tool:      "command",
+			Resource:  cmd,
+			Operation: "execute",
+		}
+		result := policy.Evaluate(action, model.NewTraceState("wo-082-deny"), "general", "", dl, cfg)
+		if result.Decision != model.Deny {
+			t.Fatalf("expected %q to be deny, got %s (%s)", cmd, result.Decision, result.Reason)
 		}
 	}
 }

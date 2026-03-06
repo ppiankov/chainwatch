@@ -1,0 +1,75 @@
+name: terraform-planner
+description: Terraform planning profile for execution agents that must never apply
+min_tier: 2
+
+authority_boundaries:
+  - pattern: "terraform\\s+apply|terraform\\s+destroy|terraform\\s+import"
+    reason: "Terraform mutation commands are blocked for planner-only agents"
+  - pattern: "auto-approve"
+    reason: "Auto-approval is blocked for planner-only agents"
+  - pattern: "kubectl\\s+apply|kubectl\\s+delete"
+    reason: "Kubernetes mutation commands are blocked for planner-only agents"
+
+execution_boundaries:
+  urls:
+    - "*/settings/secrets*"
+    - "*/api/keys*"
+    - "*/account/delete*"
+  files:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/credentials*"
+    - "~/.ssh/*"
+    - "~/.aws/*"
+    - "**/secrets.yaml"
+    - "**/secrets.json"
+  commands:
+    - "terraform apply"
+    - "terraform destroy"
+    - "terraform import"
+    - "kubectl apply"
+    - "kubectl delete"
+    - "-auto-approve"
+
+policy:
+  rules:
+    - purpose: "*"
+      resource_pattern: "*secret*"
+      decision: deny
+      reason: "secret access blocked by terraform-planner profile"
+    - purpose: "*"
+      resource_pattern: "*credentials*"
+      decision: deny
+      reason: "credential access blocked by terraform-planner profile"
+    - purpose: "*"
+      resource_pattern: "*terraform init*"
+      decision: allow
+      reason: "terraform init allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*terraform plan*"
+      decision: allow
+      reason: "terraform plan allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*terraform validate*"
+      decision: allow
+      reason: "terraform validate allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*terraform fmt*"
+      decision: allow
+      reason: "terraform fmt allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*terraform show*"
+      decision: allow
+      reason: "terraform show allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*git commit*"
+      decision: allow
+      reason: "git commit allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*git push*"
+      decision: allow
+      reason: "git push allowed for planner-only workflow"
+    - purpose: "*"
+      resource_pattern: "*gh pr create*"
+      decision: allow
+      reason: "gh pr create allowed for planner-only workflow"

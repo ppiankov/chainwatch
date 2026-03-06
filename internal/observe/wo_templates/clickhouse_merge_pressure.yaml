@@ -1,0 +1,17 @@
+name: clickhouse_merge_pressure
+runbooks:
+  - clickhouse
+finding_types:
+  - clickhouse_merge_pressure
+  - process_anomaly
+triggers:
+  - merge pressure
+  - too many parts
+  - active merges
+  - merge backlog
+severity: medium
+remediation_type: config
+title: "Reduce ClickHouse merge pressure on {{.Scope}}"
+description: |
+  Finding: {{.Detail}}
+  Investigate part backlog and adjust merge-related settings to restore stable compaction.

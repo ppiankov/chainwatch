@@ -7,6 +7,21 @@ steps:
     purpose: "check ClickHouse version and connectivity"
   - command: "clickhouse-client --query 'SELECT database, table, formatReadableSize(sum(bytes_on_disk)) as size, sum(rows) as total_rows FROM system.parts WHERE active GROUP BY database, table ORDER BY sum(bytes_on_disk) DESC LIMIT 20' 2>/dev/null || echo 'cannot query parts'"
     purpose: "top tables by disk usage"
+  - command: "clickhouse-client --query 'SELECT cluster, shard_num, replica_num, host_name, host_address, port, is_local FROM system.clusters ORDER BY cluster, shard_num, replica_num' 2>/dev/null || echo 'cluster topology not available'"
+    purpose: "cluster topology by shard and replica"
+    cluster: true
+  - command: "clickhouse-client --query 'SELECT * FROM system.distributed_ddl_queue LIMIT 20' 2>/dev/null || echo 'distributed DDL queue not available'"
+    purpose: "check pending distributed DDL operations"
+    cluster: true
+  - command: "clickhouse-client --query 'SELECT DISTINCT cluster FROM system.clusters' 2>/dev/null | while read -r cluster; do [ -z \"$cluster\" ] && continue; echo \"cluster=$cluster\"; clickhouse-client --query \"SELECT hostName() AS replica, count() AS queue_depth FROM clusterAllReplicas('$cluster', system, replication_queue) GROUP BY replica ORDER BY queue_depth DESC LIMIT 20\" 2>/dev/null || echo \"cannot query replication queue for $cluster\"; done || echo 'replication queue not available'"
+    purpose: "per-replica replication queue depth across cluster"
+    cluster: true
+  - command: "clickhouse-client --query 'SELECT DISTINCT cluster FROM system.clusters' 2>/dev/null | while read -r cluster; do [ -z \"$cluster\" ] && continue; echo \"cluster=$cluster\"; clickhouse-client --query \"SELECT shardNum() AS shard_num, countIf(active) AS active_parts FROM clusterAllReplicas('$cluster', system, parts) GROUP BY shard_num ORDER BY shard_num\" 2>/dev/null || echo \"cannot compare shard parts for $cluster\"; done || echo 'cross-shard part comparison not available'"
+    purpose: "compare active part counts across shards"
+    cluster: true
+  - command: "clickhouse-client --query 'SELECT DISTINCT cluster FROM system.clusters' 2>/dev/null | while read -r cluster; do [ -z \"$cluster\" ] && continue; echo \"cluster=$cluster\"; clickhouse-client --query \"SELECT shardNum() AS shard_num, formatReadableSize(sum(bytes_on_disk)) AS shard_disk_usage FROM clusterAllReplicas('$cluster', system, parts) WHERE active GROUP BY shard_num ORDER BY shard_num\" 2>/dev/null || echo \"cannot aggregate disk usage for $cluster\"; done || echo 'cluster-wide disk usage not available'"
+    purpose: "aggregate active part disk usage across shards"
+    cluster: true
   - command: "clickhouse-client --query 'SELECT * FROM system.replicas WHERE active_replicas < total_replicas' 2>/dev/null | head -20 || echo 'replica status not available'"
     purpose: "check replication health and lagging replicas"
   - command: "clickhouse-client --query 'SELECT query_id, user, elapsed, read_rows, memory_usage, substring(query, 1, 120) as query_preview FROM system.processes ORDER BY elapsed DESC LIMIT 10' 2>/dev/null || echo 'cannot list running queries'"

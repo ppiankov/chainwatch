@@ -136,6 +136,141 @@ func TestRunnerConfigTypesField(t *testing.T) {
 	}
 }
 
+func TestRunSkipsClusterOnlySteps(t *testing.T) {
+	rb := &Runbook{
+		Name: "cluster-gated",
+		Type: "test",
+		Steps: []Step{
+			{Command: "echo base", Purpose: "base step"},
+			{Command: "echo cluster", Purpose: "cluster step", Cluster: true},
+		},
+	}
+
+	result, err := Run(RunnerConfig{
+		Scope:      "/tmp/test",
+		Chainwatch: "/nonexistent/chainwatch",
+		AuditLog:   "/tmp/test-cluster-skip.jsonl",
+	}, rb)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if len(result.Steps) != 1 {
+		t.Fatalf("expected 1 executed step when cluster mode is disabled, got %d", len(result.Steps))
+	}
+	if result.Steps[0].Purpose != "base step" {
+		t.Fatalf("expected base step to run, got %q", result.Steps[0].Purpose)
+	}
+}
+
+func TestRunIncludesClusterOnlyStepsWhenEnabled(t *testing.T) {
+	rb := &Runbook{
+		Name: "cluster-enabled",
+		Type: "test",
+		Steps: []Step{
+			{Command: "echo base", Purpose: "base step"},
+			{Command: "echo cluster", Purpose: "cluster step", Cluster: true},
+		},
+	}
+
+	result, err := Run(RunnerConfig{
+		Scope:      "/tmp/test",
+		Cluster:    true,
+		Chainwatch: "/nonexistent/chainwatch",
+		AuditLog:   "/tmp/test-cluster-enable.jsonl",
+	}, rb)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if len(result.Steps) != 2 {
+		t.Fatalf("expected 2 executed steps when cluster mode is enabled, got %d", len(result.Steps))
+	}
+}
+
+func TestRunMultiPropagatesClusterMode(t *testing.T) {
+	clickhouse := GetRunbook("clickhouse")
+	clusterOnly := 0
+	for _, step := range clickhouse.Steps {
+		if step.Cluster {
+			clusterOnly++
+		}
+	}
+	if clusterOnly == 0 {
+		t.Fatal("clickhouse runbook should include cluster-only steps")
+	}
+
+	baseCount := len(clickhouse.Steps) - clusterOnly
+
+	withoutCluster, err := RunMulti(RunnerConfig{
+		Scope:      "/tmp/test",
+		Chainwatch: "/nonexistent/chainwatch",
+		AuditLog:   "/tmp/test-cluster-multi-off.jsonl",
+	}, []string{"clickhouse"})
+	if err != nil {
+		t.Fatalf("RunMulti without cluster mode returned error: %v", err)
+	}
+	if len(withoutCluster.Steps) != baseCount {
+		t.Fatalf("expected %d steps without cluster mode, got %d", baseCount, len(withoutCluster.Steps))
+	}
+
+	withCluster, err := RunMulti(RunnerConfig{
+		Scope:      "/tmp/test",
+		Cluster:    true,
+		Chainwatch: "/nonexistent/chainwatch",
+		AuditLog:   "/tmp/test-cluster-multi-on.jsonl",
+	}, []string{"clickhouse"})
+	if err != nil {
+		t.Fatalf("RunMulti with cluster mode returned error: %v", err)
+	}
+	if len(withCluster.Steps) != len(clickhouse.Steps) {
+		t.Fatalf("expected %d steps with cluster mode, got %d", len(clickhouse.Steps), len(withCluster.Steps))
+	}
+}
+
+func TestRunExpandsInventoryParamsAndMetadata(t *testing.T) {
+	rb := &Runbook{
+		Name: "inventory",
+		Type: "inventory",
+		Steps: []Step{
+			{
+				Command: "echo {{SCOPE}} {{CLUSTER}} {{HOST}} {{SSH_USER}} {{CLICKHOUSE_PORT}} {{CONFIG_REPO}} {{CONFIG_PATH}}",
+				Purpose: "expand inventory placeholders",
+			},
+		},
+	}
+
+	result, err := Run(RunnerConfig{
+		Scope:       "/var/lib/clickhouse",
+		ClusterName: "dev-analytics",
+		Host:        "ch-dev-01",
+		SSHUser:     "nullbot",
+		Port:        9000,
+		ConfigRepo:  "/tmp/infra/analytics",
+		ConfigPath:  "/tmp/infra/analytics/config/users.d",
+		Chainwatch:  "/nonexistent/chainwatch",
+		AuditLog:    "/tmp/test-inventory-params.jsonl",
+	}, rb)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if len(result.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(result.Steps))
+	}
+
+	expectedCmd := "echo /var/lib/clickhouse dev-analytics ch-dev-01 nullbot 9000 /tmp/infra/analytics /tmp/infra/analytics/config/users.d"
+	if result.Steps[0].Command != expectedCmd {
+		t.Fatalf("expanded command = %q, want %q", result.Steps[0].Command, expectedCmd)
+	}
+	if result.Steps[0].Cluster != "dev-analytics" {
+		t.Fatalf("step cluster = %q, want dev-analytics", result.Steps[0].Cluster)
+	}
+	if result.Steps[0].Host != "ch-dev-01" {
+		t.Fatalf("step host = %q, want ch-dev-01", result.Steps[0].Host)
+	}
+}
+
 func TestManualObservation(t *testing.T) {
 	obs := ManualObservation(wo.SuspiciousCode, wo.SeverityHigh, "eval(base64_decode in header.php")
 	if obs.Type != wo.SuspiciousCode {
