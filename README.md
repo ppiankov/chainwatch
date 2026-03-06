@@ -166,7 +166,7 @@ Agent ──► chainwatch ──► Tool
 
 **Policy tools:** `policy diff`, `policy simulate`, `policy gate`, `certify`
 
-**Setup:** `init`, `doctor`, `recommend`, `init-denylist`, `init-policy`, `version`
+**Setup:** `init`, `doctor`, `recommend`, `init-denylist`, `init-policy`, `generate-apparmor`, `generate-selinux`, `version`
 
 ## Policy Configuration
 

@@ -145,3 +145,45 @@ Built-in agent profiles configure appropriate denylist and policy defaults:
 | `data-pipeline` | ETL/data processing |
 
 Usage: `chainwatch exec --profile clawbot -- <cmd>`
+
+## OS MAC Profiles (AppArmor / SELinux)
+
+Generate OS-native policy from chainwatch denylist semantics (default denylist + profile boundaries):
+
+```bash
+chainwatch generate-apparmor --profile coding-agent -o ./coding-agent.apparmor
+chainwatch generate-selinux --profile coding-agent -o ./coding-agent.te
+```
+
+### AppArmor
+
+Load or replace the generated profile:
+
+```bash
+sudo apparmor_parser -r ./coding-agent.apparmor
+```
+
+Optional: enforce immediately by launching the target process with this profile:
+
+```bash
+sudo aa-exec -p chainwatch-coding-agent -- /usr/local/bin/your-agent
+```
+
+### SELinux
+
+Compile, package, and install the generated type enforcement module:
+
+```bash
+checkmodule -M -m -o ./coding-agent.mod ./coding-agent.te
+semodule_package -o ./coding-agent.pp -m ./coding-agent.mod
+sudo semodule -i ./coding-agent.pp
+```
+
+The generated `.te` file includes `semanage fcontext` examples. Apply the labels and relabel paths:
+
+```bash
+sudo semanage fcontext -a -t chainwatch_coding_agent_blocked_file_t '/path/regex'
+sudo restorecon -Rv /path
+```
+
+Then run the agent in the generated SELinux domain (via your distro's domain transition policy or service unit labels).
