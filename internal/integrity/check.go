@@ -181,6 +181,9 @@ func dispatchTamperAlert(event TamperEvent) {
 
 	alertEvent := alertEventFromTamper(event)
 	for _, cfg := range configs {
+		if cfg.Channel != "" && !strings.EqualFold(cfg.Channel, "webhook") {
+			continue
+		}
 		for _, e := range cfg.Events {
 			if e == "binary_tamper" || e == "deny" {
 				// Synchronous — we're about to exit anyway
@@ -193,6 +196,7 @@ func dispatchTamperAlert(event TamperEvent) {
 
 // alertConfig is a minimal struct for parsing just the alerts section.
 type alertConfig struct {
+	Channel string            `yaml:"channel"`
 	URL     string            `yaml:"url"`
 	Format  string            `yaml:"format"`
 	Events  []string          `yaml:"events"`

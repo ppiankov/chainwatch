@@ -270,18 +270,29 @@ rules:
     reason: "access to salary data is not allowed for SOC efficiency tasks without approval"
     approval_key: soc_salary_access
 
-# Alert webhooks — fire HTTP notifications on specific decisions.
-# Format: "generic" (raw JSON), "slack" (Block Kit), "pagerduty" (Events API v2).
-# Events: list of decision types to trigger on.
+# Alert channels — fire notifications on specific decisions.
+# channel: webhook (default), telegram, email.
+# Optional env filter: NULLBOT_ALERT_CHANNELS=webhook,telegram
 # alerts:
-#   - url: https://hooks.slack.com/services/XXX
+#   - channel: webhook
+#     url: https://hooks.slack.com/services/XXX
 #     format: slack
 #     events: [deny, require_approval, break_glass_used]
-#   - url: https://events.pagerduty.com/v2/enqueue
-#     format: pagerduty
+#   - channel: telegram
+#     events: [deny, break_glass_used]
+#     telegram:
+#       bot_token: 123456:ABCDEF
+#       chat_id: "-1001234567890"
+#       api_url: https://api.telegram.org
+#   - channel: email
 #     events: [deny]
-#     headers:
-#       routing_key: YOUR_ROUTING_KEY
+#     email:
+#       smtp_host: smtp.example.com
+#       smtp_port: 587
+#       username: alerts
+#       password: CHANGE_ME
+#       from: chainwatch@example.com
+#       to: [ops@example.com]
 
 # Agent identity — scope enforcement per registered agent.
 # When agent_id is passed to Evaluate, the agent must be registered here.

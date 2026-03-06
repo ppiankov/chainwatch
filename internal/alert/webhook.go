@@ -2,17 +2,10 @@ package alert
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
-
-	"github.com/ppiankov/chainwatch/internal/redact"
-)
-
-const (
-	requestTimeout = 5 * time.Second
-	maxRetries     = 3
 )
 
 var httpClient = &http.Client{Timeout: requestTimeout}
@@ -20,26 +13,37 @@ var httpClient = &http.Client{Timeout: requestTimeout}
 // shouldRedactWebhook returns true when the webhook URL points to a
 // remote (non-localhost) endpoint. Mirrors redact.ResolveMode logic.
 func shouldRedactWebhook(url string) bool {
-	lower := strings.ToLower(url)
-	return !strings.Contains(lower, "localhost") && !strings.Contains(lower, "127.0.0.1")
+	return shouldRedactEndpoint(url)
 }
 
 // redactEvent strips sensitive values from Resource and Reason fields.
 // Uses a throwaway TokenMap — webhook payloads are one-way, no detoken needed.
 func redactEvent(event AlertEvent) AlertEvent {
-	tm := redact.NewTokenMap("webhook")
-	event.Resource = redact.Redact(event.Resource, tm)
-	event.Reason = redact.Redact(event.Reason, tm)
-	return event
+	return redactEventForChannel(event, channelWebhook)
+}
+
+// WebhookAlerter sends alert events to HTTP webhook endpoints.
+type WebhookAlerter struct {
+	cfg AlertConfig
+}
+
+// NewWebhookAlerter returns a webhook alerter for a single alert config.
+func NewWebhookAlerter(cfg AlertConfig) *WebhookAlerter {
+	return &WebhookAlerter{cfg: cfg}
+}
+
+// Name returns the transport name.
+func (a *WebhookAlerter) Name() string {
+	return channelWebhook
 }
 
 // Send posts an alert event to a webhook endpoint with retry on 5xx.
-func Send(cfg AlertConfig, event AlertEvent) error {
-	if shouldRedactWebhook(cfg.URL) {
+func (a *WebhookAlerter) Send(ctx context.Context, event AlertEvent) error {
+	if shouldRedactWebhook(a.cfg.URL) {
 		event = redactEvent(event)
 	}
 
-	body, err := FormatPayload(cfg.Format, event)
+	body, err := FormatPayload(a.cfg.Format, event)
 	if err != nil {
 		return fmt.Errorf("format payload: %w", err)
 	}
@@ -47,15 +51,19 @@ func Send(cfg AlertConfig, event AlertEvent) error {
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(time.Duration(attempt) * time.Second)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
 		}
 
-		req, err := http.NewRequest(http.MethodPost, cfg.URL, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.cfg.URL, bytes.NewReader(body))
 		if err != nil {
 			return fmt.Errorf("create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		for k, v := range cfg.Headers {
+		for k, v := range a.cfg.Headers {
 			req.Header.Set(k, v)
 		}
 
@@ -64,7 +72,7 @@ func Send(cfg AlertConfig, event AlertEvent) error {
 			lastErr = err
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return nil
@@ -76,5 +84,14 @@ func Send(cfg AlertConfig, event AlertEvent) error {
 		lastErr = fmt.Errorf("webhook server error: HTTP %d", resp.StatusCode)
 	}
 
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no webhook attempts completed")
+	}
 	return fmt.Errorf("webhook failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// Send posts an alert event to a webhook endpoint with retry on 5xx.
+// Backward-compatible helper for existing callers/tests.
+func Send(cfg AlertConfig, event AlertEvent) error {
+	return NewWebhookAlerter(cfg).Send(context.Background(), event)
 }

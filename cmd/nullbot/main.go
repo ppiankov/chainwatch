@@ -76,6 +76,7 @@ type config struct {
 	profile       string
 	maxSteps      int
 	dryRun        bool
+	alertChannels []string
 	redactMode    redact.Mode
 	redactCfg     *redact.RedactConfig
 	extraPatterns []redact.ExtraPattern
@@ -132,6 +133,9 @@ func generateEnvFile(profileName string) string {
 	b.WriteString("\n# LLM provider pool (optional, round-robin distribution)\n")
 	b.WriteString("# Format: comma-separated URL|KEY|MODEL entries\n")
 	b.WriteString("# NULLBOT_LLM_POOL=http://localhost:11434/v1/chat/completions||llama3.2,https://api.groq.com/openai/v1/chat/completions|gsk_xxx|llama-3.1-8b-instant\n")
+	b.WriteString("\n# Alert channels (optional, comma-separated)\n")
+	b.WriteString("# Controls which configured policy alert channels are active.\n")
+	b.WriteString("# Example: NULLBOT_ALERT_CHANNELS=webhook,telegram,email\n")
 	return b.String()
 }
 
@@ -226,6 +230,10 @@ func resolveConfig(flagURL, flagModel, flagProfile string, flagMaxSteps int, fla
 		}
 	}
 
+	// Resolve alert channel filter (optional, comma-separated names).
+	// Channels are consumed by the internal alert dispatcher setup.
+	cfg.alertChannels = parseCSVList(os.Getenv("NULLBOT_ALERT_CHANNELS"))
+
 	// Load operator redaction config (optional).
 	rcfg, err := redact.LoadConfig("")
 	if err != nil {
@@ -259,6 +267,18 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+func parseCSVList(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 // newLLMClient creates a neurorouter client from nullbot config.
