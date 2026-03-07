@@ -1,6 +1,6 @@
 # Agentic Runtime Control Plane
 
-*Protocol specification for governed agent execution. v0.1 — 2026-03-07.*
+*Protocol specification for governed agent execution. v0.2 — 2026-03-07.*
 
 ---
 
@@ -28,6 +28,10 @@ This document defines the contract between components in an agentic execution pi
 
 6. **Production safety must never depend on the intelligence of the actor.** It must depend on the structure of the system.
 
+7. **Artifacts are immutable once emitted.** New information produces a new artifact referencing the previous one. Editing a vector after a WO is derived from it does not change the WO — it creates a new vector and a new WO.
+
+8. **Integrity is hash chains and signatures, not consensus.** Each artifact includes its own content hash and the hash of its parent artifact. Signatures prove authorship. Append-only storage prevents deletion. No blockchain required — tamper evidence, not decentralization.
+
 ---
 
 ## 3. Runtime Stages
@@ -48,9 +52,54 @@ Intent → Work Order → Proposal → Approval → Execution → Verification �
 
 Each stage references the previous stage's artifact ID. No stage may skip its predecessor.
 
+### Abort States
+
+Every stage has a terminal failure state. Aborted artifacts are still emitted (with `status: aborted` and a reason) to preserve lineage.
+
+| Stage | Abort state | Trigger |
+|-------|------------|---------|
+| Intent | Vector rejected | Operator abandons or nudge protocol flags as unsafe |
+| Work Order | WO closed | Scope no longer valid, dependency changed |
+| Proposal | Proposal abandoned | Agent cannot satisfy WO requirements |
+| Approval | Approval denied | Approver rejects |
+| Execution | Execution halted | Runtime error, policy violation, hold triggered |
+| Verification | Verification failed | Build, tests, lint, or secrets scan fails |
+| Receipt | Receipt incomplete | Any upstream artifact in abort state |
+
 ---
 
 ## 4. Artifact Definitions
+
+### ID Format
+
+All artifact IDs must be globally unique across repos and systems.
+
+| Artifact | Format | Example |
+|----------|--------|---------|
+| Vector | `vp-<timestamp>-<short-hash>` | `vp-20260307-a4e9` |
+| Work Order | `wo-<repo>-<number>` | `wo-chainwatch-083` |
+| Proposal | `pr-<platform>-<number>` | `pr-gh-218` |
+| Approval | `ap-<uuid>` | `ap-c91f3e02` |
+| Execution | `ex-<uuid>` | `ex-7d441a0b` |
+| Verification | `vr-<uuid>` | `vr-902e8f1c` |
+| Receipt | `rc-<uuid>` | `rc-b3f09a77` |
+
+### Immutability
+
+Artifacts are write-once. Once emitted, an artifact cannot be modified. If the underlying information changes, a new artifact is created with a new ID and a reference to the previous one.
+
+### Integrity
+
+Every artifact carries:
+
+| Field | Description |
+|-------|-------------|
+| `content_hash` | SHA-256 of the artifact's canonical JSON representation |
+| `parent_hash` | Content hash of the previous artifact in the chain |
+| `actor_id` | Who created this artifact |
+| `signature` | Ed25519 or KMS-backed signature over `content_hash + parent_hash + actor_id` |
+
+Storage is append-only. Deletion of artifacts is a protocol violation.
 
 ### 4.1 Vector
 
@@ -111,6 +160,7 @@ The human decision to proceed.
 |-------|----------|-------------|
 | `approval_id` | yes | Unique identifier (e.g., `ap-991`) |
 | `proposal_id` | yes | What was approved |
+| `proposal_hash` | yes | Content hash of the proposal at approval time — freezes the proposal |
 | `approver` | yes | Who approved |
 | `timestamp` | yes | When |
 | `decision` | yes | `approved` / `denied` / `approved_with_conditions` |
@@ -118,6 +168,8 @@ The human decision to proceed.
 | `environment_confirmed` | yes | Approver explicitly confirmed environment |
 
 **Invariant:** Approval without `environment_confirmed = true` is invalid for production.
+
+**Invariant:** If the proposal's current content hash does not match `proposal_hash`, the approval is stale and execution must not proceed. Proposals cannot drift after approval.
 
 ### 4.5 Execution Log
 
@@ -141,11 +193,14 @@ Confirmation that the execution produced the expected result.
 |-------|----------|-------------|
 | `verification_id` | yes | Unique identifier (e.g., `vr-902`) |
 | `execution_id` | yes | What was verified |
+| `environment_id` | yes | Where verification ran — must match execution environment |
+| `verification_method` | yes | Command or process used (e.g., `make verify`) |
 | `build` | yes | Pass/fail |
 | `tests` | yes | Pass/fail with count |
 | `lint` | yes | Pass/fail with count |
 | `secrets_scan` | yes | Pass/fail |
 | `overall` | yes | `PASS` / `FAIL` |
+| `timestamp` | yes | When verification completed |
 
 ### 4.7 Lineage Receipt
 
@@ -199,6 +254,8 @@ The complete chain for one unit of work. Generated automatically from prior arti
 
 **Purpose:** Catch under-specified intent before execution.
 
+**When:** Before WO creation. Runs on every vector.
+
 ```
 operator intent → serialization → ambiguity check → pass / nudge
 ```
@@ -214,6 +271,8 @@ Action: Surface nudge questions, not block. Non-blocking by default.
 
 **Purpose:** Gate irreversible operations.
 
+**When:** Before every tool call / command execution during agent work.
+
 ```
 agent proposes action → policy evaluation → allow / deny / require-approval
 ```
@@ -227,6 +286,8 @@ Action: Hard block at irreversible boundary. No override without explicit approv
 ### 6.3 Reasoning Hygiene Loop (runtime)
 
 **Purpose:** Maintain session quality during long-running agent work.
+
+**When:** Continuously during sessions exceeding 50 turns or 30% context utilization.
 
 ```
 session state → signal measurement → noise detection → cleanup / compact / alert
@@ -244,15 +305,19 @@ Action: Automated cleanup of redundant context. Alert operator when compaction q
 
 **Purpose:** Confirm execution produced expected results.
 
+**When:** After every execution completes. Mandatory — not optional.
+
 ```
 execution output → build → test → lint → secrets scan → report
 ```
 
-Verification must run after every execution, not optionally. Failed verification blocks the lineage receipt from being marked complete.
+Failed verification blocks the lineage receipt from being marked complete.
 
 ### 6.5 Rollback Loop (on failure)
 
 **Purpose:** Ensure every change has a declared undo path.
+
+**When:** At proposal creation (declare) and after failed verification (surface).
 
 ```
 proposal → rollback strategy declared? → yes: proceed / no: ⚠ flag
@@ -340,16 +405,17 @@ Hash: [chain_hash]
 
 ## 10. Failure Modes
 
-| Failure | Definition | Detection | Prevention |
-|---------|-----------|-----------|------------|
-| **Ambiguous vector** | Intent compressed below safe execution resolution | Brevity-to-scope ratio, empty preservation | Nudge protocol, reference examples |
-| **Vector hijacking** | External content rotates agent reasoning | CDR spike, decision conflict | Input sanitization, session isolation |
-| **Missing rollback** | Change proposed with no declared undo path | Empty rollback field | Flag at approval time |
-| **Environment misidentification** | Agent targets wrong environment | Environment field mismatch | Persistent environment identity, explicit confirmation |
-| **Irreversible action without gate** | Destructive operation executes without approval | Policy evaluation miss | Deterministic policy, fail-closed enforcement |
-| **Reasoning decay** | Session quality degrades from noise accumulation | Signal ratio, decision density, cost per decision | Automated cleanup, compaction monitoring |
-| **Scope escalation** | Agent expands beyond WO scope during execution | Diff vs WO scope comparison | Scoped credentials, file-level access control |
-| **Approval fatigue** | Human rubber-stamps without reviewing | Non-standard approval packets, missing fields | Canonical packet format, required fields |
+| Failure | Definition | Detection | Prevention | Artifact involved |
+|---------|-----------|-----------|------------|-------------------|
+| **Ambiguous vector** | Intent compressed below safe execution resolution | Brevity-to-scope ratio, empty preservation | Nudge protocol, reference examples | Vector |
+| **Vector hijacking** | External content rotates agent reasoning | CDR spike, decision conflict | Input sanitization, session isolation | Vector, Execution |
+| **Missing rollback** | Change proposed with no declared undo path | Empty rollback field | Flag at approval time | Proposal, Approval |
+| **Environment misidentification** | Agent targets wrong environment | Environment field mismatch | Persistent environment identity, explicit confirmation | Proposal, Approval, Execution |
+| **Irreversible action without gate** | Destructive operation executes without approval | Policy evaluation miss | Deterministic policy, fail-closed enforcement | Execution |
+| **Reasoning decay** | Session quality degrades from noise accumulation | Signal ratio, decision density, cost per decision | Automated cleanup, compaction monitoring | Execution, Verification |
+| **Scope escalation** | Agent expands beyond WO scope during execution | Diff vs WO scope comparison | Scoped credentials, file-level access control | WO, Proposal, Execution |
+| **Approval fatigue** | Human rubber-stamps without reviewing | Non-standard approval packets, missing fields | Canonical packet format, required fields | Approval |
+| **Stale approval** | Proposal changed after approval was granted | `proposal_hash` mismatch | Hash freeze on approval | Approval, Proposal |
 
 ---
 
