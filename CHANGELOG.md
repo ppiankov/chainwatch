@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-03-07
+
+### Added
+
+- `internal/jira/` package: JIRA REST API client with `Creator` and `Closer` interfaces, priority mapping from inventory config
+- `orchestrator dispatch` subcommand: routes WO tasks by remediation type, creates JIRA tickets, records lifecycle transitions
+- `internal/bedrock/` package: adapter interface for OpenAI → AWS Bedrock InvokeModel translation with IAM/VPC endpoint support
+
 ## [1.3.2] - 2026-03-07
 
 ### Added
