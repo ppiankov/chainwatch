@@ -78,3 +78,6 @@ corporate_test_data/
 
 # Local inventory (contains hostnames/accounts)
 inventory.yaml
+
+# Essay drafts (private working material)
+docs/essay-draft.md
