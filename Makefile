@@ -139,6 +139,9 @@ go-proto: ## Regenerate protobuf Go code
 .PHONY: go-all
 go-all: go-fmt go-lint go-test go-build ## Run Go fmt, lint, test, build
 
+.PHONY: verify
+verify: go-build go-test go-lint ## Verify: build, test with race, lint (used by tokencontrol --verify)
+
 # ── Fuzz & Benchmark ─────────────────────────────────
 
 .PHONY: fuzz
