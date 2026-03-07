@@ -1,6 +1,6 @@
 # Agentic Runtime Control Plane
 
-*Protocol specification for governed agent execution. v0.4 — 2026-03-07.*
+*Protocol specification for governed agent execution. v0.5 — 2026-03-07.*
 
 ---
 
@@ -616,6 +616,7 @@ Hash: [chain_hash]
 | **Unfocused observation** | Swarm returns noise across all signal classes | Empty `finding_classes` | Observation preflight rejection | SWO |
 | **Aggregation failure** | Swarm partial results cannot be combined | Missing environment identity, inconsistent schema | Deduplication validation, packet marked incomplete | Findings Packet |
 | **Observation scope drift** | Swarm collects evidence from environments or resources not explicitly authorized in SWO scope | Finding `environment_id` not in `scope.environments`, resource outside declared scope | Scope validation on each finding, reject out-of-scope evidence | SWO, Findings Packet |
+| **Vector drift cascade** | System gradually stops executing original intent and begins solving a different problem. Happens slowly over many turns — earlier reasoning becomes invalid, RHL collapses, tokens spike, LOC output drops | CDR spike, RHL collapse, scope expansion without new WO, assumption changes detected by reasoning diff | WO-scoped execution (locks vector), context cleanup (removes tangent pollution), intent serialization (detects drift before code runs) | Vector, WO, Execution |
 
 ---
 
