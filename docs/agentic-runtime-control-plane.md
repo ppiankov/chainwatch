@@ -1,6 +1,6 @@
 # Agentic Runtime Control Plane
 
-*Protocol specification for governed agent execution. v0.2 — 2026-03-07.*
+*Protocol specification for governed agent execution. v0.3 — 2026-03-07.*
 
 ---
 
@@ -52,6 +52,27 @@ Intent → Work Order → Proposal → Approval → Execution → Verification �
 
 Each stage references the previous stage's artifact ID. No stage may skip its predecessor.
 
+### Observation Pipeline
+
+When intent targets investigation rather than execution, the pipeline branches:
+
+```
+Intent → Observation WO → Swarm Dispatch → Findings Packet → [Synthesis WO → Execution Pipeline]
+```
+
+| Stage | Input | Output artifact | Owner |
+|-------|-------|----------------|-------|
+| Intent | Operator's idea | Vector | Operator (via intent serializer) |
+| Observation WO | Vector | SWO | Operator or VectorPad |
+| Swarm Dispatch | SWO | Dispatch record | Dispatcher (tokencontrol) |
+| Evidence Collection | SWO + environment access | Raw findings | Observer swarm (nullbots) |
+| Aggregation | Raw findings | Findings Packet | Dispatcher (central) |
+| Synthesis | Findings Packet | Candidate remediation WOs | Synthesis agent |
+
+The observation pipeline does not reach the Approval → Execution → Verification stages. It produces evidence and candidate WOs. Those candidate WOs enter the standard execution pipeline as new work orders — each requiring its own approval.
+
+**Hard rule:** Observation pipelines are read-only. No stage in the observation pipeline may mutate target environment state.
+
 ### Abort States
 
 Every stage has a terminal failure state. Aborted artifacts are still emitted (with `status: aborted` and a reason) to preserve lineage.
@@ -65,6 +86,9 @@ Every stage has a terminal failure state. Aborted artifacts are still emitted (w
 | Execution | Execution halted | Runtime error, policy violation, hold triggered |
 | Verification | Verification failed | Build, tests, lint, or secrets scan fails |
 | Receipt | Receipt incomplete | Any upstream artifact in abort state |
+| Observation WO | Observation cancelled | Scope invalid, environment unreachable |
+| Evidence Collection | Collection halted | Constraint violation, runtime exceeded, mutation attempted |
+| Findings Packet | Packet incomplete | Swarm returned partial results, aggregation failed |
 
 ---
 
@@ -83,6 +107,9 @@ All artifact IDs must be globally unique across repos and systems.
 | Execution | `ex-<uuid>` | `ex-7d441a0b` |
 | Verification | `vr-<uuid>` | `vr-902e8f1c` |
 | Receipt | `rc-<uuid>` | `rc-b3f09a77` |
+| Observation WO | `swo-<id>` | `swo-dev-014` |
+| Findings Packet | `fp-<uuid>` | `fp-8c3a21e0` |
+| Synthesis WO | `syn-<uuid>` | `syn-a2c4e801` |
 
 ### Immutability
 
@@ -137,6 +164,19 @@ A scoped unit of work derived from a vector or observation.
 | `priority` | yes | Scheduling priority |
 
 **Invariant:** A WO with empty `rollback_strategy` must be visually flagged in any approval UI.
+
+#### WO Type Taxonomy
+
+Work orders carry a `type` field that determines which pipeline they enter:
+
+| Type | Mode | Pipeline | Mutation allowed |
+|------|------|----------|-----------------|
+| `execution` | — | Standard (§3) | Yes, within scope |
+| `observation` | `single` | Standard with observer agent | No |
+| `observation` | `swarm` | Observation pipeline (§3) | No |
+| `synthesis` | — | Generates candidate WOs from findings | No (output only) |
+
+Type determines constraints. An `observation` WO with `mode: swarm` enters the observation pipeline and must satisfy the stricter fields defined in §4.8.
 
 ### 4.3 Proposal
 
@@ -217,6 +257,123 @@ The complete chain for one unit of work. Generated automatically from prior arti
 | `verification_id` | yes | What was verified |
 | `chain_hash` | yes | Hash of all artifact IDs for integrity |
 
+### 4.8 Observation Work Order (SWO)
+
+A scoped investigation request for observer agents or swarms. Extends the base WO (§4.2) with observation-specific fields.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `wo_id` | yes | Unique identifier (e.g., `swo-dev-014`) |
+| `type` | yes | Must be `observation` |
+| `mode` | yes | `single` or `swarm` |
+| `vector_id` | if derived from vector | Reference to source vector |
+| `title` | yes | One-line description |
+| `goal` | yes | What the observation should determine |
+| **Scope** | | |
+| `scope.environments` | yes | Explicit list of target environments |
+| `scope.repos` | if applicable | Repositories to examine |
+| `scope.clusters` | if applicable | Infrastructure clusters |
+| `scope.regions` | if applicable | Cloud regions |
+| **Constraints** | | |
+| `constraints.access_mode` | yes | Must be `read-only` for observation |
+| `constraints.no_mutation` | yes | Must be `true` |
+| `constraints.no_remediation` | yes | Must be `true` |
+| `constraints.max_fanout` | if swarm | Maximum parallel observers |
+| `constraints.max_runtime` | yes | Time bound for the observation |
+| `constraints.allowed_tools` | yes | Whitelist of tools observers may use |
+| `constraints.forbidden_tools` | yes | Blacklist of tools observers must never use |
+| **Focus** | | |
+| `focus.finding_classes` | yes | What classes of signal matter (e.g., `stale-user`, `orphaned-grant`) |
+| `focus.exclude_classes` | if applicable | What to explicitly ignore |
+| **Evidence requirements** | | |
+| `evidence_requirements.minimum_confidence` | yes | `low` / `medium` / `high` |
+| `evidence_requirements.include_raw_evidence` | yes | Whether to include raw query output |
+| `evidence_requirements.include_queries` | yes | Whether to include the queries that produced evidence |
+| `evidence_requirements.include_timestamps` | yes | Whether to timestamp each finding |
+| `evidence_requirements.include_environment_identity` | yes | Whether to tag each finding with its environment |
+| **Deduplication** | | |
+| `deduplication.strategy` | yes | How to collapse duplicate findings (e.g., `by-resource-and-finding-class`) |
+| `deduplication.collapse_similar` | yes | Whether to merge near-duplicates |
+| **Output** | | |
+| `output.format` | yes | Must be `findings-packet` |
+| `output.candidate_wo_generation` | yes | Whether to generate candidate remediation WOs |
+| `output.include_severity` | yes | Whether findings carry severity |
+| `output.include_blast_radius` | yes | Whether findings carry blast radius |
+| `output.include_remediation_hints` | yes | Whether findings carry suggested fixes |
+| **Routing** | | |
+| `routing.target_profile` | if swarm | Which observer profile to dispatch to |
+| `routing.dispatch_strategy` | if swarm | `fanout-aggregate` / `sequential` |
+| `routing.aggregation_mode` | if swarm | `central` / `distributed` |
+| **Lineage** | | |
+| `lineage.parent_vector_id` | yes | Vector that spawned this observation |
+| `lineage.parent_hash` | yes | Content hash of parent vector |
+
+**Minimal viable SWO** (for MVP implementations):
+
+`wo_id`, `type`, `mode`, `title`, `goal`, `scope.environments`, `constraints.access_mode`, `constraints.no_mutation`, `focus.finding_classes`, `output.format`, `routing.target_profile`, `lineage.parent_vector_id`
+
+**Invariant:** If `constraints.access_mode` is not `read-only` or `constraints.no_mutation` is not `true`, the SWO is invalid and must be rejected.
+
+**Invariant:** If `mode: swarm` and `constraints.max_fanout` is absent, the dispatcher must apply a system default (not unlimited).
+
+#### Observation Preflight (VectorPad display)
+
+Before launching an SWO, the intent serializer must surface:
+
+```
+Swarm Observation WO
+Target environments: [count]
+Access mode: read-only
+Allowed tools: [list]
+Finding classes: [list]
+Output: findings packet [+ candidate WOs if enabled]
+Blast radius: [estimated]
+```
+
+If the SWO is under-specified, nudge with:
+- What environments exactly?
+- What classes of findings matter?
+- Do you want candidate remediation WOs generated?
+- What must the swarm ignore?
+
+### 4.9 Findings Packet
+
+The structured output of an observation. The handoff artifact into WO generation, human review, or remediation planning.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `findings_packet_id` | yes | Unique identifier (e.g., `fp-8c3a21e0`) |
+| `source_wo_id` | yes | The SWO that produced this packet |
+| **Summary** | | |
+| `summary.environments_scanned` | yes | Count of environments observed |
+| `summary.findings_total` | yes | Raw finding count before deduplication |
+| `summary.deduplicated_findings_total` | yes | Finding count after deduplication |
+| `summary.candidate_wos_generated` | yes | Count of candidate remediation WOs |
+| **Findings** (array) | | |
+| `findings[].finding_id` | yes | Unique finding identifier (e.g., `f-001`) |
+| `findings[].class` | yes | Finding class (must match SWO focus) |
+| `findings[].resource` | yes | What resource the finding concerns |
+| `findings[].environment_id` | yes | Where the finding was observed |
+| `findings[].severity` | yes | `critical` / `high` / `medium` / `low` |
+| `findings[].confidence` | yes | `high` / `medium` / `low` |
+| `findings[].evidence.query` | yes | The query or command that produced evidence |
+| `findings[].evidence.observed_at` | yes | Timestamp of observation |
+| `findings[].evidence.raw_excerpt` | yes | Raw output excerpt |
+| `findings[].blast_radius.environments` | yes | How many environments affected |
+| `findings[].blast_radius.clusters` | if applicable | How many clusters affected |
+| `findings[].remediation_hint` | if enabled | Suggested fix (human decides whether to act) |
+| `findings[].candidate_wo_id` | if enabled | Reference to generated candidate WO |
+
+**Invariant:** Every finding must carry evidence. Evidence-free findings are invalid — "trust me bro" is not an evidence model.
+
+**Invariant:** Every finding must carry `environment_id`. Findings without environment identity cannot be acted upon safely.
+
+### 4.10 Synthesis Work Order (future)
+
+Takes a Findings Packet and generates candidate remediation WOs. Each candidate WO enters the standard execution pipeline — requiring its own approval, execution, and verification.
+
+*Schema to be defined. The synthesis agent is a proposer, not an executor. It may generate WOs; it may not apply changes.*
+
 ---
 
 ## 5. Trust Model
@@ -227,7 +384,9 @@ The complete chain for one unit of work. Generated automatically from prior arti
 |------|-------------|
 | **Operator** | Human who defines intent, approves proposals, owns decisions |
 | **Observer agent** | Read-only agent that investigates, diagnoses, reports. Cannot modify. |
+| **Observer swarm** | Multiple observer agents dispatched via SWO. Read-only, bounded fanout, centrally aggregated. |
 | **Execution agent** | Agent that implements proposals. Can modify files within WO scope. Cannot apply to production. |
+| **Synthesis agent** | Agent that generates candidate WOs from findings. Cannot modify — output only. |
 | **Verifier** | Automated system that checks execution output. Cannot modify. |
 | **Approver** | Human (or human-delegated automation) that authorizes boundary crossings. |
 
@@ -327,6 +486,29 @@ Rollback is not automatic. It is declared. The system surfaces the rollback path
 
 If rollback strategy is blank, the system must visually flag this at approval time.
 
+### 6.6 Observation Preflight Loop (pre-dispatch)
+
+**Purpose:** Validate swarm observation WOs before fan-out. Swarm dispatch gets stricter preflight, not looser.
+
+**When:** Before dispatching any SWO to an observer swarm.
+
+```
+SWO received → constraint validation → scope check → fanout bound → dispatch / reject
+```
+
+Required validations:
+- `access_mode` is `read-only` and `no_mutation` is `true`
+- Target environments are explicitly listed (not inferred)
+- `max_fanout` is present and within system limits
+- `max_runtime` is present and within system limits
+- `allowed_tools` contains only read-capable tools
+- `forbidden_tools` is not empty
+- `finding_classes` is not empty (unfocused swarms are rejected)
+
+Action: Hard reject on any constraint violation. No partial dispatch.
+
+**Hard rule:** If the SWO preflight passes but a swarm member attempts mutation at runtime, the member is halted and the finding is flagged as a constraint violation.
+
 ---
 
 ## 7. Environment Identity
@@ -416,6 +598,11 @@ Hash: [chain_hash]
 | **Scope escalation** | Agent expands beyond WO scope during execution | Diff vs WO scope comparison | Scoped credentials, file-level access control | WO, Proposal, Execution |
 | **Approval fatigue** | Human rubber-stamps without reviewing | Non-standard approval packets, missing fields | Canonical packet format, required fields | Approval |
 | **Stale approval** | Proposal changed after approval was granted | `proposal_hash` mismatch | Hash freeze on approval | Approval, Proposal |
+| **Unbounded fanout** | Swarm dispatched without fanout limit | Missing `max_fanout` | Observation preflight rejection | SWO |
+| **Evidence-free finding** | Swarm reports finding without supporting evidence | Empty evidence fields | Findings Packet validation | Findings Packet |
+| **Swarm mutation attempt** | Observer agent attempts to modify target environment | Tool call outside allowed set | Constraint enforcement, member halt | SWO, Findings Packet |
+| **Unfocused observation** | Swarm returns noise across all signal classes | Empty `finding_classes` | Observation preflight rejection | SWO |
+| **Aggregation failure** | Swarm partial results cannot be combined | Missing environment identity, inconsistent schema | Deduplication validation, packet marked incomplete | Findings Packet |
 
 ---
 
@@ -425,11 +612,12 @@ This spec is tool-agnostic. The current implementation maps as:
 
 | Stage | Component | Role |
 |-------|-----------|------|
-| Intent serialization | VectorPad | Ambiguity detection, nudge protocol, blast radius |
-| Work scheduling | tokencontrol | Parallel dispatch, conflict detection, cost tracking |
+| Intent serialization | VectorPad | Ambiguity detection, nudge protocol, blast radius, SWO emission |
+| Work scheduling | tokencontrol | Parallel dispatch, conflict detection, cost tracking, swarm fanout |
 | Boundary enforcement | Chainwatch | Policy evaluation, zone detection, approval workflow |
 | Secret scanning | Pastewatch | Pre-flight and copy-out payload scanning |
 | Reasoning observation | ContextSpectre | Signal measurement, noise cleanup, decay detection |
+| Distributed observation | nullbot swarm | Read-only evidence collection, findings aggregation |
 
 The protocol does not require all components. Any subset provides value. All five provide defense in depth.
 
@@ -437,13 +625,16 @@ The protocol does not require all components. Any subset provides value. All fiv
 
 ## 12. Open Questions
 
-- **Credential isolation depth.** Should observe/propose/apply use separate credentials, or is profile-based isolation sufficient?
+- **Credential isolation depth.** Should observe/propose/apply use separate credentials, or is profile-based isolation sufficient? Swarm observers likely need distinct read-only credentials per environment.
 - **Approval delegation.** Can a human pre-approve classes of changes (e.g., "all non-prod changes under 10 lines")? What are the safety bounds?
 - **Cross-repo lineage.** When a vector spawns WOs in multiple repos, how does lineage compose? One receipt per WO, or one receipt per vector?
-- **Cost ceiling.** Should the scheduling system enforce a global token budget per run? Per day? Per project?
+- **Cost ceiling.** Should the scheduling system enforce a global token budget per run? Per day? Per project? Swarm fanout multiplies cost — per-SWO budgets may be needed.
 - **Semantic conflict detection.** tokencontrol catches file-level conflicts. Is semantic overlap detection (two WOs changing the same interface differently) worth the complexity?
 - **Automatic rollback triggers.** Should failed verification automatically invoke the declared rollback, or always require human decision?
 - **Receipt storage.** Where do receipts live? Per-repo? Central store? Git-tracked or ephemeral?
+- **Synthesis WO schema.** What fields does the synthesis agent need to generate candidate remediation WOs from a findings packet? How are generated WOs distinguished from human-authored WOs in the approval UI?
+- **Swarm partial failure.** When some swarm members complete and others fail, should the findings packet be emitted with partial results or held until all members report?
+- **Observation-to-execution handoff.** When a findings packet generates candidate WOs, how are they queued? Batch approval or individual?
 
 ---
 
