@@ -1,6 +1,6 @@
 # Agentic Runtime Control Plane
 
-*Protocol specification for governed agent execution. v0.3 — 2026-03-07.*
+*Protocol specification for governed agent execution. v0.4 — 2026-03-07.*
 
 ---
 
@@ -282,6 +282,9 @@ A scoped investigation request for observer agents or swarms. Extends the base W
 | `constraints.max_runtime` | yes | Time bound for the observation |
 | `constraints.allowed_tools` | yes | Whitelist of tools observers may use |
 | `constraints.forbidden_tools` | yes | Blacklist of tools observers must never use |
+| `constraints.max_findings` | yes | Maximum findings per packet (default: system limit) |
+| `constraints.max_evidence_bytes` | yes | Maximum raw evidence size per finding |
+| `constraints.max_candidate_wos` | if enabled | Maximum candidate remediation WOs to generate |
 | **Focus** | | |
 | `focus.finding_classes` | yes | What classes of signal matter (e.g., `stale-user`, `orphaned-grant`) |
 | `focus.exclude_classes` | if applicable | What to explicitly ignore |
@@ -307,6 +310,7 @@ A scoped investigation request for observer agents or swarms. Extends the base W
 | **Lineage** | | |
 | `lineage.parent_vector_id` | yes | Vector that spawned this observation |
 | `lineage.parent_hash` | yes | Content hash of parent vector |
+| `lineage.dispatch_id` | after dispatch | Set by dispatcher — identifies which swarm run produced results |
 
 **Minimal viable SWO** (for MVP implementations):
 
@@ -344,11 +348,15 @@ The structured output of an observation. The handoff artifact into WO generation
 |-------|----------|-------------|
 | `findings_packet_id` | yes | Unique identifier (e.g., `fp-8c3a21e0`) |
 | `source_wo_id` | yes | The SWO that produced this packet |
+| `source_dispatch_id` | yes | Which swarm dispatch run produced this packet |
 | **Summary** | | |
 | `summary.environments_scanned` | yes | Count of environments observed |
 | `summary.findings_total` | yes | Raw finding count before deduplication |
 | `summary.deduplicated_findings_total` | yes | Finding count after deduplication |
 | `summary.candidate_wos_generated` | yes | Count of candidate remediation WOs |
+| `summary.nodes_attempted` | yes | Swarm members dispatched |
+| `summary.nodes_succeeded` | yes | Swarm members that completed |
+| `summary.nodes_failed` | yes | Swarm members that failed |
 | **Findings** (array) | | |
 | `findings[].finding_id` | yes | Unique finding identifier (e.g., `f-001`) |
 | `findings[].class` | yes | Finding class (must match SWO focus) |
@@ -368,11 +376,15 @@ The structured output of an observation. The handoff artifact into WO generation
 
 **Invariant:** Every finding must carry `environment_id`. Findings without environment identity cannot be acted upon safely.
 
+**Partial failure rule:** Partial swarm failure does not invalidate successful findings. The Findings Packet is emitted with whatever succeeded, but `summary.nodes_failed > 0` marks the packet as incomplete. Confidence of aggregate conclusions must be degraded proportionally. Systems consuming an incomplete packet must surface the gap — silent optimism is a failure mode.
+
 ### 4.10 Synthesis Work Order (future)
 
 Takes a Findings Packet and generates candidate remediation WOs. Each candidate WO enters the standard execution pipeline — requiring its own approval, execution, and verification.
 
-*Schema to be defined. The synthesis agent is a proposer, not an executor. It may generate WOs; it may not apply changes.*
+*Schema to be defined.*
+
+**Invariant:** Synthesis may generate candidate WOs and remediation proposals. Synthesis may not mutate infrastructure, approve actions, or alter prior evidence artifacts. The synthesis agent is a proposer, not an executor — creativity stops at the proposal boundary.
 
 ---
 
@@ -603,6 +615,7 @@ Hash: [chain_hash]
 | **Swarm mutation attempt** | Observer agent attempts to modify target environment | Tool call outside allowed set | Constraint enforcement, member halt | SWO, Findings Packet |
 | **Unfocused observation** | Swarm returns noise across all signal classes | Empty `finding_classes` | Observation preflight rejection | SWO |
 | **Aggregation failure** | Swarm partial results cannot be combined | Missing environment identity, inconsistent schema | Deduplication validation, packet marked incomplete | Findings Packet |
+| **Observation scope drift** | Swarm collects evidence from environments or resources not explicitly authorized in SWO scope | Finding `environment_id` not in `scope.environments`, resource outside declared scope | Scope validation on each finding, reject out-of-scope evidence | SWO, Findings Packet |
 
 ---
 
@@ -633,7 +646,7 @@ The protocol does not require all components. Any subset provides value. All fiv
 - **Automatic rollback triggers.** Should failed verification automatically invoke the declared rollback, or always require human decision?
 - **Receipt storage.** Where do receipts live? Per-repo? Central store? Git-tracked or ephemeral?
 - **Synthesis WO schema.** What fields does the synthesis agent need to generate candidate remediation WOs from a findings packet? How are generated WOs distinguished from human-authored WOs in the approval UI?
-- **Swarm partial failure.** When some swarm members complete and others fail, should the findings packet be emitted with partial results or held until all members report?
+- **Swarm partial failure.** Interim rule defined in §4.9: emit with partial results, degrade confidence, surface the gap. Open question: should confidence degradation be proportional (linear to node failure rate) or stepped (threshold-based)?
 - **Observation-to-execution handoff.** When a findings packet generates candidate WOs, how are they queued? Batch approval or individual?
 
 ---
