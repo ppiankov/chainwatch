@@ -44,6 +44,26 @@ A single Go binary that wraps agent tool invocations, evaluates deterministic po
 - Not a permissions system (enforces boundaries, not roles)
 - Not a web UI or SaaS product (CLI only)
 
+## Why This Matters
+
+In February 2026, a [supply chain attack on Cline](https://adnanthekhan.com/posts/clinejection/) compromised ~4,000 developer machines. The attack chain:
+
+1. Attacker injects a prompt into a GitHub issue title
+2. An AI triage bot reads the issue, interprets it as an instruction, and executes `npm install` from an attacker-controlled repository
+3. A preinstall script exfiltrates the project's npm publish token
+4. The attacker publishes a compromised package that installs malware on end-user machines
+
+The root cause: **the AI agent had unrestricted tool execution in the same context as untrusted input and production credentials.** No structural boundary existed between reading an issue title and running `npm install` with secret-bearing environment variables.
+
+Chainwatch prevents this class of attack by enforcing policy at the execution boundary:
+
+- **Denylist** blocks `npm publish`, `npm install` from untrusted sources, credential access patterns, and egress to unknown hosts
+- **Risk scoring** classifies credential + egress combinations as IRREVERSIBLE — hard deny, no approval workflow
+- **Profiles** restrict what each agent identity can do: a triage bot gets read-only access, never `exec`
+- **Audit log** records every decision with hash chain integrity, so compromised actions are traceable
+
+The enforcement is structural, not cooperative. The agent does not choose whether to consult the policy — every tool call routes through chainwatch before execution.
+
 ## Installation
 
 ### Quick Install
