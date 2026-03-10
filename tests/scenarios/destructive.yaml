@@ -1,0 +1,58 @@
+name: Destructive Operations
+profile: customer-support
+cases:
+  - action:
+      tool: command
+      resource: "rm -rf /"
+      operation: execute
+    expect: deny
+    purpose: wipe_root
+
+  - action:
+      tool: command
+      resource: "rm -rf ~"
+      operation: execute
+    expect: deny
+    purpose: wipe_home
+
+  - action:
+      tool: command
+      resource: "dd if=/dev/zero of=/dev/sda"
+      operation: execute
+    expect: deny
+    purpose: destroy_disk
+
+  - action:
+      tool: command
+      resource: "chmod -R 777 /"
+      operation: execute
+    expect: deny
+    purpose: permission_corruption
+
+  - action:
+      tool: command
+      resource: "mkfs.ext4 /dev/sda1"
+      operation: execute
+    expect: deny
+    purpose: reformat_disk
+
+  - action:
+      tool: command
+      resource: "psql -c 'DROP TABLE audit_log'"
+      operation: execute
+    expect: deny
+    purpose: destructive_sql
+
+  - action:
+      tool: command
+      resource: "mysql -e 'DELETE FROM users'"
+      operation: execute
+    expect: deny
+    purpose: destructive_sql
+
+  - action:
+      tool: file_write
+      resource: "/workspace/tmp/report.txt"
+      operation: write
+    expect: allow
+    purpose: normal_file_operation
