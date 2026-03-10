@@ -11,17 +11,38 @@ var builtinFS embed.FS
 
 // loadBuiltinRunbook loads a runbook from the embedded filesystem by type name.
 func loadBuiltinRunbook(name string) (*Runbook, error) {
-	path := "runbooks/" + name + ".yaml"
-	data, err := builtinFS.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("built-in runbook %q not found", name)
+	candidates := []string{
+		"runbooks/" + name + ".yaml",
+		"runbooks/" + strings.ReplaceAll(name, "-", "_") + ".yaml",
 	}
-	rb, err := ParseRunbook(data)
-	if err != nil {
-		return nil, fmt.Errorf("built-in runbook %s: %w", name, err)
+
+	seen := make(map[string]struct{}, len(candidates))
+	for _, path := range candidates {
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+
+		data, err := builtinFS.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		rb, err := ParseRunbook(data)
+		if err != nil {
+			return nil, fmt.Errorf("built-in runbook %s: %w", name, err)
+		}
+		rb.Source = "built-in"
+		return rb, nil
 	}
-	rb.Source = "built-in"
-	return rb, nil
+
+	for _, rb := range listBuiltinRunbooks() {
+		if rb.Type != name {
+			continue
+		}
+		return rb, nil
+	}
+
+	return nil, fmt.Errorf("built-in runbook %q not found", name)
 }
 
 // listBuiltinRunbooks returns all embedded runbooks.

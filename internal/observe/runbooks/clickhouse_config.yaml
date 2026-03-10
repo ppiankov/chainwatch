@@ -1,0 +1,10 @@
+name: "ClickHouse config drift investigation"
+type: clickhouse-config
+sensitivity: local
+steps:
+  - command: "config_path=\"{{CONFIG_PATH}}\"; case \"$config_path\" in /*) ;; *) config_path=\"{{CONFIG_REPO}}/$config_path\" ;; esac; [ -f \"$config_path\" ] && cat \"$config_path\" || echo \"config XML not found: $config_path\""
+    purpose: "read ClickHouse users XML from the config repository"
+  - command: "clickhouse-client --host '{{SCOPE}}' --format TabSeparatedWithNames --query 'SELECT * FROM system.users ORDER BY name' 2>/dev/null || echo 'cannot query system.users'"
+    purpose: "read live ClickHouse users from the target host"
+  - command: "clickhouse-client --host '{{SCOPE}}' --format TabSeparatedWithNames --query 'SELECT * FROM system.settings_profiles' 2>/dev/null || echo 'cannot query system.settings_profiles'"
+    purpose: "read live ClickHouse settings profiles from the target host"

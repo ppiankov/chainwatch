@@ -12,7 +12,7 @@ var allBuiltinTypes = []string{
 	"wordpress", "linux", "postfix", "postfix-inbound", "nginx", "mysql",
 	"kubernetes", "prometheus", "cloud-infra",
 	"aws-billing", "k8s-utilization", "cost-anomaly",
-	"clickhouse",
+	"clickhouse", "clickhouse-config",
 }
 
 // scopedBuiltinTypes lists runbooks that investigate a target directory/namespace via {{SCOPE}}.
@@ -175,8 +175,8 @@ func TestBuiltinRunbooksSource(t *testing.T) {
 
 func TestListRunbooks(t *testing.T) {
 	list := ListRunbooks()
-	if len(list) < 13 {
-		t.Errorf("ListRunbooks() returned %d runbooks, want at least 13", len(list))
+	if len(list) < 14 {
+		t.Errorf("ListRunbooks() returned %d runbooks, want at least 14", len(list))
 	}
 
 	types := make(map[string]bool)
@@ -451,6 +451,49 @@ func TestClickHouseClusterAwareSteps(t *testing.T) {
 
 	if clusterSteps < 4 {
 		t.Errorf("clickhouse runbook has %d cluster-only steps, want at least 4", clusterSteps)
+	}
+}
+
+func TestGetRunbookClickHouseConfig(t *testing.T) {
+	rb := GetRunbook("clickhouse-config")
+	if rb.Type != "clickhouse-config" {
+		t.Fatalf("GetRunbook(clickhouse-config) type = %q, want clickhouse-config", rb.Type)
+	}
+	if rb.Sensitivity != "local" {
+		t.Fatalf("clickhouse-config sensitivity = %q, want local", rb.Sensitivity)
+	}
+	if len(rb.Steps) < 3 {
+		t.Fatalf("clickhouse-config has %d steps, want at least 3", len(rb.Steps))
+	}
+}
+
+func TestClickHouseConfigHasRequiredPlaceholders(t *testing.T) {
+	rb := GetRunbook("clickhouse-config")
+
+	hasScope := false
+	hasConfigRepo := false
+	hasConfigPath := false
+
+	for _, step := range rb.Steps {
+		if strings.Contains(step.Command, "{{SCOPE}}") {
+			hasScope = true
+		}
+		if strings.Contains(step.Command, "{{CONFIG_REPO}}") {
+			hasConfigRepo = true
+		}
+		if strings.Contains(step.Command, "{{CONFIG_PATH}}") {
+			hasConfigPath = true
+		}
+	}
+
+	if !hasScope {
+		t.Fatal("clickhouse-config runbook should contain {{SCOPE}}")
+	}
+	if !hasConfigRepo {
+		t.Fatal("clickhouse-config runbook should contain {{CONFIG_REPO}}")
+	}
+	if !hasConfigPath {
+		t.Fatal("clickhouse-config runbook should contain {{CONFIG_PATH}}")
 	}
 }
 
