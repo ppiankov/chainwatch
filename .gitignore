@@ -81,3 +81,6 @@ inventory.yaml
 
 # Essay drafts (private working material)
 docs/essay-draft.md
+
+# Local notes (session context)
+notes/
