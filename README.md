@@ -147,6 +147,12 @@ chainwatch init
 # With a built-in profile
 chainwatch init --profile clawbot
 
+# With supply chain protection preset
+chainwatch init --preset supply-chain
+
+# Combine profile and preset
+chainwatch init --profile coding-agent --preset supply-chain
+
 # Verify setup
 chainwatch doctor
 ```
@@ -169,6 +175,7 @@ Agent ──► chainwatch ──► Tool
 | Mode | Command | Use Case |
 |------|---------|----------|
 | **CLI wrapper** | `chainwatch exec -- <cmd>` | Single agent, simplest setup |
+| **Claude Code hook** | `chainwatch hook install` | Native Claude Code PreToolUse enforcement |
 | **gRPC server** | `chainwatch serve` | Multi-agent, SDK integration |
 | **HTTP proxy** | `chainwatch proxy` | Intercept agent HTTP traffic |
 | **LLM intercept** | `chainwatch intercept` | Extract tool calls from streaming LLM responses |
@@ -176,7 +183,9 @@ Agent ──► chainwatch ──► Tool
 
 ### CLI Commands
 
-**Enforcement:** `exec`, `serve`, `proxy`, `intercept`, `mcp`, `evaluate`
+**Enforcement:** `exec`, `serve`, `proxy`, `intercept`, `mcp`, `hook`
+
+**Framework integration:** `hook install` (Claude Code), `mcp` (MCP-compatible agents)
 
 **Approval workflow:** `approve`, `deny`, `pending`
 
@@ -184,7 +193,7 @@ Agent ──► chainwatch ──► Tool
 
 **Audit:** `audit verify`
 
-**Policy tools:** `policy diff`, `policy simulate`, `policy gate`, `certify`
+**Policy tools:** `policy diff`, `policy simulate`, `policy gate`, `certify`, `check`
 
 **Setup:** `init`, `doctor`, `recommend`, `init-denylist`, `init-policy`, `generate-apparmor`, `generate-selinux`, `version`
 
@@ -207,6 +216,21 @@ files:
   - "~/.ssh/id_rsa"
   - "~/.aws/credentials"
 ```
+
+### Denylist Presets
+
+Presets add domain-specific patterns to the denylist. Applied at init time via `--preset`.
+
+```bash
+# Supply chain protection — blocks npm publish, pip --index-url, cargo publish,
+# docker push, registry config access, credential files, and more
+chainwatch init --preset supply-chain
+
+# Multiple presets (comma-separated)
+chainwatch init --preset supply-chain,ci-cd
+```
+
+Available presets: `supply-chain` (52 patterns covering npm, pip, cargo, gem, docker attack vectors).
 
 ### Policy Rules
 
@@ -242,6 +266,26 @@ chainwatch deny salary_access               # Deny
 # Emergency override
 chainwatch breakglass create --reason "incident response"
 chainwatch exec --breakglass <token> -- <cmd>
+```
+
+## Claude Code Integration
+
+Install chainwatch as a native Claude Code hook. Every tool call (Bash, Write, Edit, WebFetch, MCP tools) is evaluated against policy before execution.
+
+```bash
+# Install hook (project-scoped, gitignored)
+chainwatch hook install --profile coding-agent --preset supply-chain
+
+# Install globally
+chainwatch hook install --global --preset supply-chain
+```
+
+This writes a `PreToolUse` hook to `.claude/settings.local.json`. Chainwatch evaluates each tool call via stdin JSON and returns allow/deny decisions. The agent cannot bypass enforcement — blocked tool calls never execute.
+
+```bash
+# Manual test
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | chainwatch hook
+# → {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",...}}
 ```
 
 ## SDKs
