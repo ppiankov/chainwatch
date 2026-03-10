@@ -1,0 +1,4 @@
+time=2026-03-10T22:02:34.324+08:00 level=WARN msg="removing unsafe runner for repo with secrets" runner=codex repo=ppiankov/chainwatch
+time=2026-03-10T22:02:34.324+08:00 level=WARN msg="removing unsafe runner for repo with secrets" runner=gemini repo=ppiankov/chainwatch
+time=2026-03-10T22:02:34.324+08:00 level=WARN msg="removing unsafe runner for repo with secrets" runner=opencode repo=ppiankov/chainwatch
+time=2026-03-10T22:02:34.324+08:00 level=WARN msg="removing unsafe runner for repo with secrets" runner=qwen repo=ppiankov/chainwatch
