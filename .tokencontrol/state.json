@@ -1,9 +1,16 @@
 {
   "tasks": {
-    "wo-104": {
+    "wo-089": {
       "status": "in_progress",
-      "started": "2026-03-10T22:05:24.369208+08:00",
+      "started": "2026-03-10T23:28:29.637775+08:00",
       "finished": "0001-01-01T00:00:00Z"
+    },
+    "wo-104": {
+      "status": "completed",
+      "started": "2026-03-10T22:05:24.369208+08:00",
+      "finished": "2026-03-10T22:17:23.544248+08:00",
+      "runner": "codex",
+      "commit": "6dbe7f637e0f79a03137d29691e81c17fc2138af"
     },
     "wo-112": {
       "status": "completed",

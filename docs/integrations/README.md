@@ -18,3 +18,16 @@ environments, attempting to secure agent internals is neither feasible nor suffi
 Chainwatch therefore focuses on enforcing policy at boundaries agents cannot bypass —
 tools, network access, and output paths — where execution can be intercepted, evaluated
 in context, and controlled in real time.
+
+## Guides
+
+| Guide | Integration model | Enforcement |
+|-------|-------------------|-------------|
+| [Claude Desktop](claude-desktop.md) | MCP server (cooperative) | Agent routes actions through chainwatch tools |
+| [Agent runtime hooks](agent-runtime-hooks.md) | PreToolUse hook (non-cooperative) | Automatic interception of all tool calls |
+| [HTTP proxy](http-proxy.md) | Network proxy | All outbound HTTP passes through policy |
+| [Tool wrapper](tool-wrapper.md) | Function wrapping | Wraps individual tool functions |
+| [File ops wrapper](file-ops-wrapper.md) | Monkey-patch builtins.open | All file I/O passes through policy |
+| [Browser checkout gate](browser-checkout-gate.md) | Browser automation | Intercepts checkout flows |
+| [Output interception](output-interception.md) | Output filter | Scans agent output before delivery |
+| [Denylist presets](clawbot-denylist.md) | Pattern library | Pre-built denylist patterns |

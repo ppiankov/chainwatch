@@ -281,6 +281,84 @@ func TestStatusAllAndStateFilter(t *testing.T) {
 	}
 }
 
+func TestDispatchDryRunPrintsResults(t *testing.T) {
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: dev
+      hosts: [ch-dev-01]
+      config_repo: infra/dev
+bedrock:
+  region: us-east-1
+`)
+	input := `{
+  "tasks": [
+    {
+      "id": "WO-TF-001",
+      "repo": "infra/dev",
+      "title": "Apply Terraform remediation",
+      "prompt": "Update Terraform module settings.",
+      "priority": 2,
+      "metadata": {
+        "source": "nullbot",
+        "runbook": "rb-terraform",
+        "finding_hash": "hash-terraform",
+        "scope": "dev",
+        "severity": "high",
+        "remediation_type": "terraform"
+      }
+    }
+  ]
+}`
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(input), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{
+		"dispatch",
+		"--inventory", inventoryPath,
+		"--db", filepath.Join(t.TempDir(), "dispatch.db"),
+		"--dry-run",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "WO-TF-001 → codex:terraform-planner [dry-run]") {
+		t.Fatalf("expected dry-run dispatch result, got:\n%s", out)
+	}
+	if !strings.Contains(out, "dry-run complete: 1 task(s) routed, 0 dispatched") {
+		t.Fatalf("expected dry-run summary, got:\n%s", out)
+	}
+}
+
+func TestDispatchRequiresInput(t *testing.T) {
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: dev
+      hosts: [ch-dev-01]
+      config_repo: infra/dev
+bedrock:
+  region: us-east-1
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{"dispatch", "--inventory", inventoryPath})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute to fail when no dispatch input is provided")
+	}
+	if !strings.Contains(err.Error(), "parse dispatch input") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 type mockSender struct {
 	sendFn func(orchestratorpkg.Message) error
 }

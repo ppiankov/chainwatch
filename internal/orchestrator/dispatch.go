@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ppiankov/chainwatch/internal/jira"
 )
@@ -17,6 +20,8 @@ const (
 	RemediationK8s       = "k8s"
 	RemediationManual    = "manual"
 	RemediationBoth      = "both"
+
+	maxJIRADescriptionBytes = 32 * 1024
 )
 
 // DispatchInput is the tokencontrol task file produced by `nullbot observe --format wo`.
@@ -60,11 +65,11 @@ type DispatchResult struct {
 // DispatcherConfig holds construction parameters for a Dispatcher.
 type DispatcherConfig struct {
 	LifecycleStore *LifecycleStore
+	JIRACreator    jira.Creator
 	JIRAClient     jira.Creator // nil disables JIRA ticket creation
 	NotifyService  *Service
 	NotifyConfig   Config
-	JIRABaseURL    string            // for building JIRA links
-	PriorityMap    map[string]string // severity → JIRA priority
+	JIRABaseURL    string // for building JIRA links
 	DryRun         bool
 	NowFn          func() time.Time
 }
@@ -73,11 +78,10 @@ type DispatcherConfig struct {
 // and records lifecycle transitions.
 type Dispatcher struct {
 	store       *LifecycleStore
-	jiraClient  jira.Creator
+	jiraCreator jira.Creator
 	notifySvc   *Service
 	notifyCfg   Config
 	jiraBaseURL string
-	priorityMap map[string]string
 	dryRun      bool
 	nowFn       func() time.Time
 }
@@ -88,13 +92,18 @@ func NewDispatcher(cfg DispatcherConfig) *Dispatcher {
 	if nowFn == nil {
 		nowFn = func() time.Time { return time.Now().UTC() }
 	}
+
+	jiraCreator := cfg.JIRACreator
+	if jiraCreator == nil {
+		jiraCreator = cfg.JIRAClient
+	}
+
 	return &Dispatcher{
 		store:       cfg.LifecycleStore,
-		jiraClient:  cfg.JIRAClient,
+		jiraCreator: jiraCreator,
 		notifySvc:   cfg.NotifyService,
 		notifyCfg:   cfg.NotifyConfig,
 		jiraBaseURL: cfg.JIRABaseURL,
-		priorityMap: cfg.PriorityMap,
 		dryRun:      cfg.DryRun,
 		nowFn:       nowFn,
 	}
@@ -112,6 +121,10 @@ func ParseDispatchInput(r io.Reader) (*DispatchInput, error) {
 // Dispatch routes all tasks: creates lifecycle entries, JIRA tickets,
 // and returns dispatch results. In dry-run mode, no side effects occur.
 func (d *Dispatcher) Dispatch(ctx context.Context, input *DispatchInput) ([]DispatchResult, error) {
+	if input == nil || len(input.Tasks) == 0 {
+		return []DispatchResult{}, nil
+	}
+
 	results := make([]DispatchResult, 0, len(input.Tasks))
 
 	for _, task := range input.Tasks {
@@ -159,22 +172,19 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, task DispatchTask) Dispatc
 	}
 
 	// Create JIRA ticket.
-	if d.jiraClient != nil {
-		priority := jira.MapPriority(task.Metadata.Severity, d.priorityMap)
-		issue, err := d.jiraClient.CreateIssue(ctx, jira.CreateIssueInput{
-			Summary:     task.Title,
-			Description: task.Prompt,
-			Priority:    priority,
-			Labels:      []string{task.Metadata.Runbook, task.Metadata.RemediationType},
-			WOID:        task.ID,
-		})
+	if d.jiraCreator != nil {
+		issue, err := d.jiraCreator.CreateIssue(ctx, buildDispatchIssueInput(task))
 		if err != nil {
-			result.Error = fmt.Sprintf("jira create: %v", err)
-			return result
-		}
-		result.JIRAKey = issue.Key
-		if d.jiraBaseURL != "" {
-			result.JIRALink = fmt.Sprintf("%s/browse/%s", d.jiraBaseURL, issue.Key)
+			log.Printf("orchestrator dispatch: create JIRA issue for %s: %v", task.ID, err)
+		} else {
+			result.JIRAKey = issue.Key
+			if d.jiraBaseURL != "" {
+				result.JIRALink = fmt.Sprintf(
+					"%s/browse/%s",
+					strings.TrimRight(d.jiraBaseURL, "/"),
+					issue.Key,
+				)
+			}
 		}
 	}
 
@@ -224,4 +234,56 @@ func routeTarget(remediationType string) string {
 	default:
 		return "codex:default"
 	}
+}
+
+func buildDispatchIssueInput(task DispatchTask) jira.CreateIssueInput {
+	return jira.CreateIssueInput{
+		Summary:     buildDispatchIssueSummary(task.Title),
+		Description: truncateDispatchIssueDescription(task.Prompt),
+		Priority:    dispatchIssuePriority(task.Priority),
+		Labels:      dispatchIssueLabels(task.Metadata.RemediationType),
+		WOID:        task.ID,
+	}
+}
+
+func buildDispatchIssueSummary(title string) string {
+	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "" {
+		return "[chainwatch]"
+	}
+	return "[chainwatch] " + trimmedTitle
+}
+
+func truncateDispatchIssueDescription(prompt string) string {
+	if len(prompt) <= maxJIRADescriptionBytes {
+		return prompt
+	}
+
+	truncated := []byte(prompt[:maxJIRADescriptionBytes])
+	for len(truncated) > 0 && !utf8.Valid(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return string(truncated)
+}
+
+func dispatchIssuePriority(priority int) string {
+	switch priority {
+	case 1:
+		return "Highest"
+	case 2:
+		return "High"
+	case 3:
+		return "Medium"
+	default:
+		return "Low"
+	}
+}
+
+func dispatchIssueLabels(remediationType string) []string {
+	labels := []string{"chainwatch", "auto-dispatched"}
+	trimmedType := strings.TrimSpace(remediationType)
+	if trimmedType != "" {
+		labels = append(labels, trimmedType)
+	}
+	return labels
 }

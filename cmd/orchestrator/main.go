@@ -291,7 +291,6 @@ func newRootCmdWithFactory(
 
 			cfg := orchestrator.DispatcherConfig{
 				LifecycleStore: store,
-				PriorityMap:    inv.Orchestrator.JIRA.PriorityMap,
 				JIRABaseURL:    inv.Orchestrator.JIRA.BaseURL,
 				DryRun:         dispatchDryRun,
 				NowFn:          nowFn,
@@ -306,7 +305,7 @@ func newRootCmdWithFactory(
 					Project:  jiraCfg.Project,
 					Assignee: jiraCfg.Assignee,
 				})
-				cfg.JIRAClient = jiraClient
+				cfg.JIRACreator = jiraClient
 			}
 
 			// Wire up Slack notification if configured.
