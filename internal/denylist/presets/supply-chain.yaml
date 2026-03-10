@@ -1,0 +1,65 @@
+# Supply chain denylist preset.
+# Blocks dependency manipulation, registry hijacking, and package publishing.
+# Based on real supply chain attack vectors (Cline March 2025, event-stream 2018, ua-parser-js 2021).
+
+urls:
+  # Package registry publishing endpoints
+  - "registry.npmjs.org/-/npm"
+  - "upload.pypi.org"
+  - "test.pypi.org"
+  - "crates.io/api/v1/crates"
+  - "rubygems.org/api/v1/gems"
+  # Registry manipulation
+  - "registry.npmjs.org/-/package/*/dist-tags"
+  - "registry.npmjs.org/-/package/*/access"
+  # Container registry push
+  - "ghcr.io/v2/*/blobs/uploads"
+  - "registry.hub.docker.com/v2/*/blobs/uploads"
+
+files:
+  # Registry configuration (credential theft / registry hijacking)
+  - "**/.npmrc"
+  - "**/.pypirc"
+  - "**/pip.conf"
+  - "**/pip.ini"
+  - "**/.cargo/config.toml"
+  - "**/.cargo/credentials.toml"
+  - "**/.gem/credentials"
+  - "**/.m2/settings.xml"
+  - "**/.nuget/NuGet.Config"
+  # Token/auth files
+  - "**/.npm/_authToken"
+  - "**/token"
+
+commands:
+  # npm supply chain vectors
+  - "npm publish"
+  - "npm config set registry"
+  - "npm config set //registry"
+  - "npm install --ignore-scripts"
+  - "npm exec"
+  - "npx "
+  # pip supply chain vectors
+  - "pip install --index-url"
+  - "pip install --extra-index-url"
+  - "pip install --trusted-host"
+  - "pip install -e git+"
+  - "pip install git+"
+  - "twine upload"
+  - "python setup.py upload"
+  # cargo supply chain vectors
+  - "cargo publish"
+  - "cargo install --registry"
+  - "cargo install --git"
+  # gem supply chain vectors
+  - "gem push"
+  - "gem install --source"
+  # general publishing
+  - "docker push"
+  - "podman push"
+  # lockfile manipulation
+  - "npm shrinkwrap"
+  - "npm config set package-lock false"
+  # preinstall/postinstall execution
+  - "preinstall"
+  - "postinstall"

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -18,6 +19,7 @@ import (
 
 var (
 	initProfile        string
+	initPreset         string
 	initMode           string
 	initInstallSystemd bool
 	initForce          bool
@@ -25,6 +27,7 @@ var (
 
 func init() {
 	initCmd.Flags().StringVar(&initProfile, "profile", "", "Built-in profile to apply (e.g., clawbot, coding-agent)")
+	initCmd.Flags().StringVar(&initPreset, "preset", "", "Denylist preset to merge (e.g., supply-chain); comma-separated for multiple")
 	initCmd.Flags().StringVar(&initMode, "mode", "user", "Config location: user (~/.chainwatch) or system (/etc/chainwatch)")
 	initCmd.Flags().BoolVar(&initInstallSystemd, "install-systemd", false, "Install systemd guarded@ template unit (requires root)")
 	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing config files")
@@ -67,11 +70,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 		created = append(created, policyPath)
 	}
 
-	// Write denylist.yaml.
+	// Write denylist.yaml (with optional preset merge).
 	denylistPath := filepath.Join(configDir, "denylist.yaml")
-	denylistContent, err := defaultDenylistYAML()
+	denylistContent, err := denylistYAMLWithPresets(initPreset)
 	if err != nil {
-		return fmt.Errorf("generate default denylist: %w", err)
+		return err
 	}
 	if wrote, err := writeIfMissing(denylistPath, denylistContent); err != nil {
 		return err
@@ -188,17 +191,38 @@ func writeIfMissing(path, content string) (bool, error) {
 	return true, nil
 }
 
-// defaultDenylistYAML generates a commented default denylist.yaml.
-func defaultDenylistYAML() (string, error) {
-	data, err := yaml.Marshal(denylist.DefaultPatterns)
+// denylistYAMLWithPresets generates denylist.yaml, merging any requested presets.
+func denylistYAMLWithPresets(presetFlag string) (string, error) {
+	patterns := denylist.DefaultPatterns
+
+	if presetFlag != "" {
+		for _, name := range strings.Split(presetFlag, ",") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			preset, err := denylist.LoadPreset(name)
+			if err != nil {
+				return "", err
+			}
+			patterns = denylist.Merge(patterns, preset)
+		}
+	}
+
+	data, err := yaml.Marshal(patterns)
 	if err != nil {
 		return "", err
 	}
+
 	header := "# Chainwatch denylist — irreversible boundaries.\n" +
 		"# Patterns are matched against tool calls at runtime.\n" +
 		"# URLs: regex patterns. Files: glob patterns. Commands: substring match.\n" +
 		"#\n" +
 		"# Edit this file to customize what chainwatch blocks.\n" +
-		"# See: chainwatch exec --help\n\n"
+		"# See: chainwatch exec --help\n"
+	if presetFlag != "" {
+		header += "# Presets applied: " + presetFlag + "\n"
+	}
+	header += "\n"
 	return header + string(data), nil
 }

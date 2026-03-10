@@ -219,10 +219,10 @@ func TestWriteIfMissing(t *testing.T) {
 	}
 }
 
-func TestDefaultDenylistYAML(t *testing.T) {
-	content, err := defaultDenylistYAML()
+func TestDenylistYAMLWithPresets_NoPreset(t *testing.T) {
+	content, err := denylistYAMLWithPresets("")
 	if err != nil {
-		t.Fatalf("defaultDenylistYAML failed: %v", err)
+		t.Fatalf("denylistYAMLWithPresets failed: %v", err)
 	}
 
 	// Should have header comments.
@@ -235,5 +235,74 @@ func TestDefaultDenylistYAML(t *testing.T) {
 		if !strings.Contains(content, section) {
 			t.Errorf("missing section %q", section)
 		}
+	}
+
+	// Should NOT have preset comment.
+	if strings.Contains(content, "Presets applied") {
+		t.Error("should not have preset comment without presets")
+	}
+}
+
+func TestDenylistYAMLWithPresets_SupplyChain(t *testing.T) {
+	content, err := denylistYAMLWithPresets("supply-chain")
+	if err != nil {
+		t.Fatalf("denylistYAMLWithPresets failed: %v", err)
+	}
+
+	// Should have preset comment in header.
+	if !strings.Contains(content, "Presets applied: supply-chain") {
+		t.Error("missing preset comment")
+	}
+
+	// Should contain supply chain patterns merged with defaults.
+	if !strings.Contains(content, "npm publish") {
+		t.Error("missing supply chain command pattern")
+	}
+	if !strings.Contains(content, "registry.npmjs.org") {
+		t.Error("missing supply chain URL pattern")
+	}
+
+	// Should still have default patterns.
+	if !strings.Contains(content, "stripe.com") {
+		t.Error("default patterns missing after merge")
+	}
+}
+
+func TestDenylistYAMLWithPresets_Unknown(t *testing.T) {
+	_, err := denylistYAMLWithPresets("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for unknown preset")
+	}
+}
+
+func TestRunInit_WithPreset(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origHome := os.Getenv("HOME")
+	t.Setenv("HOME", tmpDir)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	initMode = "user"
+	initProfile = ""
+	initPreset = "supply-chain"
+	initInstallSystemd = false
+	initForce = false
+
+	if err := runInit(nil, nil); err != nil {
+		t.Fatalf("runInit with preset failed: %v", err)
+	}
+
+	// Denylist should contain supply chain patterns.
+	denylistPath := filepath.Join(tmpDir, ".chainwatch", "denylist.yaml")
+	data, err := os.ReadFile(denylistPath)
+	if err != nil {
+		t.Fatalf("denylist.yaml not created: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "npm publish") {
+		t.Error("denylist missing supply chain command pattern")
+	}
+	if !strings.Contains(content, "Presets applied: supply-chain") {
+		t.Error("denylist missing preset comment")
 	}
 }
