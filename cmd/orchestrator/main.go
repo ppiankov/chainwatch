@@ -14,6 +14,7 @@ import (
 
 	"github.com/ppiankov/chainwatch/internal/inventory"
 	"github.com/ppiankov/chainwatch/internal/jira"
+	"github.com/ppiankov/chainwatch/internal/metrics"
 	"github.com/ppiankov/chainwatch/internal/orchestrator"
 	"github.com/ppiankov/chainwatch/internal/schedule"
 	"github.com/spf13/cobra"
@@ -504,6 +505,110 @@ func newRootCmdWithFactory(
 		"output format: crontab, systemd, or eventbridge",
 	)
 
+	var (
+		metricsObsDB       string
+		metricsLifecycleDB string
+		metricsFormat      string
+	)
+
+	metricsCmd := &cobra.Command{
+		Use:   "metrics",
+		Short: "Show pipeline metrics from observation and lifecycle databases",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			collector := metrics.NewCollector(metricsObsDB, metricsLifecycleDB, nowFn)
+
+			findings, err := collector.FindingMetrics()
+			if err != nil {
+				return fmt.Errorf("finding metrics: %w", err)
+			}
+			pipeline, err := collector.PipelineMetrics()
+			if err != nil {
+				return fmt.Errorf("pipeline metrics: %w", err)
+			}
+			redaction, err := collector.RedactionMetrics()
+			if err != nil {
+				return fmt.Errorf("redaction metrics: %w", err)
+			}
+
+			switch metricsFormat {
+			case "json":
+				combined := struct {
+					Findings  *metrics.FindingStats   `json:"findings"`
+					Pipeline  *metrics.PipelineStats  `json:"pipeline"`
+					Redaction *metrics.RedactionStats `json:"redaction"`
+				}{
+					Findings:  findings,
+					Pipeline:  pipeline,
+					Redaction: redaction,
+				}
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(combined); err != nil {
+					return fmt.Errorf("encode metrics: %w", err)
+				}
+
+			case "text":
+				_, _ = fmt.Fprintln(out, "Findings")
+				_, _ = fmt.Fprintf(out, "  total:    %d\n", findings.TotalFindings)
+				_, _ = fmt.Fprintf(out, "  open:     %d\n", findings.OpenFindings)
+				_, _ = fmt.Fprintf(out, "  resolved: %d\n", findings.ResolvedFindings)
+				if findings.MeanTimeToResolve > 0 {
+					_, _ = fmt.Fprintf(out, "  MTTR:     %s\n", findings.MeanTimeToResolve.Truncate(time.Second))
+				}
+				if len(findings.FindingsByType) > 0 {
+					_, _ = fmt.Fprintln(out, "  by type:")
+					for t, c := range findings.FindingsByType {
+						_, _ = fmt.Fprintf(out, "    %s: %d\n", t, c)
+					}
+				}
+
+				_, _ = fmt.Fprintln(out, "Pipeline")
+				_, _ = fmt.Fprintf(out, "  total WOs:  %d\n", pipeline.TotalWOs)
+				_, _ = fmt.Fprintf(out, "  stale PRs:  %d\n", pipeline.StalePRs)
+				if pipeline.MeanTimeToMerge > 0 {
+					_, _ = fmt.Fprintf(out, "  avg merge:  %s\n", pipeline.MeanTimeToMerge.Truncate(time.Second))
+				}
+				if pipeline.MeanTimeToVerify > 0 {
+					_, _ = fmt.Fprintf(out, "  avg verify: %s\n", pipeline.MeanTimeToVerify.Truncate(time.Second))
+				}
+				if len(pipeline.WOsByState) > 0 {
+					_, _ = fmt.Fprintln(out, "  by state:")
+					for s, c := range pipeline.WOsByState {
+						_, _ = fmt.Fprintf(out, "    %s: %d\n", s, c)
+					}
+				}
+
+				if redaction.TotalRedactions > 0 {
+					_, _ = fmt.Fprintln(out, "Redaction")
+					_, _ = fmt.Fprintf(out, "  total: %d\n", redaction.TotalRedactions)
+				}
+
+			default:
+				return fmt.Errorf("unsupported format %q (use text or json)", metricsFormat)
+			}
+
+			return nil
+		},
+	}
+	metricsCmd.Flags().StringVar(
+		&metricsObsDB,
+		"db",
+		"",
+		"path to observation cache SQLite database",
+	)
+	metricsCmd.Flags().StringVar(
+		&metricsLifecycleDB,
+		"lifecycle",
+		defaultLifecycleDBPath(),
+		"path to orchestrator lifecycle SQLite database",
+	)
+	metricsCmd.Flags().StringVar(
+		&metricsFormat,
+		"format",
+		"text",
+		"output format: text or json",
+	)
+
 	rootCmd.SetOut(out)
 	rootCmd.SetErr(errOut)
 	rootCmd.AddCommand(notifyCmd)
@@ -511,6 +616,7 @@ func newRootCmdWithFactory(
 	rootCmd.AddCommand(transitionCmd)
 	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(scheduleCmd)
+	rootCmd.AddCommand(metricsCmd)
 	return rootCmd
 }
 

@@ -547,6 +547,67 @@ func writeInventoryFile(t *testing.T, content string) string {
 	return path
 }
 
+func TestMetricsCommandTextFormat(t *testing.T) {
+	dir := t.TempDir()
+	lcDB := filepath.Join(dir, "lifecycle.db")
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	seedLifecycle(t, lcDB, []orchestratorpkg.LifecycleTransition{
+		{WOID: "WO-001", ToState: "finding", TransitionedAt: base},
+		{WOID: "WO-001", ToState: "wo", TransitionedAt: base.Add(1 * time.Hour)},
+		{WOID: "WO-001", ToState: "dispatched", TransitionedAt: base.Add(2 * time.Hour)},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, func() time.Time {
+		return base.Add(30 * time.Hour)
+	})
+	cmd.SetArgs([]string{"metrics", "--lifecycle", lcDB, "--format", "text"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "Pipeline") {
+		t.Errorf("expected Pipeline header in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "total WOs:  1") {
+		t.Errorf("expected total WOs in output, got:\n%s", out)
+	}
+}
+
+func TestMetricsCommandJSONFormat(t *testing.T) {
+	dir := t.TempDir()
+	lcDB := filepath.Join(dir, "lifecycle.db")
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	seedLifecycle(t, lcDB, []orchestratorpkg.LifecycleTransition{
+		{WOID: "WO-001", ToState: "finding", TransitionedAt: base},
+		{WOID: "WO-001", ToState: "wo", TransitionedAt: base.Add(1 * time.Hour)},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, func() time.Time {
+		return base.Add(30 * time.Hour)
+	})
+	cmd.SetArgs([]string{"metrics", "--lifecycle", lcDB, "--format", "json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, `"total_wos"`) {
+		t.Errorf("expected JSON total_wos key in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, `"findings"`) {
+		t.Errorf("expected JSON findings key in output, got:\n%s", out)
+	}
+}
+
 func seedLifecycle(t *testing.T, dbPath string, transitions []orchestratorpkg.LifecycleTransition) {
 	t.Helper()
 	store := orchestratorpkg.NewLifecycleStore(dbPath, nil)
