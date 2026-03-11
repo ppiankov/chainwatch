@@ -9,12 +9,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ppiankov/chainwatch/internal/inventory"
 	"github.com/ppiankov/chainwatch/internal/jira"
 	"github.com/ppiankov/chainwatch/internal/metrics"
+	"github.com/ppiankov/chainwatch/internal/observe"
 	"github.com/ppiankov/chainwatch/internal/orchestrator"
 	"github.com/ppiankov/chainwatch/internal/schedule"
 	"github.com/spf13/cobra"
@@ -31,6 +33,7 @@ func main() {
 type senderFactory func(string) orchestrator.Sender
 
 const statusTimeLayout = "2006-01-02 15:04:05 UTC"
+const defaultVerifyScopeFromInventory = "/var/lib/clickhouse"
 
 func newRootCmd(
 	in io.Reader,
@@ -437,6 +440,142 @@ func newRootCmdWithFactory(
 	)
 
 	var (
+		verifyWOID          string
+		verifyInventoryPath string
+		verifyScope         string
+		verifyType          string
+		verifyDBPath        string
+		verifyMaxRetries    int
+		verifyRetryDelay    time.Duration
+		verifyCluster       bool
+	)
+
+	verifyCmd := &cobra.Command{
+		Use:   "verify",
+		Short: "Re-run observation after remediation and confirm drift is resolved",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			woID := strings.TrimSpace(verifyWOID)
+			if woID == "" {
+				return fmt.Errorf("--wo is required")
+			}
+
+			runbookType := strings.TrimSpace(verifyType)
+			if runbookType == "" {
+				return fmt.Errorf("--type is required")
+			}
+
+			var inv *inventory.Inventory
+			if strings.TrimSpace(verifyInventoryPath) != "" {
+				loaded, err := inventory.Load(verifyInventoryPath)
+				if err != nil {
+					return fmt.Errorf("load inventory: %w", err)
+				}
+				inv = loaded
+			}
+
+			scope := strings.TrimSpace(verifyScope)
+			if scope == "" {
+				if inv == nil {
+					return fmt.Errorf("--scope is required unless --inventory is set")
+				}
+				scope = defaultVerifyScopeFromInventory
+			}
+
+			originalHash, err := observe.LookupFindingHashByWOID(verifyDBPath, woID)
+			if err != nil {
+				return err
+			}
+
+			chainwatch := strings.TrimSpace(os.Getenv("CHAINWATCH_BIN"))
+			if chainwatch == "" {
+				chainwatch = "chainwatch"
+			}
+			auditLog := strings.TrimSpace(os.Getenv("AUDIT_LOG"))
+			if auditLog == "" {
+				auditLog = "/tmp/nullbot-observe.jsonl"
+			}
+
+			runnerCfg := observe.RunnerConfig{
+				Scope:      scope,
+				Type:       runbookType,
+				Cluster:    verifyCluster,
+				Chainwatch: chainwatch,
+				AuditLog:   auditLog,
+			}
+
+			var runner observe.VerifyRunner
+			if inv != nil {
+				runner = func(ctx context.Context, cfg observe.RunnerConfig) (*observe.RunResult, error) {
+					return runVerifyWithInventory(ctx, cfg, inv)
+				}
+			}
+
+			verifyResult, err := observe.VerifyWithRunner(ctx, observe.VerifyConfig{
+				WOID:                woID,
+				RunnerConfig:        runnerCfg,
+				OriginalFindingHash: originalHash,
+				MaxRetries:          verifyMaxRetries,
+				RetryDelay:          verifyRetryDelay,
+			}, runner)
+			if err != nil {
+				return err
+			}
+
+			_, _ = fmt.Fprintf(out, "WO: %s\n", verifyResult.WOID)
+			_, _ = fmt.Fprintf(out, "Passed: %t\n", verifyResult.Passed)
+			_, _ = fmt.Fprintf(out, "Attempt: %d\n", verifyResult.Attempt)
+			_, _ = fmt.Fprintf(out, "Original hash: %s\n", verifyResult.OriginalHash)
+			_, _ = fmt.Fprintf(out, "Current hash: %s\n", verifyResult.CurrentHash)
+			_, _ = fmt.Fprintf(out, "Detail: %s\n", verifyResult.Detail)
+
+			if !verifyResult.Passed {
+				_, _ = fmt.Fprintf(out, "Lifecycle: %s\n", orchestrator.LifecycleStateApplied)
+				return fmt.Errorf("drift persists for %s", woID)
+			}
+
+			store := orchestrator.NewLifecycleStore(verifyDBPath, nowFn)
+			if err := orchestrator.VerifyAndTransition(ctx, store, woID, verifyResult); err != nil {
+				return err
+			}
+			if err := observe.UpdateFindingHashStatus(
+				verifyDBPath,
+				originalHash,
+				observe.FindingStatusClosed,
+				nowFn(),
+			); err != nil {
+				return err
+			}
+
+			_, _ = fmt.Fprintf(out, "Lifecycle: %s\n", orchestrator.LifecycleStateVerified)
+			return nil
+		},
+	}
+	verifyCmd.Flags().StringVar(&verifyWOID, "wo", "", "work order ID to verify")
+	verifyCmd.Flags().StringVar(&verifyInventoryPath, "inventory", "", "path to inventory.yaml")
+	verifyCmd.Flags().StringVar(&verifyScope, "scope", "", "target scope to re-run observation against")
+	verifyCmd.Flags().StringVar(&verifyType, "type", "", "runbook type to verify")
+	verifyCmd.Flags().StringVar(
+		&verifyDBPath,
+		"db",
+		defaultLifecycleDBPath(),
+		"path to shared observation/lifecycle SQLite database",
+	)
+	verifyCmd.Flags().IntVar(&verifyMaxRetries, "retries", 1, "number of verification retries")
+	verifyCmd.Flags().DurationVar(
+		&verifyRetryDelay,
+		"retry-delay",
+		30*time.Second,
+		"delay between verification retries",
+	)
+	verifyCmd.Flags().BoolVar(
+		&verifyCluster,
+		"cluster",
+		false,
+		"include cluster-only runbook steps during verification",
+	)
+
+	var (
 		scheduleInventoryPath string
 		scheduleFormat        string
 	)
@@ -615,6 +754,7 @@ func newRootCmdWithFactory(
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(transitionCmd)
 	rootCmd.AddCommand(dispatchCmd)
+	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(scheduleCmd)
 	rootCmd.AddCommand(metricsCmd)
 	return rootCmd
@@ -660,4 +800,90 @@ func resolveEventsReader(eventsPath string, stdin io.Reader) (io.Reader, error) 
 	}
 
 	return stdin, nil
+}
+
+func cloneVerifyParams(params map[string]string) map[string]string {
+	if len(params) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]string, len(params))
+	for key, value := range params {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func verifyRunnerConfigForHost(
+	baseCfg observe.RunnerConfig,
+	cluster inventory.Cluster,
+	host inventory.Host,
+) observe.RunnerConfig {
+	cfg := baseCfg
+	cfg.ClusterName = cluster.Name
+	cfg.Host = host.Name
+	cfg.SSHUser = host.SSHUser
+	cfg.Port = host.ClickHousePort
+	cfg.ConfigRepo = cluster.ConfigRepoPath()
+	cfg.ConfigPath = cluster.ConfigPathResolved()
+
+	params := cloneVerifyParams(baseCfg.Params)
+	if params == nil {
+		params = make(map[string]string, 6)
+	}
+	params["CLUSTER"] = cluster.Name
+	params["HOST"] = host.Name
+	params["SSH_USER"] = host.SSHUser
+	params["CLICKHOUSE_PORT"] = strconv.Itoa(host.ClickHousePort)
+	params["CONFIG_REPO"] = cfg.ConfigRepo
+	params["CONFIG_PATH"] = cfg.ConfigPath
+	cfg.Params = params
+
+	return cfg
+}
+
+func runVerifyWithInventory(
+	ctx context.Context,
+	baseCfg observe.RunnerConfig,
+	inv *inventory.Inventory,
+) (*observe.RunResult, error) {
+	if inv == nil {
+		return nil, fmt.Errorf("inventory is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	result := &observe.RunResult{
+		Scope:   baseCfg.Scope,
+		Type:    baseCfg.Type,
+		StartAt: time.Now().UTC(),
+	}
+
+	for _, cluster := range inv.Clusters() {
+		for _, host := range cluster.Hosts() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+
+			hostCfg := verifyRunnerConfigForHost(baseCfg, cluster, host)
+			hostResult, err := observe.Run(hostCfg, observe.GetRunbook(hostCfg.Type))
+			if err != nil {
+				result.Steps = append(result.Steps, observe.StepResult{
+					Command:  hostCfg.Type,
+					Purpose:  fmt.Sprintf("run verification for %s/%s", cluster.Name, host.Name),
+					Output:   err.Error(),
+					ExitCode: 1,
+					Cluster:  cluster.Name,
+					Host:     host.Name,
+				})
+				continue
+			}
+
+			result.Steps = append(result.Steps, hostResult.Steps...)
+		}
+	}
+
+	result.EndAt = time.Now().UTC()
+	return result, nil
 }

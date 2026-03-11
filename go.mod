@@ -3,6 +3,10 @@ module github.com/ppiankov/chainwatch
 go 1.25.7
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.39.0
+	github.com/aws/aws-sdk-go-v2/config v1.32.1
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.1
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.31.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/modelcontextprotocol/go-sdk v1.3.0
 	github.com/ppiankov/neurorouter v0.2.0
@@ -36,3 +40,11 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	modernc.org/sqlite v1.46.1
 )
+
+replace github.com/aws/aws-sdk-go-v2 => ./third_party/aws-sdk-go-v2
+
+replace github.com/aws/aws-sdk-go-v2/config => ./third_party/aws-sdk-go-v2-config
+
+replace github.com/aws/aws-sdk-go-v2/credentials => ./third_party/aws-sdk-go-v2-credentials
+
+replace github.com/aws/aws-sdk-go-v2/service/bedrockruntime => ./third_party/aws-sdk-go-v2-service-bedrockruntime

@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ppiankov/chainwatch/internal/inventory"
+	"github.com/ppiankov/chainwatch/internal/observe"
 	orchestratorpkg "github.com/ppiankov/chainwatch/internal/orchestrator"
 )
 
@@ -415,6 +418,107 @@ bedrock:
 	}
 }
 
+func TestVerifyCommand(t *testing.T) {
+	chainwatchPath, outputPath := writeFakeChainwatch(t)
+	t.Setenv("CHAINWATCH_BIN", chainwatchPath)
+	t.Setenv("AUDIT_LOG", filepath.Join(t.TempDir(), "audit.jsonl"))
+
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: dev
+      hosts: [ch-dev-01]
+      config_repo: infra/dev
+`)
+	inv, err := inventory.Load(inventoryPath)
+	if err != nil {
+		t.Fatalf("inventory.Load returned error: %v", err)
+	}
+
+	if err := os.WriteFile(outputPath, []byte("before-remediation\n"), 0600); err != nil {
+		t.Fatalf("write fake chainwatch output: %v", err)
+	}
+
+	runnerCfg := observe.RunnerConfig{
+		Scope:      defaultVerifyScopeFromInventory,
+		Type:       "clickhouse",
+		Chainwatch: chainwatchPath,
+		AuditLog:   filepath.Join(t.TempDir(), "verify-audit.jsonl"),
+	}
+	initialRun, err := runVerifyWithInventory(context.Background(), runnerCfg, inv)
+	if err != nil {
+		t.Fatalf("runVerifyWithInventory returned error: %v", err)
+	}
+	originalHash := observe.ComputeEvidenceHash(observe.CollectEvidence(initialRun))
+
+	dbPath := filepath.Join(t.TempDir(), "verify.db")
+	woID := "wo-verify-cli"
+	if _, err := observe.ApplyFindingDedup(
+		dbPath,
+		originalHash,
+		woID,
+		time.Date(2026, 3, 11, 10, 0, 0, 0, time.UTC),
+		time.Hour,
+	); err != nil {
+		t.Fatalf("ApplyFindingDedup returned error: %v", err)
+	}
+	seedLifecycle(t, dbPath, []orchestratorpkg.LifecycleTransition{
+		{WOID: woID, ToState: orchestratorpkg.LifecycleStateFinding},
+		{WOID: woID, ToState: orchestratorpkg.LifecycleStateWO},
+		{WOID: woID, ToState: orchestratorpkg.LifecycleStateDispatched},
+		{WOID: woID, ToState: orchestratorpkg.LifecycleStatePROpen},
+		{WOID: woID, ToState: orchestratorpkg.LifecycleStatePRMerged},
+		{WOID: woID, ToState: orchestratorpkg.LifecycleStateApplied},
+	})
+
+	if err := os.WriteFile(outputPath, []byte("after-remediation\n"), 0600); err != nil {
+		t.Fatalf("update fake chainwatch output: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{
+		"verify",
+		"--wo", woID,
+		"--inventory", inventoryPath,
+		"--type", "clickhouse",
+		"--db", dbPath,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "Passed: true") {
+		t.Fatalf("expected successful verification output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Lifecycle: verified") {
+		t.Fatalf("expected verified lifecycle output, got:\n%s", out)
+	}
+
+	store := orchestratorpkg.NewLifecycleStore(dbPath, nil)
+	status, err := store.GetWOStatus(woID)
+	if err != nil {
+		t.Fatalf("GetWOStatus returned error: %v", err)
+	}
+	if status.CurrentState != orchestratorpkg.LifecycleStateVerified {
+		t.Fatalf("CurrentState = %q, want %q", status.CurrentState, orchestratorpkg.LifecycleStateVerified)
+	}
+
+	record, err := observe.ReadFindingHash(dbPath, originalHash)
+	if err != nil {
+		t.Fatalf("ReadFindingHash returned error: %v", err)
+	}
+	if record == nil {
+		t.Fatal("expected finding hash record")
+	}
+	if record.Status != observe.FindingStatusClosed {
+		t.Fatalf("finding hash status = %q, want %q", record.Status, observe.FindingStatusClosed)
+	}
+}
+
 func TestScheduleCommandCrontab(t *testing.T) {
 	inventoryPath := writeInventoryFile(t, `
 clickhouse:
@@ -545,6 +649,19 @@ func writeInventoryFile(t *testing.T, content string) string {
 		t.Fatalf("write inventory file: %v", err)
 	}
 	return path
+}
+
+func writeFakeChainwatch(t *testing.T) (string, string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "fake-output.txt")
+	binPath := filepath.Join(dir, "chainwatch")
+	script := fmt.Sprintf("#!/bin/sh\ncat %q\n", outputPath)
+	if err := os.WriteFile(binPath, []byte(script), 0700); err != nil {
+		t.Fatalf("write fake chainwatch: %v", err)
+	}
+	return binPath, outputPath
 }
 
 func TestMetricsCommandTextFormat(t *testing.T) {
