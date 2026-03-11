@@ -175,7 +175,13 @@ Zero to working chainwatch in under five minutes:
 
 **File:** `guides/profiles.md`
 
-Detailed reference for all 9 built-in profiles: coding-agent, research-agent, customer-support, data-analyst, terraform-planner, sre-infra, finops, clawbot, vm-cloud. Explains what each profile allows and blocks, and how to create custom profiles.
+Comprehensive guide for understanding, selecting, and customizing chainwatch profiles. Covers:
+- Profile anatomy (name, description, min_tier, authority_boundaries, execution_boundaries, policy rules)
+- Built-in profiles reference table (all 9 profiles with tier, boundaries, and use cases)
+- Step-by-step custom profile creation
+- Profile + preset composition rules
+- Common patterns (read-only agents, terraform plan-only, HTTP restrictions, credential blocking)
+- Testing and validation (dry-run, certification suite, custom scenarios, authority boundary testing)
 
 **When to read:** When choosing or customizing a profile for your agent.
 
