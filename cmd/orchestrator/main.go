@@ -75,6 +75,10 @@ func newRootCmdWithFactory(
 		statusAll     bool
 		statusState   string
 		lifecyclePath string
+
+		transitionWOID string
+		transitionTo   string
+		transitionDB   string
 	)
 
 	notifyCmd := &cobra.Command{
@@ -258,6 +262,58 @@ func newRootCmdWithFactory(
 		"path to orchestrator lifecycle SQLite database",
 	)
 
+	transitionCmd := &cobra.Command{
+		Use:   "transition",
+		Short: "Record a manual WO lifecycle transition",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			woID := strings.TrimSpace(transitionWOID)
+			if woID == "" {
+				return fmt.Errorf("--wo is required")
+			}
+			if strings.TrimSpace(transitionTo) == "" {
+				return fmt.Errorf("--to is required")
+			}
+
+			toState, err := orchestrator.ParseLifecycleState(transitionTo)
+			if err != nil {
+				return err
+			}
+
+			store := orchestrator.NewLifecycleStore(transitionDB, nowFn)
+			status, err := store.GetWOStatus(woID)
+			if err != nil {
+				if errors.Is(err, orchestrator.ErrWorkOrderNotFound) {
+					return fmt.Errorf("work order %q not found", woID)
+				}
+				return err
+			}
+
+			if err := store.RecordTransition(orchestrator.LifecycleTransition{
+				WOID:    woID,
+				ToState: toState,
+			}); err != nil {
+				return err
+			}
+
+			_, _ = fmt.Fprintf(
+				out,
+				"recorded transition %s: %s -> %s\n",
+				woID,
+				status.CurrentState,
+				toState,
+			)
+			return nil
+		},
+	}
+	transitionCmd.Flags().StringVar(&transitionWOID, "wo", "", "work order ID to transition")
+	transitionCmd.Flags().StringVar(&transitionTo, "to", "", "target lifecycle state")
+	transitionCmd.Flags().StringVar(
+		&transitionDB,
+		"db",
+		defaultLifecycleDBPath(),
+		"path to orchestrator lifecycle SQLite database",
+	)
+
 	var (
 		dispatchInventoryPath string
 		dispatchInputPath     string
@@ -337,6 +393,9 @@ func newRootCmdWithFactory(
 				line := fmt.Sprintf("%s → %s", r.WOID, r.Routed)
 				if r.JIRAKey != "" {
 					line += fmt.Sprintf(" | JIRA: %s", r.JIRAKey)
+				}
+				if r.PRURL != "" {
+					line += fmt.Sprintf(" | PR: %s", r.PRURL)
 				}
 				if r.DryRun {
 					line += " [dry-run]"
@@ -449,6 +508,7 @@ func newRootCmdWithFactory(
 	rootCmd.SetErr(errOut)
 	rootCmd.AddCommand(notifyCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(transitionCmd)
 	rootCmd.AddCommand(dispatchCmd)
 	rootCmd.AddCommand(scheduleCmd)
 	return rootCmd

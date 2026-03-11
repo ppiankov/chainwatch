@@ -1,11 +1,23 @@
 {
   "tasks": {
+    "wo-084": {
+      "status": "in_progress",
+      "started": "2026-03-11T11:14:10.493381+08:00",
+      "finished": "0001-01-01T00:00:00Z"
+    },
     "wo-089": {
       "status": "completed",
       "started": "2026-03-10T23:28:29.637775+08:00",
       "finished": "2026-03-10T23:38:35.083907+08:00",
       "runner": "codex",
       "commit": "725e7512e3d820ba50848e06d758dc39e3ef2965"
+    },
+    "wo-097": {
+      "status": "completed",
+      "started": "2026-03-11T10:59:35.236962+08:00",
+      "finished": "2026-03-11T11:03:32.754383+08:00",
+      "runner": "claude",
+      "commit": "4909e48f4aa8c70945fc08a220d78e6a2c65baf1"
     },
     "wo-104": {
       "status": "completed",
@@ -15,9 +27,11 @@
       "commit": "6dbe7f637e0f79a03137d29691e81c17fc2138af"
     },
     "wo-111": {
-      "status": "in_progress",
+      "status": "completed",
       "started": "2026-03-11T10:52:10.033564+08:00",
-      "finished": "0001-01-01T00:00:00Z"
+      "finished": "2026-03-11T10:55:18.423189+08:00",
+      "runner": "gemini",
+      "commit": "c1407c23995ac8daa9f91d29c06195d3e6113eab"
     },
     "wo-112": {
       "status": "completed",
@@ -32,6 +46,20 @@
       "finished": "2026-03-10T23:41:25.877672+08:00",
       "runner": "claude",
       "commit": "e673068e79dd1a1df4dbad8b5db699cf84c060aa"
+    },
+    "wo-cw45": {
+      "status": "completed",
+      "started": "2026-03-11T11:03:35.304889+08:00",
+      "finished": "2026-03-11T11:14:07.576749+08:00",
+      "runner": "opencode",
+      "commit": "e1fd567ceea16b15c699d364a77d2a9497577920"
+    },
+    "wo-cw47": {
+      "status": "completed",
+      "started": "2026-03-11T10:55:20.099907+08:00",
+      "finished": "2026-03-11T10:59:32.59436+08:00",
+      "runner": "claude",
+      "commit": "883aa95d9fb336b0facf8e20f98f9baf74c4b39f"
     }
   }
 }

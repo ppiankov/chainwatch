@@ -281,6 +281,62 @@ func TestStatusAllAndStateFilter(t *testing.T) {
 	}
 }
 
+func TestTransitionCommand(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "lifecycle.db")
+	base := time.Date(2026, 3, 6, 9, 0, 0, 0, time.UTC)
+	seedLifecycle(t, dbPath, []orchestratorpkg.LifecycleTransition{
+		{WOID: "WO-CH-003", ToState: orchestratorpkg.LifecycleStateFinding, TransitionedAt: base},
+		{WOID: "WO-CH-003", ToState: orchestratorpkg.LifecycleStateWO, TransitionedAt: base.Add(1 * time.Minute)},
+		{WOID: "WO-CH-003", ToState: orchestratorpkg.LifecycleStateDispatched, TransitionedAt: base.Add(2 * time.Minute)},
+		{
+			WOID:           "WO-CH-003",
+			ToState:        orchestratorpkg.LifecycleStatePROpen,
+			TransitionedAt: base.Add(3 * time.Minute),
+			PRURL:          "https://github.com/infra/example/pull/22",
+		},
+	})
+
+	t.Run("records allowed transition", func(t *testing.T) {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+		cmd.SetArgs([]string{"transition", "--db", dbPath, "--wo", "WO-CH-003", "--to", "pr_merged"})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("Execute returned error: %v", err)
+		}
+
+		out := stdout.String()
+		if !strings.Contains(out, "recorded transition WO-CH-003: pr_open -> pr_merged") {
+			t.Fatalf("expected transition confirmation, got:\n%s", out)
+		}
+
+		store := orchestratorpkg.NewLifecycleStore(dbPath, nil)
+		status, err := store.GetWOStatus("WO-CH-003")
+		if err != nil {
+			t.Fatalf("GetWOStatus returned error: %v", err)
+		}
+		if status.CurrentState != orchestratorpkg.LifecycleStatePRMerged {
+			t.Fatalf("CurrentState = %q, want %q", status.CurrentState, orchestratorpkg.LifecycleStatePRMerged)
+		}
+	})
+
+	t.Run("rejects invalid transition", func(t *testing.T) {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+		cmd.SetArgs([]string{"transition", "--db", dbPath, "--wo", "WO-CH-003", "--to", "verified"})
+
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatal("expected invalid transition to fail")
+		}
+		if !strings.Contains(err.Error(), `expected next state "applied", got "verified"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestDispatchDryRunPrintsResults(t *testing.T) {
 	inventoryPath := writeInventoryFile(t, `
 clickhouse:

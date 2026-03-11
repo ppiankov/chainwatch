@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	gh "github.com/ppiankov/chainwatch/internal/github"
 	"github.com/ppiankov/chainwatch/internal/jira"
 )
 
@@ -22,6 +23,11 @@ const (
 	RemediationBoth      = "both"
 
 	maxJIRADescriptionBytes = 32 * 1024
+	maxPRPromptBytes        = 32 * 1024
+
+	dispatchPRBaseBranch  = "main"
+	dispatchPRHeadPrefix  = "chainwatch/"
+	dispatchPRTitlePrefix = "[chainwatch]"
 )
 
 // DispatchInput is the tokencontrol task file produced by `nullbot observe --format wo`.
@@ -57,6 +63,7 @@ type DispatchResult struct {
 	WOID     string `json:"wo_id"`
 	JIRAKey  string `json:"jira_key,omitempty"`
 	JIRALink string `json:"jira_link,omitempty"`
+	PRURL    string `json:"pr_url,omitempty"`
 	Routed   string `json:"routed_to"` // "terraform", "config", "manual", etc.
 	DryRun   bool   `json:"dry_run"`
 	Error    string `json:"error,omitempty"`
@@ -67,6 +74,7 @@ type DispatcherConfig struct {
 	LifecycleStore *LifecycleStore
 	JIRACreator    jira.Creator
 	JIRAClient     jira.Creator // nil disables JIRA ticket creation
+	PRCreator      gh.PRCreator
 	NotifyService  *Service
 	NotifyConfig   Config
 	JIRABaseURL    string // for building JIRA links
@@ -79,6 +87,7 @@ type DispatcherConfig struct {
 type Dispatcher struct {
 	store       *LifecycleStore
 	jiraCreator jira.Creator
+	prCreator   gh.PRCreator
 	notifySvc   *Service
 	notifyCfg   Config
 	jiraBaseURL string
@@ -101,6 +110,7 @@ func NewDispatcher(cfg DispatcherConfig) *Dispatcher {
 	return &Dispatcher{
 		store:       cfg.LifecycleStore,
 		jiraCreator: jiraCreator,
+		prCreator:   cfg.PRCreator,
 		notifySvc:   cfg.NotifyService,
 		notifyCfg:   cfg.NotifyConfig,
 		jiraBaseURL: cfg.JIRABaseURL,
@@ -201,6 +211,26 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, task DispatchTask) Dispatc
 		}
 	}
 
+	pr, prErr := d.createDraftPR(ctx, task)
+	if prErr != nil {
+		log.Printf("orchestrator dispatch: create draft PR for %s: %v", task.ID, prErr)
+	}
+	if pr != nil {
+		result.PRURL = strings.TrimSpace(pr.URL)
+		if d.store != nil {
+			if err := d.store.RecordTransition(LifecycleTransition{
+				WOID:           task.ID,
+				FromState:      LifecycleStateDispatched,
+				ToState:        LifecycleStatePROpen,
+				TransitionedAt: d.nowFn(),
+				PRURL:          result.PRURL,
+			}); err != nil {
+				result.Error = fmt.Sprintf("lifecycle pr_open: %v", err)
+				return result
+			}
+		}
+	}
+
 	// Send notification.
 	if d.notifySvc != nil {
 		notifyInput := Input{
@@ -236,6 +266,18 @@ func routeTarget(remediationType string) string {
 	}
 }
 
+func (d *Dispatcher) createDraftPR(ctx context.Context, task DispatchTask) (*gh.PR, error) {
+	if d == nil || d.prCreator == nil || !shouldCreatePR(task.Metadata.RemediationType) {
+		return nil, nil
+	}
+
+	pr, err := d.prCreator.CreatePR(ctx, buildDispatchPRInput(task))
+	if pr == nil {
+		return nil, err
+	}
+	return pr, err
+}
+
 func buildDispatchIssueInput(task DispatchTask) jira.CreateIssueInput {
 	return jira.CreateIssueInput{
 		Summary:     buildDispatchIssueSummary(task.Title),
@@ -255,15 +297,7 @@ func buildDispatchIssueSummary(title string) string {
 }
 
 func truncateDispatchIssueDescription(prompt string) string {
-	if len(prompt) <= maxJIRADescriptionBytes {
-		return prompt
-	}
-
-	truncated := []byte(prompt[:maxJIRADescriptionBytes])
-	for len(truncated) > 0 && !utf8.Valid(truncated) {
-		truncated = truncated[:len(truncated)-1]
-	}
-	return string(truncated)
+	return truncateUTF8Bytes(prompt, maxJIRADescriptionBytes)
 }
 
 func dispatchIssuePriority(priority int) string {
@@ -286,4 +320,61 @@ func dispatchIssueLabels(remediationType string) []string {
 		labels = append(labels, trimmedType)
 	}
 	return labels
+}
+
+func buildDispatchPRInput(task DispatchTask) gh.CreatePRInput {
+	return gh.CreatePRInput{
+		Head:   dispatchPRHeadPrefix + strings.TrimSpace(task.ID),
+		Base:   dispatchPRBaseBranch,
+		Title:  buildDispatchPRTitle(task),
+		Body:   buildDispatchPRBody(task),
+		Labels: dispatchIssueLabels(task.Metadata.RemediationType),
+		Draft:  true,
+	}
+}
+
+func buildDispatchPRTitle(task DispatchTask) string {
+	woID := strings.TrimSpace(task.ID)
+	title := strings.TrimSpace(task.Title)
+	if title == "" {
+		return fmt.Sprintf("%s (%s)", dispatchPRTitlePrefix, woID)
+	}
+	return fmt.Sprintf("%s %s (%s)", dispatchPRTitlePrefix, title, woID)
+}
+
+func buildDispatchPRBody(task DispatchTask) string {
+	sections := make([]string, 0, 2)
+
+	prompt := truncateUTF8Bytes(task.Prompt, maxPRPromptBytes)
+	if strings.TrimSpace(prompt) != "" {
+		sections = append(sections, prompt)
+	}
+
+	remediationType := strings.TrimSpace(task.Metadata.RemediationType)
+	if remediationType == "" {
+		remediationType = "unknown"
+	}
+	sections = append(sections, fmt.Sprintf(
+		"WO ID: %s\nRemediation type: %s",
+		strings.TrimSpace(task.ID),
+		remediationType,
+	))
+
+	return strings.Join(sections, "\n\n")
+}
+
+func shouldCreatePR(remediationType string) bool {
+	return strings.TrimSpace(remediationType) != RemediationManual
+}
+
+func truncateUTF8Bytes(value string, maxBytes int) string {
+	if maxBytes <= 0 || len(value) <= maxBytes {
+		return value
+	}
+
+	truncated := []byte(value[:maxBytes])
+	for len(truncated) > 0 && !utf8.Valid(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return string(truncated)
 }

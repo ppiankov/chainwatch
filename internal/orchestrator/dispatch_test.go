@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	gh "github.com/ppiankov/chainwatch/internal/github"
 	"github.com/ppiankov/chainwatch/internal/jira"
 )
 
@@ -29,6 +30,23 @@ func (f *fakeJIRACreator) CreateIssue(
 
 func (f *fakeJIRACreator) AddComment(context.Context, string, string) error {
 	return nil
+}
+
+type fakePRCreator struct {
+	calls      []gh.CreatePRInput
+	createPRFn func(context.Context, gh.CreatePRInput) (*gh.PR, error)
+}
+
+func (f *fakePRCreator) CreatePR(ctx context.Context, input gh.CreatePRInput) (*gh.PR, error) {
+	f.calls = append(f.calls, input)
+	if f.createPRFn != nil {
+		return f.createPRFn(ctx, input)
+	}
+	return &gh.PR{
+		Number: 42,
+		URL:    "https://github.com/example/repo/pull/42",
+		State:  "open",
+	}, nil
 }
 
 func TestParseDispatchInput(t *testing.T) {
@@ -325,6 +343,157 @@ func TestDispatchUpdatesLifecycleState(t *testing.T) {
 	}
 	if !status.LastTransition.Equal(baseTime) {
 		t.Fatalf("LastTransition = %s, want %s", status.LastTransition, baseTime)
+	}
+}
+
+func TestDispatchCreatesPR(t *testing.T) {
+	store := NewLifecycleStore(t.TempDir()+"/lifecycle.db", nil)
+	prCreator := &fakePRCreator{
+		createPRFn: func(_ context.Context, input gh.CreatePRInput) (*gh.PR, error) {
+			return &gh.PR{
+				Number: 17,
+				URL:    "https://github.com/infra/prod/pull/17",
+				State:  "open",
+			}, nil
+		},
+	}
+	dispatcher := NewDispatcher(DispatcherConfig{
+		LifecycleStore: store,
+		PRCreator:      prCreator,
+	})
+
+	task := testDispatchTask(RemediationTerraform)
+	task.Title = "Apply Terraform remediation"
+	task.Prompt = "Update Terraform module settings."
+
+	results, err := dispatcher.Dispatch(context.Background(), &DispatchInput{
+		Tasks: []DispatchTask{task},
+	})
+	if err != nil {
+		t.Fatalf("Dispatch returned error: %v", err)
+	}
+	if len(prCreator.calls) != 1 {
+		t.Fatalf("CreatePR calls = %d, want 1", len(prCreator.calls))
+	}
+
+	call := prCreator.calls[0]
+	if call.Head != "chainwatch/WO-123" {
+		t.Fatalf("head = %q, want %q", call.Head, "chainwatch/WO-123")
+	}
+	if call.Base != "main" {
+		t.Fatalf("base = %q, want %q", call.Base, "main")
+	}
+	if call.Title != "[chainwatch] Apply Terraform remediation (WO-123)" {
+		t.Fatalf("title = %q, want PR title", call.Title)
+	}
+	if call.Body != "Update Terraform module settings.\n\nWO ID: WO-123\nRemediation type: terraform" {
+		t.Fatalf("body = %q, want prompt and metadata", call.Body)
+	}
+	if !call.Draft {
+		t.Fatal("draft = false, want true")
+	}
+	wantLabels := []string{"chainwatch", "auto-dispatched", RemediationTerraform}
+	if !reflect.DeepEqual(call.Labels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", call.Labels, wantLabels)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(results))
+	}
+	if results[0].PRURL != "https://github.com/infra/prod/pull/17" {
+		t.Fatalf("PRURL = %q, want PR URL", results[0].PRURL)
+	}
+	if results[0].Error != "" {
+		t.Fatalf("result error = %q, want empty", results[0].Error)
+	}
+
+	status, err := store.GetWOStatus(task.ID)
+	if err != nil {
+		t.Fatalf("GetWOStatus returned error: %v", err)
+	}
+	if status.CurrentState != LifecycleStatePROpen {
+		t.Fatalf("CurrentState = %q, want %q", status.CurrentState, LifecycleStatePROpen)
+	}
+	if status.PRURL != "https://github.com/infra/prod/pull/17" {
+		t.Fatalf("PRURL = %q, want PR URL", status.PRURL)
+	}
+}
+
+func TestDispatchPRFailureDoesNotBlockDispatch(t *testing.T) {
+	store := NewLifecycleStore(t.TempDir()+"/lifecycle.db", nil)
+	prCreator := &fakePRCreator{
+		createPRFn: func(_ context.Context, input gh.CreatePRInput) (*gh.PR, error) {
+			return nil, errors.New("github unavailable")
+		},
+	}
+	dispatcher := NewDispatcher(DispatcherConfig{
+		LifecycleStore: store,
+		PRCreator:      prCreator,
+	})
+
+	task := testDispatchTask(RemediationConfig)
+	results, err := dispatcher.Dispatch(context.Background(), &DispatchInput{
+		Tasks: []DispatchTask{task},
+	})
+	if err != nil {
+		t.Fatalf("Dispatch returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(results))
+	}
+	if results[0].Error != "" {
+		t.Fatalf("result error = %q, want empty", results[0].Error)
+	}
+	if results[0].PRURL != "" {
+		t.Fatalf("PRURL = %q, want empty", results[0].PRURL)
+	}
+	if len(prCreator.calls) != 1 {
+		t.Fatalf("CreatePR calls = %d, want 1", len(prCreator.calls))
+	}
+
+	status, err := store.GetWOStatus(task.ID)
+	if err != nil {
+		t.Fatalf("GetWOStatus returned error: %v", err)
+	}
+	if status.CurrentState != LifecycleStateDispatched {
+		t.Fatalf("CurrentState = %q, want %q", status.CurrentState, LifecycleStateDispatched)
+	}
+	if status.PRURL != "" {
+		t.Fatalf("PRURL = %q, want empty", status.PRURL)
+	}
+}
+
+func TestDispatchManualSkipsPR(t *testing.T) {
+	store := NewLifecycleStore(t.TempDir()+"/lifecycle.db", nil)
+	prCreator := &fakePRCreator{}
+	dispatcher := NewDispatcher(DispatcherConfig{
+		LifecycleStore: store,
+		PRCreator:      prCreator,
+	})
+
+	task := testDispatchTask(RemediationManual)
+	results, err := dispatcher.Dispatch(context.Background(), &DispatchInput{
+		Tasks: []DispatchTask{task},
+	})
+	if err != nil {
+		t.Fatalf("Dispatch returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(results))
+	}
+	if len(prCreator.calls) != 0 {
+		t.Fatalf("CreatePR calls = %d, want 0", len(prCreator.calls))
+	}
+	if results[0].PRURL != "" {
+		t.Fatalf("PRURL = %q, want empty", results[0].PRURL)
+	}
+
+	status, err := store.GetWOStatus(task.ID)
+	if err != nil {
+		t.Fatalf("GetWOStatus returned error: %v", err)
+	}
+	if status.CurrentState != LifecycleStateDispatched {
+		t.Fatalf("CurrentState = %q, want %q", status.CurrentState, LifecycleStateDispatched)
 	}
 }
 
