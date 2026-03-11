@@ -1,0 +1,68 @@
+name: 'Chainwatch Policy Gate'
+description: 'Enforce security policies using Chainwatch certify and check commands'
+inputs:
+  profile:
+    description: 'Profile to certify'
+    required: true
+    default: 'default'
+  suite:
+    description: 'Certification suite (minimal|enterprise)'
+    required: false
+    default: 'enterprise'
+  scenarios:
+    description: 'Glob pattern for scenario YAML files to check'
+    required: false
+    default: ''
+  policy_path:
+    description: 'Path to policy YAML'
+    required: false
+    default: ''
+  denylist_path:
+    description: 'Path to denylist YAML'
+    required: false
+    default: ''
+  chainwatch_version:
+    description: 'Chainwatch version to install'
+    required: false
+    default: 'latest'
+outputs:
+  certify_json:
+    description: 'JSON result from certify command'
+    value: ${{ steps.run-chainwatch.outputs.certify_json }}
+  check_json:
+    description: 'JSON result from check command'
+    value: ${{ steps.run-chainwatch.outputs.check_json }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Chainwatch
+      id: run-chainwatch
+      shell: bash
+      run: |
+        ${{ github.action_path }}/entrypoint.sh \
+          "${{ inputs.profile }}" \
+          "${{ inputs.suite }}" \
+          "${{ inputs.scenarios }}" \
+          "${{ inputs.policy_path }}" \
+          "${{ inputs.denylist_path }}" \
+          "${{ inputs.chainwatch_version }}"
+    
+    - name: Save results to files
+      shell: bash
+      run: |
+        echo '${{ steps.run-chainwatch.outputs.certify_json }}' > certify.json
+        CHECK_JSON='${{ steps.run-chainwatch.outputs.check_json }}'
+        if [ -n "$CHECK_JSON" ]; then
+          echo "$CHECK_JSON" > check.json
+        fi
+      if: always()
+
+    - name: Upload Chainwatch Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: chainwatch-results
+        path: |
+          certify.json
+          check.json
+      if: always()

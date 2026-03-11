@@ -37,6 +37,7 @@ execution_boundaries:
     - "psql"
     - "mysql"
     - "mongo"
+    - "npm"
 
 policy:
   rules:
