@@ -185,6 +185,19 @@ Comprehensive guide for understanding, selecting, and customizing chainwatch pro
 
 **When to read:** When choosing or customizing a profile for your agent.
 
+### ClickHouse Rollout Guide
+
+**File:** `guides/clickhouse-rollout.md`
+
+**What it covers:**
+- Multi-cluster ClickHouse deployment with Bedrock backend
+- Credential protection via pastewatch and pipeline redaction
+- Infrastructure setup (nullbot user, IAM, VPC endpoints)
+- Staged rollout strategy (Dev -> Canary -> Prod)
+- Schedule installation (Crontab, Systemd)
+
+**When to read:** When deploying nullbot for ClickHouse fleet observation.
+
 ### FAQ
 
 **File:** `FAQ.md`
