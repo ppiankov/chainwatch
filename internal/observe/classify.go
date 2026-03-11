@@ -38,6 +38,7 @@ type ClassifierConfig struct {
 	Pool             []LLMProvider // round-robin distribution across providers
 	Sensitivity      string        // "local" restricts to localhost providers only
 	DiagnosticWriter io.Writer     // if non-nil, raw LLM response is written here
+	RedactRules      []RedactRule  // if non-nil, applied to evidence before LLM
 }
 
 // classificationResponse is the expected JSON from the LLM.
@@ -94,6 +95,15 @@ func Classify(cfg ClassifierConfig, evidence string) ([]wo.Observation, error) {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = 60 * time.Second
+	}
+
+	// Redact sensitive content from evidence before sending to LLM.
+	if len(cfg.RedactRules) > 0 {
+		var redactCount int
+		evidence, redactCount = RedactEvidence(evidence, cfg.RedactRules)
+		if redactCount > 0 {
+			fmt.Fprintf(os.Stderr, "classify: redacted %d sensitive values from evidence\n", redactCount)
+		}
 	}
 
 	// Build provider list.
