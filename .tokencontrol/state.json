@@ -1,9 +1,11 @@
 {
   "tasks": {
     "wo-089": {
-      "status": "in_progress",
+      "status": "completed",
       "started": "2026-03-10T23:28:29.637775+08:00",
-      "finished": "0001-01-01T00:00:00Z"
+      "finished": "2026-03-10T23:38:35.083907+08:00",
+      "runner": "codex",
+      "commit": "725e7512e3d820ba50848e06d758dc39e3ef2965"
     },
     "wo-104": {
       "status": "completed",
@@ -18,6 +20,11 @@
       "finished": "2026-03-10T22:05:22.461991+08:00",
       "runner": "claude",
       "commit": "b7d497f691be0c48267ba3937052ab144406b7e9"
+    },
+    "wo-cw44": {
+      "status": "in_progress",
+      "started": "2026-03-10T23:38:39.820258+08:00",
+      "finished": "0001-01-01T00:00:00Z"
     }
   }
 }

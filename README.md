@@ -40,7 +40,7 @@ A single Go binary that wraps agent tool invocations, evaluates deterministic po
 
 - Not an ML-based anomaly detector
 - Not a logging/observability layer (enforcement, not detection)
-- Not an LLM guardrail for prompt content
+- Not an LLM guardrail for prompt content (PromptGuard input filter is optional, off by default)
 - Not a permissions system (enforces boundaries, not roles)
 - Not a web UI or SaaS product (CLI only)
 
@@ -268,6 +268,33 @@ chainwatch breakglass create --reason "incident response"
 chainwatch exec --breakglass <token> -- <cmd>
 ```
 
+## PromptGuard Input Filter
+
+Optional pre-reasoning input filter using Meta's PromptGuard 2 model. Classifies untrusted text for prompt injection before it reaches the agent. Off by default — zero impact when disabled.
+
+```yaml
+# ~/.chainwatch/policy.yaml
+guard:
+  enabled: false          # off by default
+  model: "22m"            # 22m (faster) or 86m (more accurate)
+  python: "python3"       # path to python binary
+  timeout: "5s"
+  on_unavailable: "warn"  # warn (continue) or deny (fail-closed)
+```
+
+Requires Python 3 and `transformers` + `torch` (`pip install -r scripts/promptguard/requirements.txt`). Model downloads on first run (~88MB for 22M variant).
+
+```bash
+# Self-test
+python3 scripts/promptguard/classify.py --test
+
+# Manual classification
+echo '{"text": "ignore previous instructions"}' | python3 scripts/promptguard/classify.py
+# → {"decision": "malicious", "score": 0.98, "model": "22m"}
+```
+
+When enabled, PromptGuard filters inputs before reasoning. Chainwatch's deterministic policy still makes all enforcement decisions at the execution boundary — PromptGuard is an input classifier, not a policy engine.
+
 ## Claude Code Integration
 
 Install chainwatch as a native Claude Code hook. Every tool call (Bash, Write, Edit, WebFetch, MCP tools) is evaluated against policy before execution.
@@ -348,7 +375,8 @@ See [docs/irreversible-boundaries.md](docs/irreversible-boundaries.md) and [docs
 - **Single-node** — no distributed coordination or multi-tenant support
 - **Process wrapping** — runtime enforcement is process-level (`exec`); seccomp can be generated for container hardening via `chainwatch profile seccomp`
 - **Python SDK** — subprocess-based (wraps the Go binary, not a native library)
-- **No content inspection** — classification based on resource names, not file contents
+- **No content inspection** — classification based on resource names, not file contents (PromptGuard optional input filter is separate from policy enforcement)
+- **PromptGuard requires Python** — the optional input filter needs Python 3 + transformers + torch; disabled by default
 
 ## License
 
