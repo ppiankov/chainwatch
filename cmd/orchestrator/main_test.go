@@ -359,6 +359,119 @@ bedrock:
 	}
 }
 
+func TestScheduleCommandCrontab(t *testing.T) {
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: prod
+      hosts: [ch-01]
+      config_repo: infra/clickhouse
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{"schedule", "--inventory", inventoryPath, "--format", "crontab"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "# chainwatch nullbot observe schedules") {
+		t.Fatalf("expected crontab header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "operational-check") {
+		t.Fatalf("expected operational-check in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "nullbot observe") {
+		t.Fatalf("expected nullbot observe command, got:\n%s", out)
+	}
+}
+
+func TestScheduleCommandSystemd(t *testing.T) {
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: prod
+      hosts: [ch-01]
+      config_repo: infra/clickhouse
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{"schedule", "--inventory", inventoryPath, "--format", "systemd"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "[Timer]") {
+		t.Fatalf("expected [Timer] section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[Service]") {
+		t.Fatalf("expected [Service] section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "nullbot-operational-check") {
+		t.Fatalf("expected unit name in output, got:\n%s", out)
+	}
+}
+
+func TestScheduleCommandEventBridge(t *testing.T) {
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: prod
+      hosts: [ch-01]
+      config_repo: infra/clickhouse
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{"schedule", "--inventory", inventoryPath, "--format", "eventbridge"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "nullbot-operational-check") {
+		t.Fatalf("expected rule name in JSON, got:\n%s", out)
+	}
+	if !strings.Contains(out, "schedule_expression") {
+		t.Fatalf("expected schedule_expression in JSON, got:\n%s", out)
+	}
+	if !strings.Contains(out, "cron(") {
+		t.Fatalf("expected cron expression in output, got:\n%s", out)
+	}
+}
+
+func TestScheduleCommandInvalidFormat(t *testing.T) {
+	inventoryPath := writeInventoryFile(t, `
+clickhouse:
+  clusters:
+    - name: prod
+      hosts: [ch-01]
+      config_repo: infra/clickhouse
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := newRootCmd(strings.NewReader(""), &stdout, &stderr, time.Now)
+	cmd.SetArgs([]string{"schedule", "--inventory", inventoryPath, "--format", "invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid format")
+	}
+	if !strings.Contains(err.Error(), "unsupported format") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 type mockSender struct {
 	sendFn func(orchestratorpkg.Message) error
 }

@@ -24,6 +24,10 @@ const (
 	defaultDigestSchedule  = "0 9 * * 1-5"
 	defaultStalePRHours    = 24
 
+	defaultScheduleOperational = "0 * * * *"
+	defaultScheduleDrift       = "0 */6 * * *"
+	defaultScheduleFull        = "0 3 * * *"
+
 	envJIRAToken             = "CHAINWATCH_JIRA_TOKEN"
 	envBedrockRegion         = "CHAINWATCH_BEDROCK_REGION"
 	envBedrockNullbotModel   = "CHAINWATCH_BEDROCK_NULLBOT_MODEL"
@@ -31,12 +35,21 @@ const (
 	envOrchestratorDispatch  = "CHAINWATCH_ORCHESTRATOR_DISPATCH_BACKEND"
 )
 
+// Schedule defines a recurring nullbot observe run.
+type Schedule struct {
+	Name     string   `yaml:"name"`
+	Types    []string `yaml:"types"`
+	Interval string   `yaml:"interval"`
+	Enabled  bool     `yaml:"enabled"`
+}
+
 // Inventory is the centralized topology/configuration definition for nullbot.
 type Inventory struct {
 	ClickHouse    ClickHouseConfig    `yaml:"clickhouse"`
 	Bedrock       BedrockConfig       `yaml:"bedrock"`
 	Orchestrator  OrchestratorConfig  `yaml:"orchestrator"`
 	Notifications NotificationsConfig `yaml:"notifications"`
+	Schedules     []Schedule          `yaml:"schedules,omitempty"`
 
 	path string
 	dir  string
@@ -254,6 +267,21 @@ func (inv *Inventory) Validate() error {
 		)
 	}
 
+	seenSchedules := make(map[string]struct{}, len(inv.Schedules))
+	for i, sched := range inv.Schedules {
+		if strings.TrimSpace(sched.Name) == "" {
+			return fmt.Errorf("schedules[%d].name is required", i)
+		}
+		if _, ok := seenSchedules[sched.Name]; ok {
+			return fmt.Errorf("duplicate schedule name %q", sched.Name)
+		}
+		seenSchedules[sched.Name] = struct{}{}
+
+		if strings.TrimSpace(sched.Interval) == "" {
+			return fmt.Errorf("schedule %q interval is required", sched.Name)
+		}
+	}
+
 	return nil
 }
 
@@ -344,6 +372,35 @@ func (inv *Inventory) applyDefaults() {
 	}
 	if inv.Notifications.Slack.StalePRHours == 0 {
 		inv.Notifications.Slack.StalePRHours = defaultStalePRHours
+	}
+
+	if len(inv.Schedules) == 0 {
+		inv.Schedules = DefaultSchedules()
+	}
+}
+
+// DefaultSchedules returns the built-in schedule definitions used when
+// no schedules are specified in inventory.
+func DefaultSchedules() []Schedule {
+	return []Schedule{
+		{
+			Name:     "operational-check",
+			Types:    []string{"clickhouse", "clickhouse-config"},
+			Interval: defaultScheduleOperational,
+			Enabled:  true,
+		},
+		{
+			Name:     "drift-detection",
+			Types:    []string{"clickhouse-config"},
+			Interval: defaultScheduleDrift,
+			Enabled:  true,
+		},
+		{
+			Name:     "full-investigation",
+			Types:    []string{},
+			Interval: defaultScheduleFull,
+			Enabled:  true,
+		},
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/ppiankov/chainwatch/internal/inventory"
 	"github.com/ppiankov/chainwatch/internal/jira"
 	"github.com/ppiankov/chainwatch/internal/orchestrator"
+	"github.com/ppiankov/chainwatch/internal/schedule"
 	"github.com/spf13/cobra"
 )
 
@@ -374,11 +376,81 @@ func newRootCmdWithFactory(
 		"path to orchestrator lifecycle SQLite database",
 	)
 
+	var (
+		scheduleInventoryPath string
+		scheduleFormat        string
+	)
+
+	scheduleCmd := &cobra.Command{
+		Use:   "schedule",
+		Short: "Generate schedule templates for automated nullbot observe runs",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			inv, err := inventory.Load(scheduleInventoryPath)
+			if err != nil {
+				return fmt.Errorf("load inventory: %w", err)
+			}
+
+			switch scheduleFormat {
+			case "crontab":
+				result := schedule.GenerateCrontab(inv)
+				if result == "" {
+					_, _ = fmt.Fprintln(out, "no enabled schedules found")
+					return nil
+				}
+				_, _ = fmt.Fprint(out, result)
+
+			case "systemd":
+				units := schedule.GenerateSystemdTimers(inv)
+				if len(units) == 0 {
+					_, _ = fmt.Fprintln(out, "no enabled schedules found")
+					return nil
+				}
+				for i, unit := range units {
+					_, _ = fmt.Fprintf(out, "# %s.timer\n%s", unit.Name, unit.Timer)
+					_, _ = fmt.Fprintf(out, "# %s.service\n%s", unit.Name, unit.Service)
+					if i < len(units)-1 {
+						_, _ = fmt.Fprintln(out, "---")
+					}
+				}
+
+			case "eventbridge":
+				rules := schedule.GenerateEventBridgeRules(inv)
+				if len(rules) == 0 {
+					_, _ = fmt.Fprintln(out, "no enabled schedules found")
+					return nil
+				}
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(rules); err != nil {
+					return fmt.Errorf("encode EventBridge rules: %w", err)
+				}
+
+			default:
+				return fmt.Errorf("unsupported format %q (use crontab, systemd, or eventbridge)", scheduleFormat)
+			}
+
+			return nil
+		},
+	}
+	scheduleCmd.Flags().StringVar(
+		&scheduleInventoryPath,
+		"inventory",
+		"inventory.yaml",
+		"path to inventory.yaml",
+	)
+	scheduleCmd.Flags().StringVar(
+		&scheduleFormat,
+		"format",
+		"crontab",
+		"output format: crontab, systemd, or eventbridge",
+	)
+
 	rootCmd.SetOut(out)
 	rootCmd.SetErr(errOut)
 	rootCmd.AddCommand(notifyCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(dispatchCmd)
+	rootCmd.AddCommand(scheduleCmd)
 	return rootCmd
 }
 
