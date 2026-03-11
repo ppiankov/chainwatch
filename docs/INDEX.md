@@ -25,7 +25,8 @@
 - **...set up gRPC policy server** → See [Central Policy Server](#central-policy-server-grpc)
 - **...run adversarial tests** → Read [design/fieldtest-test-plan.md](#fieldtest-test-plan)
 - **...write agent-ready tasks** → Read [design/agent-task-quality.md](#agent-task-quality)
-- **...use Chainwatch today** → Read [Quick Start](../README.md#quick-start) and [getting-started.md](#getting-started)
+- **...get started quickly** → Read [Getting Started Guide](guides/getting-started.md)
+- **...use Chainwatch today** → Read [Quick Start](../README.md#quick-start)
 - **...understand RootOps** → Read [DESIGN_BASELINE.md](#design-baseline) and [rootops-antipatterns.md](#rootops-antipatterns)
 - **...learn about forbidden architectures** → Read [security-classes.md](#security-classes)
 - **...see implementation progress** → Read [work-orders.md](work-orders.md)
@@ -43,6 +44,9 @@ For newcomers, read in this order:
 5. [Quick Start](../README.md#quick-start) - Install and demo
 
 **Then explore based on interest:**
+- Getting started → [guides/getting-started.md](guides/getting-started.md)
+- Profiles → [guides/profiles.md](guides/profiles.md)
+- FAQ → [FAQ.md](FAQ.md)
 - Implementation → [design/v0.2.0-specification.md](#v020-specification)
 - Configuration → [boundary-configuration.md](#boundary-configuration)
 - RootOps → [security-classes.md](#security-classes), [rootops-antipatterns.md](#rootops-antipatterns)
@@ -150,20 +154,38 @@ The shared design principle across chainwatch, kubenow, infranow:
 
 ---
 
-## Implementation Guides
+## Guides
 
 ### Getting Started
 
-**File:** `getting-started.md`
+**File:** `guides/getting-started.md`
 
-Quick onboarding for first-time users:
-- Installation steps
-- First integration example with FileGuard
-- How policy works
-- File classification logic
-- Next steps
+Zero to working chainwatch in under five minutes:
+- Prerequisites and installation (3 methods)
+- First run with `chainwatch init --profile coding-agent`
+- Verify with `chainwatch doctor`
+- Try it: safe command vs dangerous command
+- Supply chain protection with `--preset supply-chain`
+- Claude Code integration with `chainwatch hook install`
+- Policy testing with `chainwatch certify` and `chainwatch check`
 
-**When to read:** After understanding philosophy, before implementing.
+**When to read:** First practical guide after understanding the philosophy.
+
+### Profiles Guide
+
+**File:** `guides/profiles.md`
+
+Detailed reference for all 9 built-in profiles: coding-agent, research-agent, customer-support, data-analyst, terraform-planner, sre-infra, finops, clawbot, vm-cloud. Explains what each profile allows and blocks, and how to create custom profiles.
+
+**When to read:** When choosing or customizing a profile for your agent.
+
+### FAQ
+
+**File:** `FAQ.md`
+
+17 Q&A pairs covering: ML vs deterministic enforcement, intent judgment, IAM/DLP overlap, LLM independence, profile selection, supply chain presets, Claude Code integration, MCP server, PromptGuard, policy testing, false positives, fail-closed behavior, editor support, and approval workflow.
+
+**When to read:** When you have a specific question about chainwatch capabilities or design choices.
 
 ---
 
@@ -425,10 +447,7 @@ Original concept: execution chains as first-class entities for security enforcem
 
 **File:** `FAQ.md`
 
-Common questions:
-- Why no ML for enforcement?
-- Why Chainwatch exists
-- How it differs from existing tools
+17 Q&A pairs covering philosophy, integration, and operations. See [Guides > FAQ](#faq) above for full summary.
 
 ---
 
@@ -501,7 +520,9 @@ Validation
 └── design/fieldtest-test-plan.md   [Adversarial testing]
        ↓
 Implementation (Usage)
-├── getting-started.md             [Onboarding]
+├── guides/getting-started.md      [Onboarding]
+├── guides/profiles.md             [Profile reference]
+├── FAQ.md                         [Common questions]
 ├── testing-guide.md               [Testing]
 ├── integrations/                  [Integration guides]
 └── work-orders.md                 [Full implementation roadmap]
